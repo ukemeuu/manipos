@@ -31,40 +31,33 @@ export const BRAND_CONFIGS = {
 };
 
 export const getBrandForItem = (item) => {
-    // Multi-brand: check brands array first
-    if (item && item.brands && item.brands.length > 0) return item.brands[0]; // primary brand
-    if (item && item.brand) return item.brand;
-    const name = (item.name || '').toLowerCase();
-    const category = (item.category || '').toLowerCase();
-    
-    // SAMAKI STREET: Fish, Tilapia, Mackerel, Seafood, Samaki
-    if (name.includes('fish') || name.includes('tilapia') || name.includes('mackerel') || name.includes('samaki') || name.includes('seafood') || name.includes('samosas')) {
-        return 'SAMAKI STREET';
-    }
-    
-    // CAFÉ SWAHILI: Tea, Coffee, Chocolate, Beverages, Breakfast, Akara, Moi Moi
-    if (category.includes('breakfast') || category.includes('hot beverages') || name.includes('akara') || name.includes('moi moi') || name.includes('tea') || name.includes('coffee') || name.includes('chocolate') || name.includes('water')) {
-        return 'CAFÉ SWAHILI';
-    }
-    
-    // LITTLE LAGOS: Soups, Stews, Yam, Fufu, Garri, Amala, Semo, Egusi, Okra, Ogbono, Efo Riro, Afang, White Soup, Ofada, Pomo, Suya
-    if (category.includes('soups') || category.includes('stews') || name.includes('pomo') || name.includes('suya') || name.includes('egusi') || name.includes('okra') || name.includes('ogbono') || name.includes('efo riro') || name.includes('ofada') || name.includes('yam') || name.includes('fufu') || name.includes('garri') || name.includes('amala')) {
-        return 'LITTLE LAGOS';
-    }
-    
+    if (!item) return 'POT OF JOLLOF';
+    if (item.brand && item.brand.trim()) return item.brand.trim();
+    if (item.brands && Array.isArray(item.brands) && item.brands.length > 0) return item.brands[0];
     return 'POT OF JOLLOF';
 };
 
-// Helper: check if item belongs to a brand (supports multi-brand arrays)
+// Helper: check if item belongs to a brand (supports multi-brand arrays and strict POS brand assignment)
 export const itemBelongsToBrand = (item, brand) => {
     if (!brand || brand === 'All') return true;
-    // Multi-brand array
-    if (item.brands && item.brands.length > 0) {
-        return item.brands.includes(brand);
+    if (!item) return false;
+
+    const targetBrandUpper = brand.trim().toUpperCase();
+
+    // 1. Check multi-brand array first
+    if (Array.isArray(item.brands) && item.brands.length > 0) {
+        return item.brands.some(b => (b || '').trim().toUpperCase() === targetBrandUpper);
     }
-    // Single brand fallback
-    return getBrandForItem(item) === brand;
+
+    // 2. Check primary brand field
+    if (item.brand && item.brand.trim()) {
+        return item.brand.trim().toUpperCase() === targetBrandUpper;
+    }
+
+    // 3. Fallback for unassigned items: default to POT OF JOLLOF
+    return targetBrandUpper === 'POT OF JOLLOF';
 };
+
 
 export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof' }) {
     const isSingleBrand = window.location.hostname.includes('potofjollof') || tenantSlug === 'potofjollof';
@@ -1567,7 +1560,8 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                         <div className="text-center pb-2">
                                             <span className="text-3xl">🔑</span>
                                             <h3 className="font-black text-sm text-gray-900 uppercase tracking-tight mt-2">Log In or Register</h3>
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Enter your phone number to check in or register.</p>
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Enter your phone number or email to check in or register.</p>
+
                                         </div>
 
                                         <form onSubmit={handleGuestLoginOrRegister} className="space-y-4">
