@@ -268,7 +268,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     // OpenStreetMap Nominatim geocoding & Haversine calculator for distance-based delivery fee
     useEffect(() => {
-        if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 3) {
+        if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
             setCalculatedDistance(null);
             setCalculatedDeliveryFee(0);
             return;
@@ -279,18 +279,33 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
         const delayDebounceFn = setTimeout(async () => {
             try {
-                // Focus the query locally to Nairobi
-                const query = `${deliveryAddress}, Nairobi`;
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
-                    headers: {
-                        'User-Agent': 'ManiPOS-Microsite/1.0'
-                    }
+                const cleanQuery = deliveryAddress.trim();
+                let data = [];
+
+                // Attempt 1: Query + ", Kenya"
+                let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=1`, {
+                    headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
                 });
-                
-                if (!res.ok) throw new Error("Geocoding service unavailable");
-                const data = await res.json();
+                if (res.ok) data = await res.json();
+
+                // Attempt 2: Raw query
+                if (!data || data.length === 0) {
+                    res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery)}&format=json&limit=1`, {
+                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
+                    });
+                    if (res.ok) data = await res.json();
+                }
+
+                // Attempt 3: Query + ", Nairobi"
+                if (!data || data.length === 0) {
+                    res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Nairobi')}&format=json&limit=1`, {
+                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
+                    });
+                    if (res.ok) data = await res.json();
+                }
                 
                 if (data && data.length > 0) {
+                    setGeocodingError('');
                     const lat = parseFloat(data[0].lat);
                     const lon = parseFloat(data[0].lon);
                     
@@ -315,7 +330,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                     let fee = whatsappSettings.base_delivery_fee;
                     if (distance > whatsappSettings.base_delivery_distance) {
                         const extraDistance = distance - whatsappSettings.base_delivery_distance;
-                        fee += extraDistance * whatsappSettings.delivery_fee_per_km;
+                        fee += extraDistance * (whatsappSettings.delivery_fee_per_km || 85);
                     }
                     setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
                 } else {
@@ -329,14 +344,14 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             } finally {
                 setIsGeocoding(false);
             }
-        }, 500);
+        }, 400);
 
         return () => clearTimeout(delayDebounceFn);
     }, [deliveryAddress, diningOption, whatsappSettings]);
 
-    // Real-time Address Autocomplete lookup for Nairobi
+    // Real-time Address Autocomplete lookup (flexible search in Kenya)
     useEffect(() => {
-        if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 3) {
+        if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
             setAddressSuggestions([]);
             setShowSuggestions(false);
             return;
@@ -345,24 +360,32 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         setIsSearchingAddress(true);
         const debounceTimer = setTimeout(async () => {
             try {
-                const query = `${deliveryAddress}, Nairobi, Kenya`;
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`, {
+                const cleanQuery = deliveryAddress.trim();
+                let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=5&addressdetails=1&countrycodes=ke`, {
                     headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
                 });
-                if (res.ok) {
-                    const data = await res.json();
-                    setAddressSuggestions(data || []);
-                    setShowSuggestions(true);
+                let data = res.ok ? await res.json() : [];
+                
+                if (!data || data.length === 0) {
+                    res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery)}&format=json&limit=5&addressdetails=1`, {
+                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
+                    });
+                    data = res.ok ? await res.json() : [];
                 }
+
+                setAddressSuggestions(data || []);
+                setShowSuggestions((data && data.length > 0) ? true : false);
             } catch(err) {
                 console.error("Address autocomplete search failed:", err);
+                setAddressSuggestions([]);
             } finally {
                 setIsSearchingAddress(false);
             }
-        }, 350);
+        }, 250);
 
         return () => clearTimeout(debounceTimer);
     }, [deliveryAddress, diningOption]);
+
 
     const handleSelectAddressSuggestion = (suggestion) => {
         const formatted = suggestion.display_name;
@@ -1475,34 +1498,46 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                             
                                             {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
                                                 <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Delivery Address (e.g. Kilimani, Westlands, Lavington) *"
-                                                        required
-                                                        value={deliveryAddress}
-                                                        disabled={submitting}
-                                                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                                                        onFocus={() => setShowSuggestions(true)}
-                                                        className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium animate-fadeIn"
-                                                    />
+                                                    <div className="relative flex items-center">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Delivery Address (e.g. Kilimani, Westlands, Purple Tower) *"
+                                                            required
+                                                            value={deliveryAddress}
+                                                            disabled={submitting}
+                                                            onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                            onFocus={() => setShowSuggestions(true)}
+                                                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-semibold shadow-xs"
+                                                        />
+                                                        {isSearchingAddress && (
+                                                            <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
+                                                                🔍 Searching...
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     
                                                     {/* Real-time Address Autocomplete Floating Dropdown */}
                                                     {showSuggestions && addressSuggestions.length > 0 && (
-                                                        <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-800 text-left">
+                                                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
+                                                            <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
+                                                                <span>📍 Select Matching Location:</span>
+                                                                <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
+                                                            </div>
                                                             {addressSuggestions.map((s, idx) => (
                                                                 <button
                                                                     key={idx}
                                                                     type="button"
                                                                     onClick={() => handleSelectAddressSuggestion(s)}
-                                                                    className="w-full px-3 py-2 text-[11px] text-slate-200 hover:bg-slate-800 hover:text-amber-400 font-medium text-left transition-colors flex items-center gap-2 cursor-pointer"
+                                                                    className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
                                                                 >
-                                                                    <span className="text-amber-400">📍</span>
-                                                                    <span className="truncate">{s.display_name}</span>
+                                                                    <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
+                                                                    <span className="line-clamp-2 leading-snug">{s.display_name}</span>
                                                                 </button>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
+
                                             )}
                                         </div>
                                     )}
