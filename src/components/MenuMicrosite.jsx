@@ -66,11 +66,17 @@ export const itemBelongsToBrand = (item, brand) => {
     return getBrandForItem(item) === brand;
 };
 
-export function MenuMicrosite({ onBack }) {
+export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof' }) {
+    const isSingleBrand = window.location.hostname.includes('potofjollof') || tenantSlug === 'potofjollof';
     const [menu, setMenu] = useState([]);
     const [categories, setCategories] = useState(['All']);
-    const [activeBrand, setActiveBrand] = useState('All');
+    const [activeBrand, setActiveBrand] = useState(() => {
+        if (defaultBrand) return defaultBrand;
+        if (isSingleBrand) return 'POT OF JOLLOF';
+        return 'All';
+    });
     const [activeCategory, setActiveCategory] = useState('All');
+
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState([]);
     const [cartOpen, setCartOpen] = useState(false);
@@ -888,12 +894,23 @@ export function MenuMicrosite({ onBack }) {
                     </>
                 ) : (
                     <>
-                        <button
-                            onClick={() => setActiveBrand('All')}
-                            className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                        >
-                            <ArrowLeft size={10} /> Back
-                        </button>
+                        {!isSingleBrand && (
+                            <button
+                                onClick={() => setActiveBrand('All')}
+                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
+                            >
+                                <ArrowLeft size={10} /> Back
+                            </button>
+                        )}
+                        {isSingleBrand && onBack && (
+                            <button
+                                onClick={onBack}
+                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
+                            >
+                                <ArrowLeft size={10} /> Exit Menu
+                            </button>
+                        )}
+
                         <button
                             onClick={() => setAccountOpen(true)}
                             className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
