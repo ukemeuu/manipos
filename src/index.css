@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #FFD700;
+  --color-secondary: #1c1c1e;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Mobile table wrapper */
+.mobile-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  background-color: #f9f9fb;
+  color: var(--color-secondary);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Soften harsh black text across the app */
+.text-gray-900 {
+  color: #1c1c1e !important;
+}
+.text-gray-800 {
+  color: #2c2c2e !important;
+}
+.text-gray-700 {
+  color: #3a3a3c !important;
+}
+.text-secondary {
+  color: #1c1c1e !important;
+}
+
+/* Slightly increase base text sizes */
+.text-xs {
+  font-size: 0.8rem !important;
+  line-height: 1.5 !important;
+}
+.text-sm {
+  font-size: 0.9rem !important;
+  line-height: 1.6 !important;
+}
