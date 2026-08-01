@@ -1,4 +1,3 @@
-# Hostinger LiteSpeed / Apache SPA Routing Rule
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /

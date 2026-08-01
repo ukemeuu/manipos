@@ -4,6 +4,7 @@ import { PosTerminal } from './components/PosTerminal';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
+import { GuestMenuMicrosite } from './components/GuestMenuMicrosite';
 import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
 
 function App() {
@@ -17,6 +18,9 @@ function App() {
     const info = getTenantInfo();
     if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
       return 'terminal';
+    }
+    if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu') {
+      return 'microsite';
     }
     return 'home';
   });
@@ -43,6 +47,8 @@ function App() {
       setTenantInfo(info);
       if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
         setCurrentRoute('terminal');
+      } else if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu') {
+        setCurrentRoute('microsite');
       } else {
         setCurrentRoute('home');
       }
@@ -88,7 +94,13 @@ function App() {
     );
   }
 
-  // ROUTE 1: Standalone POS Terminal Software (pos.manipos.com or <tenant>.pos.manipos.com)
+  // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
+  if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
+    return <GuestMenuMicrosite tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
+  }
+
+
+  // ROUTE 2: Standalone POS Terminal Software (pos.manipos.com or <tenant>.pos.manipos.com)
   if (currentRoute === 'terminal') {
     if (session) {
       const staffUser = session.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
@@ -160,8 +172,9 @@ function App() {
     );
   }
 
-  // ROUTE 2: Public Marketing / Product Landing Page (Toast POS Styled)
+  // ROUTE 3: Public Marketing / Product Landing Page (Toast POS Styled)
   return <LandingPage onProceedToLogin={(slug) => navigateToLogin(slug)} />;
 }
 
 export default App;
+
