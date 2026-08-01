@@ -8,8 +8,6 @@ import {
   Wifi,
   Smartphone,
   Printer,
-  Sparkles,
-  Zap,
   ShieldCheck,
   ArrowRight,
   Calculator,
@@ -61,94 +59,71 @@ export function LandingPage({ onProceedToLogin }) {
 
   const faqData = [
     {
-      q: "How does ManiPOS compare to Toast POS?",
-      a: "Like Toast POS, ManiPOS is built specifically for restaurants with fast order entry, kitchen display support, and offline resilience. However, ManiPOS requires zero proprietary hardware ($0 hardware lock-in), works on any tablet or web browser, and features native M-PESA & instant African payment reconciliations."
+      q: "How does ManiPOS compare to legacy POS systems?",
+      a: "ManiPOS is built specifically for modern restaurants and cloud kitchens. It runs ultra-fast on any iPad, tablet, or web browser without requiring $1,500 proprietary screen buys or mandatory long-term contracts."
     },
     {
       q: "Does ManiPOS work offline when Wi-Fi drops?",
-      a: "Yes! ManiPOS uses a local-first offline architecture. Orders, kitchen thermal printing, and table management continue seamlessly even during internet outages, syncing automatically when connection restores."
+      a: "Yes. ManiPOS uses a local-first offline architecture. Orders and thermal ticket printing continue seamlessly during internet outages, syncing automatically when connection restores."
     },
     {
-      q: "Can I run ManiPOS on multiple subdomains or locations?",
-      a: "Absolutely. ManiPOS features native multi-tenant subdomain routing (e.g. pos.manipos.com or littlelagos.pos.manipos.com), allowing multi-location brands to isolate menus, staff PINs, and daily Z-reports."
+      q: "Can I run ManiPOS on custom subdomains or multiple locations?",
+      a: "Yes. ManiPOS features native multi-tenant subdomain routing (e.g., pos.manipos.com or littlelagos.pos.manipos.com), allowing multi-location brands to isolate menus, staff PINs, and daily Z-reports."
     },
     {
-      q: "Do I need special thermal printers or card terminals?",
-      a: "No. ManiPOS connects to any standard ESC/POS network, Bluetooth, or USB thermal receipt printer using our built-in QZ WebPrint bridge, saving you thousands on specialized hardware."
+      q: "What thermal printers are supported?",
+      a: "ManiPOS connects to standard ESC/POS network, Bluetooth, or USB thermal receipt printers using our built-in print bridge."
     }
   ];
 
   const calculateSavings = () => {
-    // Toast average hardware + SaaS fee vs ManiPOS flat rate
     const legacyCost = monthlyOrders * 0.35 + 150;
     const maniposCost = 49;
     return Math.max(0, Math.round(legacyCost - maniposCost));
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-orange-500 selection:text-white flex flex-col">
-      {/* Toast-Style Announcement Bar */}
-      <div className="bg-gradient-to-r from-orange-600 via-amber-500 to-orange-600 text-white text-xs font-bold py-2.5 px-4 text-center tracking-wide flex items-center justify-center gap-2 shadow-sm">
-        <Sparkles size={14} className="animate-pulse" />
-        <span>Toast-Level Speed. Zero Hardware Lock-In. Native Subdomain Multi-Tenancy!</span>
-        <button 
-          onClick={() => onProceedToLogin()} 
-          className="underline font-black hover:text-slate-100 transition-colors ml-2 cursor-pointer"
-        >
-          Launch Terminal &rarr;
-        </button>
-      </div>
-
-      {/* Modern Header */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-5 flex items-center justify-between z-40 bg-slate-50/80 backdrop-blur-md sticky top-0 border-b border-slate-200/60">
+    <div className="min-h-screen bg-white text-slate-900 font-sans antialiased selection:bg-slate-900 selection:text-white flex flex-col">
+      {/* Header */}
+      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20 text-white font-black text-xl">
-            M
-          </div>
-          <div>
-            <span className="text-2xl font-black tracking-tight text-slate-900">Mani<span className="text-orange-500">POS</span></span>
-            <span className="block text-[10px] font-bold text-orange-600 uppercase tracking-widest -mt-1">Toast for Africa</span>
-          </div>
+          <span className="text-2xl font-black tracking-tight text-black">ManiPOS</span>
         </div>
 
-        <div className="hidden md:flex items-center gap-8 text-sm font-bold text-slate-600">
-          <a href="#features" className="hover:text-orange-600 transition-colors">Features</a>
-          <a href="#calculator" className="hover:text-orange-600 transition-colors">ROI Calculator</a>
-          <a href="#faq" className="hover:text-orange-600 transition-colors">FAQ</a>
-        </div>
+        <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
+          <a href="#features" className="hover:text-black transition-colors">Features</a>
+          <a href="#calculator" className="hover:text-black transition-colors">ROI Calculator</a>
+          <a href="#faq" className="hover:text-black transition-colors">FAQ</a>
+        </nav>
 
         <div className="flex items-center gap-3">
           <button 
             onClick={() => onProceedToLogin()}
-            className="bg-slate-900 hover:bg-orange-600 text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-orange-500/20 flex items-center gap-2 cursor-pointer transform active:scale-95"
+            className="bg-black hover:bg-slate-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm"
           >
             <span>Log In to POS</span>
-            <ArrowRight size={16} />
+            <ArrowRight size={15} />
           </button>
         </div>
       </header>
 
       {/* Hero Section */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-12 pb-20 flex flex-col lg:flex-row items-center gap-12 text-left">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-16 pb-20 flex flex-col lg:flex-row items-center gap-12 text-left">
         <div className="flex-1 flex flex-col items-start w-full">
-          <div className="inline-flex items-center gap-2 text-xs font-extrabold text-orange-700 bg-orange-100/80 border border-orange-200 px-4 py-2 rounded-full mb-6">
-            <Zap size={14} className="text-orange-600" />
-            <span>BUILT FOR HIGH-VOLUME RESTAURANTS & CLOUD KITCHENS</span>
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-md mb-6">
+            Restaurant Management Engine
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.1] tracking-tight mb-6">
-            The Restaurant POS <br />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-600 via-amber-500 to-orange-500">
-              Kitchens Actually Love.
-            </span>
+            The Restaurant POS Built for High-Volume Kitchens.
           </h1>
 
-          <p className="text-slate-600 text-lg leading-relaxed max-w-xl mb-8 font-medium">
-            Ultra-fast ordering, Toast-level reliability, offline resilience, and instant thermal printing. Run on any iPad, tablet, or browser without expensive hardware contracts.
+          <p className="text-slate-600 text-lg leading-relaxed max-w-xl mb-10 font-normal">
+            Ultra-fast ordering, offline resilience, and instant thermal printing. Run on any iPad, tablet, or browser without hardware lock-in.
           </p>
 
           {/* Lead Capture Form */}
-          <div className="w-full max-w-xl bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 mb-8">
+          <div className="w-full max-w-xl bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 mb-8">
             {!leadSuccess ? (
               <form onSubmit={handleLeadSubmit} className="flex flex-col sm:flex-row gap-3 w-full">
                 <input
@@ -157,7 +132,7 @@ export function LandingPage({ onProceedToLogin }) {
                   value={formData.restaurantName}
                   onChange={(e) => setFormData({ ...formData, restaurantName: e.target.value })}
                   placeholder="Restaurant Name"
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all placeholder:text-slate-400"
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:outline-none focus:border-slate-400 transition-all placeholder:text-slate-400"
                 />
                 <input
                   type="email"
@@ -165,138 +140,131 @@ export function LandingPage({ onProceedToLogin }) {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="Owner Email"
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all placeholder:text-slate-400"
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:outline-none focus:border-slate-400 transition-all placeholder:text-slate-400"
                 />
                 <button
                   type="submit"
                   disabled={leadLoading}
-                  className="bg-orange-600 hover:bg-orange-700 text-white font-black text-sm py-3 px-6 rounded-xl transition-all shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                  className="bg-black hover:bg-slate-800 text-white font-semibold text-sm py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer shadow-sm"
                 >
-                  {leadLoading ? <Loader2 className="animate-spin" size={16} /> : 'Get Early Access'}
+                  {leadLoading ? <Loader2 className="animate-spin" size={16} /> : 'Get Access'}
                 </button>
               </form>
             ) : (
-              <div className="flex items-center justify-center gap-3 py-4 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-2xl font-bold">
-                <CheckCircle2 size={22} className="text-emerald-600" />
-                <span>You're on the priority list! We'll reach out within 2 hours.</span>
+              <div className="flex items-center justify-center gap-3 py-3 text-emerald-700 font-semibold text-sm">
+                <CheckCircle2 size={18} className="text-emerald-600" />
+                <span>Thank you! We will reach out shortly.</span>
               </div>
             )}
-            {leadError && <p className="text-red-500 text-xs font-bold mt-3">{leadError}</p>}
+            {leadError && <p className="text-red-600 text-xs font-semibold mt-2">{leadError}</p>}
           </div>
 
-          {/* Quick Feature Badges */}
-          <div className="flex flex-wrap items-center gap-6 text-xs font-extrabold text-slate-500">
+          {/* Feature Bullets */}
+          <div className="flex flex-wrap items-center gap-6 text-xs font-semibold text-slate-500">
             <div className="flex items-center gap-2">
-              <ShieldCheck size={16} className="text-emerald-500" />
-              <span>100% Offline First</span>
+              <ShieldCheck size={16} className="text-slate-700" />
+              <span>Offline First</span>
             </div>
             <div className="flex items-center gap-2">
-              <Building2 size={16} className="text-blue-500" />
+              <Building2 size={16} className="text-slate-700" />
               <span>Subdomain Multi-Tenant</span>
             </div>
             <div className="flex items-center gap-2">
-              <DollarSign size={16} className="text-amber-500" />
+              <DollarSign size={16} className="text-slate-700" />
               <span>Zero Hardware Lock-In</span>
             </div>
           </div>
         </div>
 
         {/* Hero Image Showcase */}
-        <div className="flex-1 w-full flex justify-center lg:justify-end relative">
-          <div className="absolute -inset-4 bg-gradient-to-r from-orange-500 to-amber-500 rounded-3xl blur-2xl opacity-15"></div>
-          <div className="relative bg-white p-3 rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden max-w-xl">
+        <div className="flex-1 w-full flex justify-center lg:justify-end">
+          <div className="bg-slate-50 p-2 rounded-2xl border border-slate-200 shadow-md max-w-xl w-full">
             <img 
               src="/hero_mockup.png" 
-              alt="ManiPOS Toast Inspired Interface" 
-              className="w-full h-auto rounded-2xl object-cover" 
+              alt="ManiPOS Interface" 
+              className="w-full h-auto rounded-xl object-cover" 
             />
-            <div className="absolute bottom-6 left-6 right-6 bg-slate-900/90 backdrop-blur-md text-white p-4 rounded-2xl border border-slate-700/80 flex items-center justify-between shadow-xl">
+            <div className="p-4 bg-white rounded-xl border border-slate-200/80 mt-2 flex items-center justify-between">
               <div>
-                <p className="text-xs font-black text-orange-400 uppercase tracking-wider">Live Terminal Status</p>
-                <p className="text-sm font-bold text-slate-100">pos.manipos.com &bull; Online</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Subdomain Routing</p>
+                <p className="text-sm font-bold text-slate-900">pos.manipos.com &bull; Active</p>
               </div>
               <button
                 onClick={() => onProceedToLogin()}
-                className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer shadow-md"
+                className="bg-black hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all cursor-pointer"
               >
-                Try Demo &rarr;
+                Launch Register &rarr;
               </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Colorful Toast-Style Features Grid */}
-      <section id="features" className="w-full bg-white border-y border-slate-200/80 py-24">
+      {/* Features Grid */}
+      <section id="features" className="w-full bg-slate-50 border-y border-slate-200/80 py-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <div className="inline-block bg-orange-100 text-orange-700 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-widest mb-3">
-              Why High-Volume Kitchens Switch
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              Toast Power, Local Flexibility.
+          <div className="max-w-2xl mb-14 text-left">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+              Designed for Speed & Reliability.
             </h2>
-            <p className="text-slate-500 text-base font-semibold mt-3">
-              Everything your restaurant team needs to take orders fast, route tickets to kitchen stations, and manage multiple locations.
+            <p className="text-slate-600 text-base font-normal mt-2">
+              Core architecture built to ensure your counter and kitchen keep running smoothly.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-8 text-left">
             {/* Feature 1 */}
-            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200/70 hover:shadow-xl hover:border-orange-200 transition-all group">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-6 group-hover:scale-110 transition-transform">
-                <Wifi size={28} />
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center font-bold">
+                <Wifi size={20} />
               </div>
-              <h3 className="text-xl font-extrabold text-slate-900 mb-3">100% Offline Resilience</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                When internet drops during dinner rush, ManiPOS keeps ringing orders and printing kitchen tickets locally. No lost revenue, zero downtime.
+              <h3 className="text-lg font-bold text-slate-900">Offline Resilience</h3>
+              <p className="text-slate-600 text-sm font-normal leading-relaxed">
+                When internet drops, ManiPOS keeps ringing orders and printing kitchen tickets locally without interruption.
               </p>
             </div>
 
             {/* Feature 2 */}
-            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200/70 hover:shadow-xl hover:border-orange-200 transition-all group">
-              <div className="w-14 h-14 rounded-2xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-6 group-hover:scale-110 transition-transform">
-                <Smartphone size={28} />
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center font-bold">
+                <Smartphone size={20} />
               </div>
-              <h3 className="text-xl font-extrabold text-slate-900 mb-3">Zero Proprietary Hardware</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Run ManiPOS on any iPad, Android tablet, or existing desktop. Say goodbye to mandatory $1,500 screen hardware leases.
+              <h3 className="text-lg font-bold text-slate-900">Any Hardware</h3>
+              <p className="text-slate-600 text-sm font-normal leading-relaxed">
+                Run ManiPOS on any iPad, Android tablet, or existing desktop. Avoid mandatory proprietary screen hardware costs.
               </p>
             </div>
 
             {/* Feature 3 */}
-            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200/70 hover:shadow-xl hover:border-orange-200 transition-all group">
-              <div className="w-14 h-14 rounded-2xl bg-blue-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 mb-6 group-hover:scale-110 transition-transform">
-                <Printer size={28} />
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center font-bold">
+                <Printer size={20} />
               </div>
-              <h3 className="text-xl font-extrabold text-slate-900 mb-3">Direct Thermal Kitchen Printing</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Route orders directly to kitchen bump bars and thermal receipt printers over network/ESC-POS with near-zero latency.
+              <h3 className="text-lg font-bold text-slate-900">Thermal Kitchen Printing</h3>
+              <p className="text-slate-600 text-sm font-normal leading-relaxed">
+                Route orders directly to kitchen thermal receipt printers over network/ESC-POS with zero latency.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Interactive Savings Calculator */}
-      <section id="calculator" className="w-full bg-slate-900 text-white py-24 relative overflow-hidden">
-        <div className="max-w-5xl mx-auto px-6 relative z-10">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <div className="inline-flex items-center gap-2 bg-slate-800 text-orange-400 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-widest mb-4 border border-slate-700">
-              <Calculator size={14} />
-              <span>Interactive ROI Calculator</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-              See How Much You Save vs Toast & Legacy POS
+      {/* ROI Calculator */}
+      <section id="calculator" className="w-full bg-slate-900 text-white py-20">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="max-w-2xl mb-10 text-left">
+            <h2 className="text-3xl font-black tracking-tight">
+              ROI Calculator
             </h2>
+            <p className="text-slate-400 text-sm font-normal mt-1">Estimate savings compared to per-order transaction fees.</p>
           </div>
 
-          <div className="bg-slate-800/80 backdrop-blur-md p-8 sm:p-12 rounded-3xl border border-slate-700 shadow-2xl flex flex-col md:flex-row items-center gap-12">
-            <div className="flex-1 w-full space-y-6">
+          <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 flex flex-col md:flex-row items-center gap-10">
+            <div className="flex-1 w-full space-y-6 text-left">
               <div>
-                <div className="flex justify-between items-center mb-2 font-extrabold">
-                  <span className="text-slate-300 text-sm">Monthly Restaurant Orders:</span>
-                  <span className="text-orange-400 text-xl">{monthlyOrders.toLocaleString()} orders</span>
+                <div className="flex justify-between items-center mb-2 font-bold text-sm">
+                  <span className="text-slate-300">Monthly Restaurant Orders:</span>
+                  <span className="text-white text-base">{monthlyOrders.toLocaleString()} orders</span>
                 </div>
                 <input 
                   type="range" 
@@ -305,50 +273,49 @@ export function LandingPage({ onProceedToLogin }) {
                   step="250" 
                   value={monthlyOrders} 
                   onChange={(e) => setMonthlyOrders(Number(e.target.value))}
-                  className="w-full h-3 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-white"
                 />
               </div>
 
-              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-700/60 space-y-2 text-xs font-semibold text-slate-400">
+              <div className="bg-slate-900/80 p-4 rounded-xl space-y-2 text-xs font-medium text-slate-400">
                 <div className="flex justify-between">
-                  <span>Toast / Legacy Fee (~$0.35/order + SaaS):</span>
-                  <span className="text-red-400 font-bold">${Math.round(monthlyOrders * 0.35 + 150)}/mo</span>
+                  <span>Legacy POS Estimated Cost:</span>
+                  <span className="text-slate-200 font-bold">${Math.round(monthlyOrders * 0.35 + 150)}/mo</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>ManiPOS Flat Subscription:</span>
+                  <span>ManiPOS Flat Rate:</span>
                   <span className="text-emerald-400 font-bold">$49/mo</span>
                 </div>
               </div>
             </div>
 
-            <div className="w-full md:w-auto bg-gradient-to-br from-orange-500 to-amber-600 p-8 rounded-3xl text-center shadow-xl shadow-orange-500/20 min-w-[260px]">
-              <p className="text-xs font-black uppercase tracking-widest text-orange-100">Estimated Monthly Savings</p>
-              <p className="text-5xl font-black my-3 text-white">${calculateSavings()}</p>
-              <p className="text-xs text-orange-100 font-bold">That's ${calculateSavings() * 12}/year back in your pocket!</p>
+            <div className="w-full md:w-auto bg-white text-slate-900 p-6 rounded-xl text-center min-w-[240px]">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Estimated Savings</p>
+              <p className="text-4xl font-black my-2">${calculateSavings()}</p>
+              <p className="text-xs text-slate-600 font-medium">per month</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* FAQ Section */}
-      <section id="faq" className="w-full bg-slate-50 py-24 border-t border-slate-200">
-        <div className="max-w-3xl mx-auto px-6 space-y-12">
-          <div className="text-center">
+      <section id="faq" className="w-full bg-white py-20 border-t border-slate-200">
+        <div className="max-w-3xl mx-auto px-6 space-y-10 text-left">
+          <div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Frequently Asked Questions</h2>
-            <p className="text-slate-500 text-sm font-semibold mt-2">Everything you need to know about switching to ManiPOS</p>
           </div>
 
           <div className="space-y-4">
             {faqData.map((faq, idx) => {
               const isOpen = openFaqIndex === idx;
               return (
-                <div key={idx} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all">
+                <div key={idx} className="border-b border-slate-200 pb-4">
                   <button
                     onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                    className="w-full p-6 text-left flex justify-between items-center text-base font-extrabold text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="w-full py-3 text-left flex justify-between items-center text-base font-bold text-slate-900 hover:text-slate-600 transition-colors cursor-pointer"
                   >
                     <span>{faq.q}</span>
-                    <ChevronDown size={20} className={`text-orange-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={18} className={`text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
                   <AnimatePresence>
                     {isOpen && (
@@ -358,9 +325,9 @@ export function LandingPage({ onProceedToLogin }) {
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <div className="px-6 pb-6 text-slate-600 text-sm leading-relaxed pt-2 border-t border-slate-100 font-medium">
+                        <p className="text-slate-600 text-sm leading-relaxed pt-2 font-normal">
                           {faq.a}
-                        </div>
+                        </p>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -372,12 +339,11 @@ export function LandingPage({ onProceedToLogin }) {
       </section>
 
       {/* Footer */}
-      <footer className="w-full bg-slate-950 text-slate-400 py-12 border-t border-slate-800 text-xs font-semibold">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+      <footer className="w-full bg-slate-900 text-slate-400 py-10 border-t border-slate-800 text-xs font-semibold">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-orange-500 rounded-lg flex items-center justify-center text-white font-black text-xs">M</div>
-            <span className="text-white font-extrabold text-sm">ManiPOS</span>
-            <span>&bull; Toast POS Engine for Modern Restaurants</span>
+            <span className="text-white font-black text-sm">ManiPOS</span>
+            <span>&bull; Restaurant Software Engine</span>
           </div>
 
           <div className="flex items-center gap-6">
