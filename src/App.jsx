@@ -4,19 +4,18 @@ import { PosTerminal } from './components/PosTerminal';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
+import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
 
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'dashboard'
-  
-  // Clean router supporting subpaths, hashes, and search queries
+  const [tenantInfo, setTenantInfo] = useState(() => getTenantInfo());
+
+  // Clean router supporting subdomain detection, subpaths, hashes, and search queries
   const [currentRoute, setCurrentRoute] = useState(() => {
-    const path = window.location.pathname;
-    const hash = window.location.hash;
-    const searchParams = new URLSearchParams(window.location.search);
-    
-    if (path === '/terminal' || hash === '#/terminal' || searchParams.get('page') === 'terminal') {
+    const info = getTenantInfo();
+    if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
       return 'terminal';
     }
     return 'home';
@@ -40,11 +39,9 @@ function App() {
   // Listen to browser navigation changes
   useEffect(() => {
     const handleLocationChange = () => {
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      const searchParams = new URLSearchParams(window.location.search);
-      
-      if (path === '/terminal' || hash === '#/terminal' || searchParams.get('page') === 'terminal') {
+      const info = getTenantInfo();
+      setTenantInfo(info);
+      if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
         setCurrentRoute('terminal');
       } else {
         setCurrentRoute('home');
@@ -59,25 +56,39 @@ function App() {
     };
   }, []);
 
-  const navigateTo = (route) => {
-    if (route === 'terminal') {
-      window.history.pushState({}, '', '/terminal');
+  const navigateToLogin = (slug = null) => {
+    const targetUrl = getPosLoginUrl(slug || tenantInfo.tenantSlug);
+    // If we're on local dev or same domain, update state directly
+    if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) {
+      const url = new URL(targetUrl);
+      window.history.pushState({}, '', url.pathname + url.search + url.hash);
       setCurrentRoute('terminal');
+      setTenantInfo(getTenantInfo());
     } else {
+      window.location.href = targetUrl;
+    }
+  };
+
+  const navigateToHome = () => {
+    const targetUrl = getMarketingUrl();
+    if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) {
       window.history.pushState({}, '', '/');
       setCurrentRoute('home');
+      setTenantInfo(getTenantInfo());
+    } else {
+      window.location.href = targetUrl;
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div>
       </div>
     );
   }
 
-  // ROUTE 1: Standalone POS Terminal Software
+  // ROUTE 1: Standalone POS Terminal Software (pos.manipos.com or <tenant>.pos.manipos.com)
   if (currentRoute === 'terminal') {
     if (session) {
       const staffUser = session.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
@@ -92,53 +103,65 @@ function App() {
 
       if (isAdmin && viewMode === 'dashboard') {
         return (
-          <AdminDashboard onBackToTerminal={() => setViewMode('terminal')} />
+          <AdminDashboard onBackToTerminal={() => setViewMode('terminal')} tenantSlug={tenantInfo.tenantSlug} />
         );
       }
 
       return (
-        <div className="min-h-screen bg-gray-50 relative">
+        <div className="min-h-screen bg-slate-50 relative">
           <PosTerminal 
             staffName={staffUser.name} 
             staffRole={staffUser.role} 
             onSignOut={handleSignOut} 
+            tenantSlug={tenantInfo.tenantSlug}
           />
           {/* Floating Admin Switcher Button */}
           {isAdmin && (
             <button
               onClick={() => setViewMode('dashboard')}
-              className="fixed bottom-6 right-6 bg-slate-900 text-white font-black text-xs uppercase tracking-wider py-3 px-5 rounded-2xl shadow-xl hover:bg-black transition-all border border-slate-800 z-50 hover:-translate-y-0.5 cursor-pointer"
+              className="fixed bottom-6 right-6 bg-slate-900 text-white font-black text-xs uppercase tracking-wider py-3 px-5 rounded-2xl shadow-2xl hover:bg-orange-600 transition-all border border-slate-800 z-50 hover:-translate-y-0.5 cursor-pointer flex items-center gap-2"
             >
-              Owner Dashboard &rarr;
+              <span>Owner Dashboard</span>
+              <span>&rarr;</span>
             </button>
           )}
         </div>
       );
     }
 
-    // Not logged in: Show the clean full-screen register terminal login page
+    // Not logged in: Show the bright Toast-styled register terminal login page
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-4 relative font-sans">
-        {/* Subtle return link for admin convenience */}
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative font-sans">
         <button
-          onClick={() => navigateTo('home')}
-          className="absolute top-6 left-6 text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-wider border border-zinc-800 px-3 py-1.5 rounded transition-colors cursor-pointer"
+          onClick={navigateToHome}
+          className="absolute top-6 left-6 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider border border-slate-800 px-4 py-2 rounded-xl transition-colors cursor-pointer bg-slate-900/50 backdrop-blur-sm"
         >
-          &larr; Public Site
+          &larr; Back to ManiPOS Home
         </button>
-        <div className="w-full max-w-md bg-zinc-950 p-8 rounded border border-zinc-900 shadow-2xl">
+        <div className="w-full max-w-md bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
           <div className="text-center mb-6">
-            <h2 className="text-lg font-black tracking-wider text-white uppercase">ManiPOS</h2>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Terminal Login</p>
+            <div className="inline-block bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs px-3 py-1 rounded-full uppercase tracking-widest mb-3">
+              {tenantInfo.tenantSlug ? `${tenantInfo.tenantSlug}.pos.manipos.com` : 'pos.manipos.com'}
+            </div>
+            <h2 className="text-2xl font-black text-white tracking-tight">Mani<span className="text-orange-500">POS</span></h2>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mt-1">Staff Terminal Login</p>
           </div>
-          <PinLogin onLoginSuccess={(userSession) => setSession(userSession)} />
+          <PinLogin 
+            tenantSlug={tenantInfo.tenantSlug}
+            onLoginSuccess={(userSession, userTenantSlug) => {
+              setSession(userSession);
+              if (userTenantSlug && userTenantSlug !== tenantInfo.tenantSlug) {
+                navigateToLogin(userTenantSlug);
+              }
+            }} 
+          />
         </div>
       </div>
     );
   }
 
-  // ROUTE 2: Public Marketing / Product Landing Page
-  return <LandingPage onProceedToLogin={() => navigateTo('terminal')} />;
+  // ROUTE 2: Public Marketing / Product Landing Page (Toast POS Styled)
+  return <LandingPage onProceedToLogin={(slug) => navigateToLogin(slug)} />;
 }
 
 export default App;

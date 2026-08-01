@@ -59,7 +59,7 @@ const formatCustomerName = (name) => {
     return name.toUpperCase();
 };
 
-export function PosTerminal({ staffName, staffRole, onSignOut }) {
+export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     const isSystemAdmin = React.useMemo(() => {
         try {
             const stored = localStorage.getItem('pin_staff_user');

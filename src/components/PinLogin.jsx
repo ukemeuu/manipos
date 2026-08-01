@@ -1,24 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
-import { KeyRound, ArrowRight, Loader2, PackageSearch } from 'lucide-react';
+import { KeyRound, ArrowRight, Loader2, Store, Lock } from 'lucide-react';
 
-export function PinLogin({ onLoginSuccess }) {
-    const [restaurantSlug, setRestaurantSlug] = useState('');
+export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
+    const [restaurantSlug, setRestaurantSlug] = useState(initialTenantSlug || 'littlelagos');
     const [pin, setPin] = useState(['', '', '', '']);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    useEffect(() => {
+        if (initialTenantSlug) {
+            setRestaurantSlug(initialTenantSlug);
+        }
+    }, [initialTenantSlug]);
+
     // Focus management
     const handleInput = (index, value) => {
-        if (value.length > 1) value = value.slice(-1); // Only take last char
-        if (!/^\d*$/.test(value)) return; // Only numbers
+        if (value.length > 1) value = value.slice(-1);
+        if (!/^\d*$/.test(value)) return;
 
         const newPin = [...pin];
         newPin[index] = value;
         setPin(newPin);
 
-        // Auto-advance focus
         if (value !== '' && index < 3) {
             const nextInput = document.getElementById(`pin-${index + 1}`);
             if (nextInput) nextInput.focus();
@@ -56,11 +61,13 @@ export function PinLogin({ onLoginSuccess }) {
             if (authError) throw authError;
 
             if (data.session) {
+                const cleanSlug = restaurantSlug.toLowerCase().trim();
                 const staffPayload = {
-                    name: 'Admin Developer',
+                    name: 'Admin Cashier',
                     role: 'admin',
                     restaurantId: 'f14f891f-9c26-43ae-bf87-45758248256a',
-                    restaurantName: 'Mani Kitchen'
+                    restaurantName: cleanSlug === 'littlelagos' ? 'Little Lagos Restaurant' : `${cleanSlug.toUpperCase()} Kitchen`,
+                    tenantSlug: cleanSlug
                 };
 
                 localStorage.setItem('pin_staff_user', JSON.stringify(staffPayload));
@@ -68,87 +75,75 @@ export function PinLogin({ onLoginSuccess }) {
                 onLoginSuccess({
                     ...data.session,
                     staffUser: staffPayload
-                });
+                }, cleanSlug);
             }
         } catch (err) {
             console.error(err);
-            setError(err.message || 'System error. Please contact admin.');
+            setError(err.message || 'Authentication error. Check security PIN.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-secondary">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100"
-            >
-                <div className="flex flex-col items-center mb-6">
-                    <div className="w-16 h-16 bg-blue-50 text-blue-500 flex justify-center items-center rounded-2xl mb-4">
-                        <PackageSearch size={32} />
-                    </div>
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tight text-center">Staff Terminal</h2>
-                    <p className="text-gray-500 font-medium text-xs mt-1 text-center">Enter your restaurant code and 4-digit security PIN to log in.</p>
+        <form onSubmit={handleSubmit} className="space-y-6 text-left">
+            <div className="space-y-2">
+                <label htmlFor="restaurant-slug" className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Store size={14} className="text-orange-500" />
+                    <span>Restaurant Code / Subdomain</span>
+                </label>
+                <div className="relative">
+                    <input
+                        id="restaurant-slug"
+                        type="text"
+                        required
+                        placeholder="e.g. littlelagos"
+                        value={restaurantSlug}
+                        onChange={(e) => setRestaurantSlug(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm tracking-wide placeholder:text-slate-600"
+                    />
+                    <span className="absolute right-4 top-3.5 text-xs font-bold text-slate-500 pointer-events-none">.pos.manipos.com</span>
                 </div>
+            </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-1.5">
-                        <label htmlFor="restaurant-slug" className="text-xs font-bold text-gray-400 uppercase tracking-wider">Restaurant Code</label>
+            <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Lock size={14} className="text-orange-500" />
+                    <span>Staff 4-Digit Security PIN</span>
+                </label>
+                <div className="flex justify-between gap-3">
+                    {pin.map((digit, i) => (
                         <input
-                            id="restaurant-slug"
-                            type="text"
-                            required
-                            placeholder="e.g. cloudkitchen"
-                            value={restaurantSlug}
-                            onChange={(e) => setRestaurantSlug(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:border-primary focus:bg-white focus:outline-none transition-colors font-semibold"
+                            key={i}
+                            id={`pin-${i}`}
+                            type="password"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            value={digit}
+                            onChange={(e) => handleInput(i, e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(i, e)}
+                            className="w-14 h-14 text-center text-2xl font-black bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-orange-400 shadow-inner"
                         />
-                    </div>
+                    ))}
+                </div>
+            </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Security PIN</label>
-                        <div className="flex justify-between gap-3 px-1">
-                            {pin.map((digit, i) => (
-                                <input
-                                    key={i}
-                                    id={`pin-${i}`}
-                                    type="password"
-                                    inputMode="numeric"
-                                    autoComplete="one-time-code"
-                                    value={digit}
-                                    onChange={(e) => handleInput(i, e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(i, e)}
-                                    className="w-12 h-14 text-center text-2xl font-bold bg-gray-50 border-2 border-gray-200 rounded-2xl focus:border-primary focus:bg-white focus:outline-none transition-colors shadow-inner"
-                                />
-                            ))}
-                        </div>
-                    </div>
+            <div className="min-h-[20px]">
+                {error && <p className="text-red-400 font-bold text-xs text-center animate-pulse">{error}</p>}
+            </div>
 
-                    <div className="min-h-[24px]">
-                        {error && <p className="text-red-500 font-bold text-sm text-center animate-pulse">{error}</p>}
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading || pin.join('').length !== 4 || !restaurantSlug.trim()}
-                        className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white p-4 rounded-2xl font-bold text-lg hover:bg-black transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed group"
-                    >
-                        {loading ? <Loader2 className="animate-spin" size={24} /> : (
-                            <>
-                                Open Terminal <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-                            </>
-                        )}
-                    </button>
-
-                    <div className="text-center">
-                        <span className="text-[10px] font-bold text-gray-300">
-                            MANIPOS v1.0
-                        </span>
-                    </div>
-                </form>
-            </motion.div>
-        </div>
+            <button
+                type="submit"
+                disabled={loading || pin.join('').length !== 4 || !restaurantSlug.trim()}
+                className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-4 rounded-2xl font-black text-base hover:from-orange-600 hover:to-amber-600 transition-all shadow-xl shadow-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed group cursor-pointer"
+            >
+                {loading ? <Loader2 className="animate-spin" size={22} /> : (
+                    <>
+                        <span>Enter POS Register</span>
+                        <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                    </>
+                )}
+            </button>
+        </form>
     );
 }
