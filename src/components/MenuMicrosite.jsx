@@ -694,35 +694,18 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 discount: discountAmount,
                 cashier_name: 'Self-Service Microsite',
                 brand: activeBrand === 'All' ? (cart.length > 0 ? getBrandForItem(cart[0]) : 'POT OF JOLLOF') : activeBrand,
-                notes: finalNotes,
-                guest_id: guestUser ? guestUser.id : null
+                notes: finalNotes
             };
 
             // 1. Insert order header
-            let { data: orderData, error: orderError } = await supabase
+            const { data: orderData, error: orderError } = await supabase
                 .from('pos_orders')
                 .insert([orderPayload])
                 .select('id, ticket_number')
                 .single();
 
-            // Fallback: If Supabase schema cache does not have 'guest_id' column in pos_orders table yet
-            if (orderError && (
-                orderError.message.includes('guest_id') || 
-                (orderError.details && orderError.details.includes('guest_id')) ||
-                orderError.code === 'PGRST204'
-            )) {
-                console.warn("guest_id column not found in pos_orders schema cache, retrying without guest_id...");
-                delete orderPayload.guest_id;
-                const retryRes = await supabase
-                    .from('pos_orders')
-                    .insert([orderPayload])
-                    .select('id, ticket_number')
-                    .single();
-                orderData = retryRes.data;
-                orderError = retryRes.error;
-            }
-
             if (orderError) throw orderError;
+
 
 
             // 2. Insert order items
