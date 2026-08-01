@@ -342,9 +342,24 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             if (error) throw error;
             setMenu(data || []);
 
-            // Extract unique categories
-            const cats = ['All', ...new Set((data || []).map(item => item.category))];
-            setCategories(cats);
+            // Extract unique categories and respect custom category order
+            let savedOrder = [];
+            try {
+                const rawOrder = localStorage.getItem('poj_category_order');
+                if (rawOrder) savedOrder = JSON.parse(rawOrder);
+            } catch(e) {}
+
+            const rawCats = [...new Set((data || []).map(item => item.category).filter(Boolean))];
+            const sortedCats = [];
+            savedOrder.forEach(c => {
+                if (rawCats.includes(c)) sortedCats.push(c);
+            });
+            rawCats.forEach(c => {
+                if (!sortedCats.includes(c)) sortedCats.push(c);
+            });
+
+            setCategories(['All', ...sortedCats]);
+
         } catch (err) {
             console.error('Error loading menu:', err);
         } finally {
