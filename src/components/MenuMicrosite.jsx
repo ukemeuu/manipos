@@ -699,13 +699,31 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             };
 
             // 1. Insert order header
-            const { data: orderData, error: orderError } = await supabase
+            let { data: orderData, error: orderError } = await supabase
                 .from('pos_orders')
                 .insert([orderPayload])
                 .select('id, ticket_number')
                 .single();
 
+            // Fallback: If Supabase schema cache does not have 'guest_id' column in pos_orders table yet
+            if (orderError && (
+                orderError.message.includes('guest_id') || 
+                (orderError.details && orderError.details.includes('guest_id')) ||
+                orderError.code === 'PGRST204'
+            )) {
+                console.warn("guest_id column not found in pos_orders schema cache, retrying without guest_id...");
+                delete orderPayload.guest_id;
+                const retryRes = await supabase
+                    .from('pos_orders')
+                    .insert([orderPayload])
+                    .select('id, ticket_number')
+                    .single();
+                orderData = retryRes.data;
+                orderError = retryRes.error;
+            }
+
             if (orderError) throw orderError;
+
 
             // 2. Insert order items
             const itemPayloads = cart.map(item => ({
@@ -762,14 +780,19 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                         })
                         .eq('id', guestUser.id);
                     
-                    await supabase
-                        .from('guest_visits')
-                        .insert([{
-                            guest_id: guestUser.id,
-                            spend: cartTotal,
-                            table_number: diningOption === 'Dine-in' ? assignedTable : '',
-                            notes: `Order #${orderData.ticket_number} via Microsite`
-                        }]);
+                    try {
+                        await supabase
+                            .from('guest_visits')
+                            .insert([{
+                                guest_id: guestUser.id,
+                                spend: cartTotal,
+                                table_number: diningOption === 'Dine-in' ? assignedTable : '',
+                                notes: `Order #${orderData.ticket_number} via Microsite`
+                            }]);
+                    } catch (e) {
+                        console.warn("Could not insert guest_visit:", e);
+                    }
+
                     
                     const updatedGuest = {
                         ...guestUser,
