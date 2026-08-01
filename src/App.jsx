@@ -4,8 +4,9 @@ import { PosTerminal } from './components/PosTerminal';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
-import { GuestMenuMicrosite } from './components/GuestMenuMicrosite';
+import { MenuMicrosite } from './components/MenuMicrosite';
 import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
+
 
 function App() {
   const [session, setSession] = useState(null);
@@ -96,8 +97,9 @@ function App() {
 
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
   if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
-    return <GuestMenuMicrosite tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
+    return <MenuMicrosite onBack={navigateToHome} />;
   }
+
 
 
   // ROUTE 2: Standalone POS Terminal Software (pos.manipos.com or <tenant>.pos.manipos.com)
