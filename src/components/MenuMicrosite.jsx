@@ -111,7 +111,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const [whatsappSettings, setWhatsappSettings] = useState({
         base_delivery_fee: 100,
         base_delivery_distance: 3,
-        delivery_fee_per_km: 50,
+        delivery_fee_per_km: 85, // 85 KES per km
         packaging_fee: 50,
         store_lat: -1.2921,
         store_lng: 36.7901
@@ -120,6 +120,10 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const [calculatedDistance, setCalculatedDistance] = useState(null);
     const [isGeocoding, setIsGeocoding] = useState(false);
     const [geocodingError, setGeocodingError] = useState('');
+    const [addressSuggestions, setAddressSuggestions] = useState([]);
+    const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
 
     const fetchPastOrders = async (guestId) => {
         try {
@@ -325,10 +329,69 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             } finally {
                 setIsGeocoding(false);
             }
-        }, 1000); // 1s debounce
+        }, 500);
 
         return () => clearTimeout(delayDebounceFn);
     }, [deliveryAddress, diningOption, whatsappSettings]);
+
+    // Real-time Address Autocomplete lookup for Nairobi
+    useEffect(() => {
+        if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 3) {
+            setAddressSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        setIsSearchingAddress(true);
+        const debounceTimer = setTimeout(async () => {
+            try {
+                const query = `${deliveryAddress}, Nairobi, Kenya`;
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`, {
+                    headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setAddressSuggestions(data || []);
+                    setShowSuggestions(true);
+                }
+            } catch(err) {
+                console.error("Address autocomplete search failed:", err);
+            } finally {
+                setIsSearchingAddress(false);
+            }
+        }, 350);
+
+        return () => clearTimeout(debounceTimer);
+    }, [deliveryAddress, diningOption]);
+
+    const handleSelectAddressSuggestion = (suggestion) => {
+        const formatted = suggestion.display_name;
+        setDeliveryAddress(formatted);
+        setAddressSuggestions([]);
+        setShowSuggestions(false);
+
+        const lat2 = parseFloat(suggestion.lat);
+        const lon2 = parseFloat(suggestion.lon);
+        const lat1 = whatsappSettings.store_lat;
+        const lon1 = whatsappSettings.store_lng;
+
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = 6371 * c; // in km
+
+        setCalculatedDistance(distance);
+
+        let fee = whatsappSettings.base_delivery_fee;
+        if (distance > whatsappSettings.base_delivery_distance) {
+            const extraDistance = distance - whatsappSettings.base_delivery_distance;
+            fee += extraDistance * whatsappSettings.delivery_fee_per_km; // 85 KES / km
+        }
+        setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
+    };
 
     const fetchMenu = async () => {
         try {
@@ -1411,15 +1474,35 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                             )}
                                             
                                             {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
-                                                <input
-                                                    type="text"
-                                                    placeholder="Delivery Address *"
-                                                    required
-                                                    value={deliveryAddress}
-                                                    disabled={submitting}
-                                                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                                                    className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium animate-fadeIn"
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Delivery Address (e.g. Kilimani, Westlands, Lavington) *"
+                                                        required
+                                                        value={deliveryAddress}
+                                                        disabled={submitting}
+                                                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                        onFocus={() => setShowSuggestions(true)}
+                                                        className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium animate-fadeIn"
+                                                    />
+                                                    
+                                                    {/* Real-time Address Autocomplete Floating Dropdown */}
+                                                    {showSuggestions && addressSuggestions.length > 0 && (
+                                                        <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-800 text-left">
+                                                            {addressSuggestions.map((s, idx) => (
+                                                                <button
+                                                                    key={idx}
+                                                                    type="button"
+                                                                    onClick={() => handleSelectAddressSuggestion(s)}
+                                                                    className="w-full px-3 py-2 text-[11px] text-slate-200 hover:bg-slate-800 hover:text-amber-400 font-medium text-left transition-colors flex items-center gap-2 cursor-pointer"
+                                                                >
+                                                                    <span className="text-amber-400">📍</span>
+                                                                    <span className="truncate">{s.display_name}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     )}
