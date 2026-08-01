@@ -1048,79 +1048,133 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                     <p className="text-xs text-gray-500 mt-1">Try resetting your search query or choosing another category.</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {filteredMenu.map(item => {
-                                        const cartItem = cart.find(i => i.id === item.id);
-                                        return (
-                                            <motion.div
-                                                key={item.id}
-                                                layout
-                                                className="bg-white border border-gray-150 hover:border-gray-250 rounded-[1.5rem] p-4 flex items-stretch justify-between gap-4 transition-all shadow-sm hover:shadow-md group relative text-left"
-                                            >
-                                                {/* Left Content Area */}
-                                                <div className="flex-1 flex flex-col justify-between min-w-0">
-                                                    <div className="space-y-1.5">
-                                                        <div>
-                                                            <h3 className="font-bold text-sm text-gray-900 group-hover:text-black transition-colors truncate">{item.name}</h3>
-                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{item.category}</span>
-                                                            </div>
-                                                        </div>
-                                                        <span className="text-xs font-black text-gray-900 font-mono">KES {Math.round(item.price).toLocaleString()}</span>
-                                                        <p className="text-[10px] text-gray-500 font-medium leading-normal line-clamp-2 md:line-clamp-3">
-                                                            {item.description || 'Tasty freshly prepared house recipe, made with premium ingredients.'}
-                                                        </p>
+                                activeCategory === 'All' ? (
+                                    /* Grouped by Category with Headers */
+                                    <div className="space-y-10">
+                                        {categories.filter(cat => cat !== 'All').map(categoryName => {
+                                            const catItems = filteredMenu.filter(item => (item.category || 'General') === categoryName);
+                                            if (catItems.length === 0) return null;
+                                            return (
+                                                <div key={categoryName} className="space-y-4">
+                                                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+                                                        <span className="text-xs font-black uppercase tracking-widest bg-gray-900 text-white px-3.5 py-1.5 rounded-xl shadow-sm">
+                                                            {categoryName}
+                                                        </span>
+                                                        <span className="text-xs text-gray-400 font-bold">({catItems.length} items)</span>
                                                     </div>
-
-                                                    <div className="mt-3 flex items-center justify-between gap-2">
-                                                        {cartItem && (
-                                                            <div className="flex items-center bg-gray-100 border border-gray-200 rounded-xl p-0.5">
-                                                                <button 
-                                                                    onClick={() => updateQuantity(item.id, -1)}
-                                                                    className="w-6 h-6 rounded-lg bg-gray-205 hover:bg-gray-300 flex items-center justify-center text-gray-700 transition-colors"
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                        {catItems.map(item => {
+                                                            const cartItem = cart.find(i => i.id === item.id);
+                                                            return (
+                                                                <motion.div
+                                                                    key={item.id}
+                                                                    layout
+                                                                    className="bg-white border border-gray-150 hover:border-gray-250 rounded-[1.5rem] p-4 flex items-stretch justify-between gap-4 transition-all shadow-sm hover:shadow-md group relative text-left"
                                                                 >
-                                                                    <Minus size={10} />
-                                                                </button>
-                                                                <span className="text-[11px] font-black font-mono px-2.5 text-gray-900">{cartItem.quantity}</span>
-                                                                <button 
-                                                                    onClick={() => updateQuantity(item.id, 1)}
-                                                                    className="w-6 h-6 rounded-lg bg-black text-white hover:bg-neutral-850 flex items-center justify-center transition-colors"
-                                                                >
-                                                                    <Plus size={10} />
-                                                                </button>
+                                                                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                                                                        <div className="space-y-1.5">
+                                                                            <div>
+                                                                                <h3 className="font-bold text-sm text-gray-900 group-hover:text-black transition-colors truncate">{item.name}</h3>
+                                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{item.category}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <span className="text-xs font-black text-gray-900 font-mono">KES {Math.round(item.price).toLocaleString()}</span>
+                                                                            <p className="text-[10px] text-gray-500 font-medium leading-normal line-clamp-2 md:line-clamp-3">
+                                                                                {item.description || 'Tasty freshly prepared house recipe, made with premium ingredients.'}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div className="mt-3 flex items-center justify-between gap-2">
+                                                                            {cartItem && (
+                                                                                <div className="flex items-center bg-gray-100 border border-gray-200 rounded-xl p-0.5">
+                                                                                    <button onClick={() => updateQuantity(item.id, -1)} className="w-6 h-6 rounded-lg bg-gray-205 hover:bg-gray-300 flex items-center justify-center text-gray-700 transition-colors">
+                                                                                        <Minus size={10} />
+                                                                                    </button>
+                                                                                    <span className="text-[11px] font-black font-mono px-2.5 text-gray-900">{cartItem.quantity}</span>
+                                                                                    <button onClick={() => updateQuantity(item.id, 1)} className="w-6 h-6 rounded-lg bg-black text-white hover:bg-neutral-850 flex items-center justify-center transition-colors">
+                                                                                        <Plus size={10} />
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
+                                                                        <img src={item.image_url || '/logo.png'} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-white" onError={(e) => { e.target.src = '/logo.png'; }} />
+                                                                        {!cartItem ? (
+                                                                            <button onClick={() => addToCart(item)} className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50">
+                                                                                <Plus size={16} />
+                                                                            </button>
+                                                                        ) : (
+                                                                            <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black text-white text-[9px] font-black rounded-lg shadow-md">
+                                                                                {cartItem.quantity}x
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </motion.div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    /* Single Category Grid View */
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {filteredMenu.map(item => {
+                                            const cartItem = cart.find(i => i.id === item.id);
+                                            return (
+                                                <motion.div
+                                                    key={item.id}
+                                                    layout
+                                                    className="bg-white border border-gray-150 hover:border-gray-250 rounded-[1.5rem] p-4 flex items-stretch justify-between gap-4 transition-all shadow-sm hover:shadow-md group relative text-left"
+                                                >
+                                                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                                                        <div className="space-y-1.5">
+                                                            <div>
+                                                                <h3 className="font-bold text-sm text-gray-900 group-hover:text-black transition-colors truncate">{item.name}</h3>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{item.category}</span>
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-xs font-black text-gray-900 font-mono">KES {Math.round(item.price).toLocaleString()}</span>
+                                                            <p className="text-[10px] text-gray-500 font-medium leading-normal line-clamp-2 md:line-clamp-3">
+                                                                {item.description || 'Tasty freshly prepared house recipe, made with premium ingredients.'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="mt-3 flex items-center justify-between gap-2">
+                                                            {cartItem && (
+                                                                <div className="flex items-center bg-gray-100 border border-gray-200 rounded-xl p-0.5">
+                                                                    <button onClick={() => updateQuantity(item.id, -1)} className="w-6 h-6 rounded-lg bg-gray-205 hover:bg-gray-300 flex items-center justify-center text-gray-700 transition-colors">
+                                                                        <Minus size={10} />
+                                                                    </button>
+                                                                    <span className="text-[11px] font-black font-mono px-2.5 text-gray-900">{cartItem.quantity}</span>
+                                                                    <button onClick={() => updateQuantity(item.id, 1)} className="w-6 h-6 rounded-lg bg-black text-white hover:bg-neutral-850 flex items-center justify-center transition-colors">
+                                                                        <Plus size={10} />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
+                                                        <img src={item.image_url || '/logo.png'} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-white" onError={(e) => { e.target.src = '/logo.png'; }} />
+                                                        {!cartItem ? (
+                                                            <button onClick={() => addToCart(item)} className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50">
+                                                                <Plus size={16} />
+                                                            </button>
+                                                        ) : (
+                                                            <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black text-white text-[9px] font-black rounded-lg shadow-md">
+                                                                {cartItem.quantity}x
                                                             </div>
                                                         )}
                                                     </div>
-                                                </div>
-
-                                                {/* Right Rounded Image Area */}
-                                                <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
-                                                    <img 
-                                                        src={item.image_url || '/logo.png'} 
-                                                        alt={item.name} 
-                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-white" 
-                                                        onError={(e) => { e.target.src = '/logo.png'; }} 
-                                                    />
-                                                    
-                                                    {/* Floating Plus/Status Button */}
-                                                    {!cartItem ? (
-                                                        <button
-                                                            onClick={() => addToCart(item)}
-                                                            className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50"
-                                                        >
-                                                            <Plus size={16} />
-                                                        </button>
-                                                    ) : (
-                                                        <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black text-white text-[9px] font-black rounded-lg shadow-md">
-                                                            {cartItem.quantity}x
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </motion.div>
-                                        );
-                                    })}
-                                </div>
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </div>
+                                )
                             )}
+
                         </div>
                     </div>
                 </>
