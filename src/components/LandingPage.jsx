@@ -64,14 +64,6 @@ export function LandingPage({ onProceedToLogin }) {
         <div className="flex items-center gap-2">
           <span className="text-2xl font-black tracking-tight text-white">Mani<span className="text-orange-500">POS</span></span>
         </div>
-
-        <button 
-          onClick={() => onProceedToLogin()}
-          className="text-xs font-bold text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-        >
-          <span>Staff Login</span>
-          <ArrowRight size={14} />
-        </button>
       </header>
 
       {/* Main Coming Soon Content */}
@@ -217,11 +209,8 @@ export function LandingPage({ onProceedToLogin }) {
       </main>
 
       {/* Minimal Footer */}
-      <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-slate-900 text-slate-500 text-xs font-semibold flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
+      <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-slate-900 text-slate-500 text-xs font-semibold flex items-center justify-between gap-4 relative z-10">
         <p>&copy; {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
-        <button onClick={() => onProceedToLogin()} className="hover:text-slate-300 transition-colors cursor-pointer">
-          Staff Terminal Access (pos.manipos.com)
-        </button>
       </footer>
     </div>
   );
