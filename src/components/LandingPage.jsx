@@ -126,7 +126,7 @@ export function LandingPage({ onProceedToLogin }) {
           <div className="flex-1 space-y-6">
             <div className="inline-flex items-center gap-2 text-xs font-black text-slate-700 bg-amber-100 border border-amber-300 px-4 py-1.5 rounded-full">
               <Sparkles size={14} className="text-amber-600" />
-              <span>CLOUD-BASED RESTAURANT MANAGEMENT & POS SYSTEM</span>
+              <span>CLOUD-BASED RESTAURANT POS SYSTEM</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.12] tracking-tight">
@@ -245,8 +245,8 @@ export function LandingPage({ onProceedToLogin }) {
         {/* Statistics Metric Bar */}
         <div id="metrics" className="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xl grid grid-cols-2 md:grid-cols-4 gap-8 text-center divide-x divide-slate-100">
           <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-black text-slate-900">5,000+</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Outlets Powered</p>
+            <p className="text-3xl sm:text-4xl font-black text-slate-900">10,000+</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Orders Processed</p>
           </div>
           <div className="space-y-1">
             <p className="text-3xl sm:text-4xl font-black text-amber-500">99.9%</p>
@@ -403,7 +403,7 @@ export function LandingPage({ onProceedToLogin }) {
               Ready to Upgrade Your Restaurant Management?
             </h2>
             <p className="text-slate-300 text-sm font-medium">
-              Join hundreds of restaurants leveraging ManiPOS to boost revenue and streamline kitchen operations.
+              Join fast-growing restaurants leveraging ManiPOS to boost revenue and streamline kitchen operations.
             </p>
             <div className="pt-2">
               <a
