@@ -4,12 +4,13 @@ import { motion } from 'framer-motion';
 import { 
   CheckCircle2, 
   Loader2, 
-  ArrowRight,
-  ShieldCheck,
-  Zap,
-  Building2,
   Clock,
-  Sparkles
+  Sparkles,
+  Monitor,
+  Globe,
+  Layers,
+  MapPin,
+  LayoutDashboard
 } from 'lucide-react';
 
 export function LandingPage({ onProceedToLogin }) {
@@ -188,22 +189,32 @@ export function LandingPage({ onProceedToLogin }) {
           )}
         </motion.div>
 
-        {/* Value Highlights */}
-        <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left max-w-3xl w-full">
-          <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800/80">
-            <Zap size={20} className="text-orange-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Ultra-Fast Register</h4>
-            <p className="text-slate-400 text-xs font-medium">Sub-second order entry designed for peak meal rushes.</p>
+        {/* Value Highlights - Top Selling Features */}
+        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-left max-w-5xl w-full">
+          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-orange-500/30 transition-all">
+            <Monitor size={20} className="text-orange-400 mb-2" />
+            <h4 className="text-sm font-bold text-white mb-1">Kitchen Display (KDS)</h4>
+            <p className="text-slate-400 text-xs font-medium leading-relaxed">Real-time bump screens routing orders directly to kitchen lines.</p>
           </div>
-          <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800/80">
-            <ShieldCheck size={20} className="text-emerald-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">100% Offline Resilience</h4>
-            <p className="text-slate-400 text-xs font-medium">Keep printing kitchen tickets even when Wi-Fi goes down.</p>
+          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-emerald-500/30 transition-all">
+            <Globe size={20} className="text-emerald-400 mb-2" />
+            <h4 className="text-sm font-bold text-white mb-1">Guest Menu Microsite</h4>
+            <p className="text-slate-400 text-xs font-medium leading-relaxed">Branded mobile web menu for QR ordering & guest browsing.</p>
           </div>
-          <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800/80">
-            <Building2 size={20} className="text-blue-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Zero Hardware Lock-In</h4>
-            <p className="text-slate-400 text-xs font-medium">Use any iPad, Android tablet, or existing desktop browser.</p>
+          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-purple-500/30 transition-all">
+            <Layers size={20} className="text-purple-400 mb-2" />
+            <h4 className="text-sm font-bold text-white mb-1">Multi-Brand Support</h4>
+            <p className="text-slate-400 text-xs font-medium leading-relaxed">Manage multiple virtual cloud kitchen brands from one register.</p>
+          </div>
+          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-blue-500/30 transition-all">
+            <MapPin size={20} className="text-blue-400 mb-2" />
+            <h4 className="text-sm font-bold text-white mb-1">Multi-Location Control</h4>
+            <p className="text-slate-400 text-xs font-medium leading-relaxed">Centralized subdomains and management for all your branches.</p>
+          </div>
+          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-amber-500/30 transition-all">
+            <LayoutDashboard size={20} className="text-amber-400 mb-2" />
+            <h4 className="text-sm font-bold text-white mb-1">Owner Dashboard</h4>
+            <p className="text-slate-400 text-xs font-medium leading-relaxed">Dedicated portal for sales analytics, stock control & Z-reports.</p>
           </div>
         </div>
       </main>
