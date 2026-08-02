@@ -113,7 +113,7 @@ export function LandingPage({ onProceedToLogin }) {
             href="#signup"
             className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-5 py-3 rounded-xl transition-all shadow-md shadow-amber-400/20 flex items-center gap-1.5"
           >
-            <span>Sign Up for Free</span>
+            <span>Request Demo</span>
             <ArrowRight size={14} />
           </a>
         </div>
@@ -137,11 +137,10 @@ export function LandingPage({ onProceedToLogin }) {
               Built for physical restaurants, multi-location dining groups, and quick-service outlets. Manage billing, kitchen displays, guest menus, and multi-brand operations seamlessly.
             </p>
 
-            {/* Sign Up Form Card */}
+            {/* Request Demo Form Card */}
             <div id="signup" className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 max-w-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-black text-slate-900">Start Your Free Trial</h3>
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">No Credit Card Needed</span>
+              <div className="mb-4">
+                <h3 className="text-lg font-black text-slate-900">Request a Live Demo</h3>
               </div>
 
               {!leadSuccess ? (
@@ -211,7 +210,7 @@ export function LandingPage({ onProceedToLogin }) {
                   >
                     {leadLoading ? <Loader2 className="animate-spin text-slate-950" size={18} /> : (
                       <>
-                        <span>Get Started Free</span>
+                        <span>Request Demo</span>
                         <ArrowRight size={18} />
                       </>
                     )}
@@ -222,9 +221,9 @@ export function LandingPage({ onProceedToLogin }) {
                   <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
                     <CheckCircle2 size={26} />
                   </div>
-                  <h4 className="text-base font-black text-slate-900">Your Account Request Received!</h4>
+                  <h4 className="text-base font-black text-slate-900">Demo Request Received!</h4>
                   <p className="text-slate-600 text-xs font-semibold max-w-xs mx-auto">
-                    Our onboarding team will contact you shortly to activate your free trial.
+                    Our team will contact you shortly to schedule your live demo.
                   </p>
                 </div>
               )}
@@ -411,7 +410,7 @@ export function LandingPage({ onProceedToLogin }) {
                 href="#signup"
                 className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-sm px-8 py-4 rounded-xl transition-all shadow-xl shadow-amber-400/20"
               >
-                <span>Get Started Free</span>
+                <span>Request Demo</span>
                 <ArrowRight size={18} />
               </a>
             </div>
