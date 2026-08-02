@@ -4,13 +4,18 @@ import { motion } from 'framer-motion';
 import { 
   CheckCircle2, 
   Loader2, 
-  Clock,
-  Sparkles,
+  Zap,
+  BarChart3,
+  Users,
+  RefreshCw,
   Monitor,
   Globe,
   Layers,
   MapPin,
-  LayoutDashboard
+  LayoutDashboard,
+  ArrowRight,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 
 export function LandingPage({ onProceedToLogin }) {
@@ -27,7 +32,7 @@ export function LandingPage({ onProceedToLogin }) {
   const handleLeadSubmit = async (e) => {
     e.preventDefault();
     if (!formData.restaurantName || !formData.email) {
-      setLeadError('Please provide your restaurant name and email address.');
+      setLeadError('Please fill in your restaurant name and email address.');
       return;
     }
 
@@ -48,7 +53,6 @@ export function LandingPage({ onProceedToLogin }) {
       setLeadSuccess(true);
     } catch (err) {
       console.error('Lead submission error:', err);
-      // Fallback success for user experience if Supabase RLS policies are strictly scoped
       setLeadSuccess(true);
     } finally {
       setLeadLoading(false);
@@ -56,171 +60,258 @@ export function LandingPage({ onProceedToLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white font-sans antialiased flex flex-col justify-between relative overflow-hidden selection:bg-orange-500 selection:text-white">
-      {/* Background Subtle Ambient Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-orange-500/10 via-amber-500/5 to-transparent blur-3xl pointer-events-none"></div>
-
-      {/* Navigation */}
-      <header className="w-full max-w-6xl mx-auto px-6 py-8 flex items-center justify-between relative z-10">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-orange-500 selection:text-white flex flex-col justify-between">
+      {/* Header Navigation */}
+      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between bg-slate-50 sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <span className="text-2xl font-black tracking-tight text-white">Mani<span className="text-orange-500">POS</span></span>
+          <span className="text-2xl font-black tracking-tight text-slate-900">Mani<span className="text-orange-500">POS</span></span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Early Access Opening Soon</span>
+          </div>
         </div>
       </header>
 
-      {/* Main Coming Soon Content */}
-      <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-12 flex flex-col items-center justify-center text-center relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-full mb-8"
-        >
-          <Clock size={14} />
-          <span>Coming Soon &bull; Early Access Waitlist</span>
-        </motion.div>
+      {/* Main Hero & Content */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-6 pb-20 space-y-16">
+        {/* Top Hero Grid */}
+        <div className="flex flex-col lg:flex-row items-center gap-12 text-left">
+          {/* Left Text & Form */}
+          <div className="flex-1 space-y-6">
+            <div className="inline-flex items-center gap-2 text-xs font-extrabold text-orange-600 bg-orange-100/80 border border-orange-200 px-4 py-1.5 rounded-full">
+              <Sparkles size={14} className="text-orange-500" />
+              <span>RESTAURANT MANAGEMENT ENGINE</span>
+            </div>
 
-        <motion.h1 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-[1.15] max-w-3xl mb-6"
-        >
-          The Next-Generation POS for High-Volume Restaurants.
-        </motion.h1>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.1] tracking-tight">
+              All-in-One Restaurant POS & Cloud Kitchen Software.
+            </h1>
 
-        <motion.p 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="text-slate-400 text-base sm:text-lg leading-relaxed max-w-2xl mb-12 font-medium"
-        >
-          Built for speed, offline resilience, and zero expensive hardware contracts. We are currently piloting with select cloud kitchens and dining spots. Join the waitlist for priority onboarding.
-        </motion.p>
+            <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-normal">
+              Manage your orders, kitchen displays, guest online menus, multi-brand outlets, and owner analytics from one clean unified platform.
+            </p>
 
-        {/* Lead Capture Form */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="w-full max-w-lg bg-slate-900/90 backdrop-blur-md p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl text-left"
-        >
-          {!leadSuccess ? (
-            <form onSubmit={handleLeadSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Restaurant Name <span className="text-orange-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.restaurantName}
-                  onChange={(e) => setFormData({ ...formData, restaurantName: e.target.value })}
-                  placeholder="e.g. Mama's Kitchen"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-sm text-white font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
-                />
-              </div>
+            {/* Early Access Signup Form Card */}
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 max-w-xl">
+              <h3 className="text-lg font-black text-slate-900 mb-1">Get Early Access & Private Demo</h3>
+              <p className="text-xs font-semibold text-slate-500 mb-6">Interested restaurants can begin signing up below for priority pilot onboarding.</p>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Owner / Manager Email <span className="text-orange-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="owner@restaurant.com"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-sm text-white font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
-                />
-              </div>
+              {!leadSuccess ? (
+                <form onSubmit={handleLeadSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Restaurant Name <span className="text-orange-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.restaurantName}
+                        onChange={(e) => setFormData({ ...formData, restaurantName: e.target.value })}
+                        placeholder="e.g. Little Lagos"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Owner Email <span className="text-orange-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="owner@restaurant.com"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    Phone Number (Optional)
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+254 700 000 000"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-sm text-white font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="+254 700 000 000"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        City / Location
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.location}
+                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                        placeholder="e.g. Nairobi"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  {leadError && <p className="text-red-500 text-xs font-bold">{leadError}</p>}
+
+                  <button
+                    type="submit"
+                    disabled={leadLoading}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black text-sm py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {leadLoading ? <Loader2 className="animate-spin" size={18} /> : (
+                      <>
+                        <span>Join Early Access List</span>
+                        <ArrowRight size={18} />
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <div className="py-6 text-center space-y-3 bg-emerald-50 rounded-2xl border border-emerald-200">
+                  <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
+                    <CheckCircle2 size={26} />
+                  </div>
+                  <h4 className="text-base font-black text-slate-900">You're on the early list!</h4>
+                  <p className="text-slate-600 text-xs font-semibold max-w-xs mx-auto">
+                    We will reach out to schedule your private demo before public launch.
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    City / Location
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="e.g. Nairobi / Lagos"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-sm text-white font-semibold focus:outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
+              )}
+            </div>
+          </div>
 
-              {leadError && <p className="text-red-400 text-xs font-bold">{leadError}</p>}
+          {/* Right PosBytz-Style Hardware & Interface Photo Mockup */}
+          <div className="flex-1 w-full flex justify-center lg:justify-end">
+            <div className="bg-white p-3 rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full">
+              <img 
+                src="/posbytz_hero.png" 
+                alt="ManiPOS Kitchen & Register Setup" 
+                className="w-full h-auto rounded-2xl object-cover" 
+              />
+            </div>
+          </div>
+        </div>
 
-              <button
-                type="submit"
-                disabled={leadLoading}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm py-4 px-6 rounded-xl transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {leadLoading ? <Loader2 className="animate-spin" size={18} /> : (
-                  <>
-                    <span>Request Early Access</span>
-                    <Sparkles size={16} />
-                  </>
-                )}
-              </button>
-            </form>
-          ) : (
-            <div className="py-8 text-center space-y-4">
-              <div className="w-14 h-14 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20">
-                <CheckCircle2 size={32} />
+        {/* PosBytz-Style White 4-Column Feature Highlight Bar */}
+        <div className="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-center divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
+            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
+              <Zap size={26} />
+            </div>
+            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">Instant Menu Sync</h4>
+            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
+              Instant sync of menu, pricing, and inventory changes across all devices.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
+            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
+              <BarChart3 size={26} />
+            </div>
+            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">Real-Time Sales Data</h4>
+            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
+              Real-time sales data, item velocity, and revenue reports across all locations.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
+            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
+              <Users size={26} />
+            </div>
+            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">Staff & Permissions</h4>
+            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
+              Centralized staff PINs, cashier shift tracking, and role permission management.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
+            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
+              <RefreshCw size={26} />
+            </div>
+            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">No Batch Processing</h4>
+            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
+              No batch processing — all ticket edits and order updates apply immediately.
+            </p>
+          </div>
+        </div>
+
+        {/* Top 5 Selling Features Grid */}
+        <div className="space-y-8 pt-8">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
+            <div className="inline-block bg-orange-100 text-orange-700 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
+              Core Platform Capabilities
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+              Built Specifically for Modern Restaurants & Kitchens
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 text-left">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
+                <Monitor size={22} />
               </div>
-              <h3 className="text-xl font-black text-white tracking-tight">You're on the list!</h3>
-              <p className="text-slate-400 text-xs font-medium max-w-sm mx-auto leading-relaxed">
-                Thank you for your interest in ManiPOS. Our onboarding team will reach out to schedule your private demo and pilot setup.
+              <h4 className="text-sm font-black text-slate-900">Kitchen Display (KDS)</h4>
+              <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                Real-time bump screens routing orders directly to kitchen stations with ticket timers.
               </p>
             </div>
-          )}
-        </motion.div>
 
-        {/* Value Highlights - Top Selling Features */}
-        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-left max-w-5xl w-full">
-          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-orange-500/30 transition-all">
-            <Monitor size={20} className="text-orange-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Kitchen Display (KDS)</h4>
-            <p className="text-slate-400 text-xs font-medium leading-relaxed">Real-time bump screens routing orders directly to kitchen lines.</p>
-          </div>
-          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-emerald-500/30 transition-all">
-            <Globe size={20} className="text-emerald-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Guest Menu Microsite</h4>
-            <p className="text-slate-400 text-xs font-medium leading-relaxed">Branded mobile web menu for QR ordering & guest browsing.</p>
-          </div>
-          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-purple-500/30 transition-all">
-            <Layers size={20} className="text-purple-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Multi-Brand Support</h4>
-            <p className="text-slate-400 text-xs font-medium leading-relaxed">Manage multiple virtual cloud kitchen brands from one register.</p>
-          </div>
-          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-blue-500/30 transition-all">
-            <MapPin size={20} className="text-blue-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Multi-Location Control</h4>
-            <p className="text-slate-400 text-xs font-medium leading-relaxed">Centralized subdomains and management for all your branches.</p>
-          </div>
-          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800/80 hover:border-amber-500/30 transition-all">
-            <LayoutDashboard size={20} className="text-amber-400 mb-2" />
-            <h4 className="text-sm font-bold text-white mb-1">Owner Dashboard</h4>
-            <p className="text-slate-400 text-xs font-medium leading-relaxed">Dedicated portal for sales analytics, stock control & Z-reports.</p>
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+                <Globe size={22} />
+              </div>
+              <h4 className="text-sm font-black text-slate-900">Guest Menu Microsite</h4>
+              <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                Branded mobile web menu for QR code table ordering & guest browsing.
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
+                <Layers size={22} />
+              </div>
+              <h4 className="text-sm font-black text-slate-900">Multi-Brand Support</h4>
+              <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                Manage multiple virtual cloud kitchen brands seamlessly from one POS terminal.
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                <MapPin size={22} />
+              </div>
+              <h4 className="text-sm font-black text-slate-900">Multi-Location Control</h4>
+              <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                Centralized subdomains and management across all your restaurant branches.
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
+                <LayoutDashboard size={22} />
+              </div>
+              <h4 className="text-sm font-black text-slate-900">Owner Dashboard</h4>
+              <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                Dedicated portal for real-time sales analytics, stock control & Z-reports.
+              </p>
+            </div>
           </div>
         </div>
       </main>
 
-      {/* Minimal Footer */}
-      <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-slate-900 text-slate-500 text-xs font-semibold flex items-center justify-between gap-4 relative z-10">
+      {/* Footer */}
+      <footer className="w-full max-w-7xl mx-auto px-6 py-8 border-t border-slate-200/80 text-slate-500 text-xs font-semibold flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-900 font-black text-sm">Mani<span className="text-orange-500">POS</span></span>
+          <span>&bull; Restaurant Software Engine</span>
+        </div>
         <p>&copy; {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
       </footer>
     </div>
