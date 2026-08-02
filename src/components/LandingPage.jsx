@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, 
   Loader2, 
-  Zap,
-  BarChart3,
-  Users,
-  RefreshCw,
+  ArrowRight,
   Monitor,
   Globe,
   Layers,
   MapPin,
   LayoutDashboard,
-  ArrowRight,
-  Clock,
-  Sparkles
+  Utensils,
+  Coffee,
+  Store,
+  ChevronDown,
+  Sparkles,
+  Zap,
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 
 export function LandingPage({ onProceedToLogin }) {
@@ -28,6 +30,7 @@ export function LandingPage({ onProceedToLogin }) {
   const [leadLoading, setLeadLoading] = useState(false);
   const [leadSuccess, setLeadSuccess] = useState(false);
   const [leadError, setLeadError] = useState('');
+  const [openFaqIndex, setOpenFaqIndex] = useState(0);
 
   const handleLeadSubmit = async (e) => {
     e.preventDefault();
@@ -59,45 +62,73 @@ export function LandingPage({ onProceedToLogin }) {
     }
   };
 
+  const faqData = [
+    {
+      q: "What makes ManiPOS different from other POS systems?",
+      a: "ManiPOS is built specifically for modern restaurants, cloud kitchens, and multi-location brands. It combines sub-second order entry, native Kitchen Display (KDS), guest QR code digital menus, and multi-brand support into a single cloud platform with zero mandatory hardware lock-in."
+    },
+    {
+      q: "Does ManiPOS work offline during internet outages?",
+      a: "Yes! ManiPOS uses a local-first offline architecture. Order entry and kitchen thermal printing continue seamlessly even when Wi-Fi drops, automatically syncing back to the cloud when reconnected."
+    },
+    {
+      q: "How does multi-location and subdomain routing work?",
+      a: "ManiPOS provides dedicated subdomains for each outlet (e.g. littlelagos.pos.manipos.com or mutekitchens.manipos.com), allowing managers to isolate menus, staff PINs, and Z-reports per branch."
+    },
+    {
+      q: "Can I use my existing hardware?",
+      a: "Yes! ManiPOS runs on any iPad, Android tablet, desktop browser, or standard ESC/POS network thermal printer without requiring expensive proprietary screen leases."
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-orange-500 selection:text-white flex flex-col justify-between">
-      {/* Header Navigation */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between bg-slate-50 sticky top-0 z-40">
-        <div className="flex items-center gap-2">
+      {/* Header Navbar */}
+      <header className="w-full max-w-7xl mx-auto px-6 py-5 flex items-center justify-between bg-slate-50 border-b border-slate-200/80 sticky top-0 z-50">
+        <div className="flex items-center gap-3">
           <span className="text-2xl font-black tracking-tight text-slate-900">Mani<span className="text-orange-500">POS</span></span>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Early Access Opening Soon</span>
-          </div>
+        <nav className="hidden md:flex items-center gap-8 text-sm font-bold text-slate-600">
+          <a href="#features" className="hover:text-orange-600 transition-colors">Features</a>
+          <a href="#outlets" className="hover:text-orange-600 transition-colors">Whom We Serve</a>
+          <a href="#faq" className="hover:text-orange-600 transition-colors">FAQ</a>
+        </nav>
+
+        <div className="flex items-center gap-3">
+          <a
+            href="#signup"
+            className="bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md shadow-orange-500/20 flex items-center gap-1.5"
+          >
+            <span>Request Early Access</span>
+            <ArrowRight size={14} />
+          </a>
         </div>
       </header>
 
-      {/* Main Hero & Content */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-6 pb-20 space-y-16">
-        {/* Top Hero Grid */}
+      {/* Main SlantCo-Inspired Hero & Content */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-8 pb-20 space-y-20">
+        {/* SlantCo Style Hero Section */}
         <div className="flex flex-col lg:flex-row items-center gap-12 text-left">
-          {/* Left Text & Form */}
+          {/* Hero Left Content */}
           <div className="flex-1 space-y-6">
-            <div className="inline-flex items-center gap-2 text-xs font-extrabold text-orange-600 bg-orange-100/80 border border-orange-200 px-4 py-1.5 rounded-full">
+            <div className="inline-flex items-center gap-2 text-xs font-black text-orange-600 bg-orange-100/80 border border-orange-200 px-4 py-1.5 rounded-full">
               <Sparkles size={14} className="text-orange-500" />
-              <span>RESTAURANT MANAGEMENT ENGINE</span>
+              <span>CLOUD-BASED RESTAURANT POS & MANAGEMENT SYSTEM</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.1] tracking-tight">
-              All-in-One Restaurant POS & Cloud Kitchen Software.
+              Supercharge Your Restaurant Operations & Sales.
             </h1>
 
             <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-normal">
-              Manage your orders, kitchen displays, guest online menus, multi-brand outlets, and owner analytics from one clean unified platform.
+              Cloud-based POS and restaurant management software system that helps you grow your sales, improve service speed, cut costs, and manage multi-branch operations effortlessly.
             </p>
 
-            {/* Early Access Signup Form Card */}
-            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 max-w-xl">
+            {/* Early Access Form */}
+            <div id="signup" className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 max-w-xl">
               <h3 className="text-lg font-black text-slate-900 mb-1">Get Early Access & Private Demo</h3>
-              <p className="text-xs font-semibold text-slate-500 mb-6">Interested restaurants can begin signing up below for priority pilot onboarding.</p>
+              <p className="text-xs font-semibold text-slate-500 mb-6">Join the early pilot list to get priority setup when we launch.</p>
 
               {!leadSuccess ? (
                 <form onSubmit={handleLeadSubmit} className="space-y-4">
@@ -166,7 +197,7 @@ export function LandingPage({ onProceedToLogin }) {
                   >
                     {leadLoading ? <Loader2 className="animate-spin" size={18} /> : (
                       <>
-                        <span>Join Early Access List</span>
+                        <span>Request Free Pilot Access</span>
                         <ArrowRight size={18} />
                       </>
                     )}
@@ -186,122 +217,176 @@ export function LandingPage({ onProceedToLogin }) {
             </div>
           </div>
 
-          {/* Right PosBytz-Style Hardware & Interface Photo Mockup */}
+          {/* Hero Hardware & Register Photo */}
           <div className="flex-1 w-full flex justify-center lg:justify-end">
             <div className="bg-white p-3 rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full">
               <img 
                 src="/posbytz_hero.png" 
-                alt="ManiPOS Kitchen & Register Setup" 
+                alt="ManiPOS Cloud POS System" 
                 className="w-full h-auto rounded-2xl object-cover" 
               />
             </div>
           </div>
         </div>
 
-        {/* PosBytz-Style White 4-Column Feature Highlight Bar */}
-        <div className="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-center divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
-          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
-            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
-              <Zap size={26} />
-            </div>
-            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">Instant Menu Sync</h4>
-            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
-              Instant sync of menu, pricing, and inventory changes across all devices.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
-            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
-              <BarChart3 size={26} />
-            </div>
-            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">Real-Time Sales Data</h4>
-            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
-              Real-time sales data, item velocity, and revenue reports across all locations.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
-            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
-              <Users size={26} />
-            </div>
-            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">Staff & Permissions</h4>
-            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
-              Centralized staff PINs, cashier shift tracking, and role permission management.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center pt-4 lg:pt-0 lg:px-4">
-            <div className="w-14 h-14 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
-              <RefreshCw size={26} />
-            </div>
-            <h4 className="text-base font-extrabold text-slate-900 mb-1.5">No Batch Processing</h4>
-            <p className="text-xs font-semibold text-slate-500 max-w-xs leading-relaxed">
-              No batch processing — all ticket edits and order updates apply immediately.
-            </p>
-          </div>
-        </div>
-
-        {/* Top 5 Selling Features Grid */}
-        <div className="space-y-8 pt-8">
+        {/* SlantCo-Style Feature Highlight Grid */}
+        <div id="features" className="space-y-8 pt-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <div className="inline-block bg-orange-100 text-orange-700 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
-              Core Platform Capabilities
+              Comprehensive Platform Capabilities
             </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-              Built Specifically for Modern Restaurants & Kitchens
+              Everything Your Restaurant Needs in One System
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 text-left">
+            {/* Feature 1 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
-                <Monitor size={22} />
+              <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
+                <Monitor size={24} />
               </div>
-              <h4 className="text-sm font-black text-slate-900">Kitchen Display (KDS)</h4>
+              <h4 className="text-sm font-black text-slate-900">Kitchen Display System</h4>
               <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                Real-time bump screens routing orders directly to kitchen stations with ticket timers.
+                Streamline order tickets with real-time KDS bump screens and ticket timers for zero-delay prep.
               </p>
             </div>
 
+            {/* Feature 2 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
-                <Globe size={22} />
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+                <Globe size={24} />
               </div>
-              <h4 className="text-sm font-black text-slate-900">Guest Menu Microsite</h4>
+              <h4 className="text-sm font-black text-slate-900">Guest QR Menu & Microsite</h4>
               <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                Branded mobile web menu for QR code table ordering & guest browsing.
+                Provide guests with branded mobile web menus for table QR ordering and online takeaway browsing.
               </p>
             </div>
 
+            {/* Feature 3 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
-                <Layers size={22} />
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
+                <Layers size={24} />
               </div>
-              <h4 className="text-sm font-black text-slate-900">Multi-Brand Support</h4>
+              <h4 className="text-sm font-black text-slate-900">Multi-Brand Cloud Kitchen</h4>
               <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                Manage multiple virtual cloud kitchen brands seamlessly from one POS terminal.
+                Operate multiple virtual cloud kitchen brands from a single POS register and central inventory.
               </p>
             </div>
 
+            {/* Feature 4 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                <MapPin size={22} />
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                <MapPin size={24} />
               </div>
               <h4 className="text-sm font-black text-slate-900">Multi-Location Control</h4>
               <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                Centralized subdomains and management across all your restaurant branches.
+                Manage menus, staff access, and sales analytics across all your restaurant branches effortlessly.
               </p>
             </div>
 
+            {/* Feature 5 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
-                <LayoutDashboard size={22} />
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
+                <LayoutDashboard size={24} />
               </div>
-              <h4 className="text-sm font-black text-slate-900">Owner Dashboard</h4>
+              <h4 className="text-sm font-black text-slate-900">Owner & Manager Portal</h4>
               <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                Dedicated portal for real-time sales analytics, stock control & Z-reports.
+                Real-time dashboard for daily Z-reports, sales analytics, stock control, and cashier audit logs.
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* SlantCo-Style "Whom We Serve" Section */}
+        <div id="outlets" className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-xl space-y-10">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
+            <div className="inline-block bg-slate-100 text-slate-700 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
+              Whom We Serve
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+              Tailored for Every Food & Beverage Concept
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center">
+                <Utensils size={20} />
+              </div>
+              <h4 className="text-base font-extrabold text-slate-900">Fine Dine & Full Service</h4>
+              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                Table mapping, bill splitting, order courses, and waiter handheld order taking.
+              </p>
+            </div>
+
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center">
+                <Zap size={20} />
+              </div>
+              <h4 className="text-base font-extrabold text-slate-900">QSR & Fast Casual</h4>
+              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                Sub-second order entry, fast payment checkout, and high-speed thermal printing.
+              </p>
+            </div>
+
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center">
+                <Building2 size={20} />
+              </div>
+              <h4 className="text-base font-extrabold text-slate-900">Cloud Kitchens</h4>
+              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                Multi-brand dispatch, automated ticket routing, and central stock management.
+              </p>
+            </div>
+
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center">
+                <Coffee size={20} />
+              </div>
+              <h4 className="text-base font-extrabold text-slate-900">Cafes & Bakeries</h4>
+              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                Custom item modifiers, combo deals, loyalty rewards, and rapid order workflows.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* FAQ Accordion Section */}
+        <div id="faq" className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-xl space-y-8 text-left">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Frequently Asked Questions</h2>
+          </div>
+
+          <div className="space-y-4">
+            {faqData.map((faq, idx) => {
+              const isOpen = openFaqIndex === idx;
+              return (
+                <div key={idx} className="border-b border-slate-200 pb-4">
+                  <button
+                    onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                    className="w-full py-3 text-left flex justify-between items-center text-base font-bold text-slate-900 hover:text-orange-600 transition-colors cursor-pointer"
+                  >
+                    <span>{faq.q}</span>
+                    <ChevronDown size={18} className={`text-orange-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  <AnimatePresence>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <p className="text-slate-600 text-sm leading-relaxed pt-2 font-medium">
+                          {faq.a}
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
         </div>
       </main>
@@ -310,7 +395,7 @@ export function LandingPage({ onProceedToLogin }) {
       <footer className="w-full max-w-7xl mx-auto px-6 py-8 border-t border-slate-200/80 text-slate-500 text-xs font-semibold flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="text-slate-900 font-black text-sm">Mani<span className="text-orange-500">POS</span></span>
-          <span>&bull; Restaurant Software Engine</span>
+          <span>&bull; Cloud Restaurant POS & Management System</span>
         </div>
         <p>&copy; {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
       </footer>
