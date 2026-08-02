@@ -70,16 +70,16 @@ export function LandingPage({ onProceedToLogin }) {
 
   const faqData = [
     {
-      q: "What is Slant / ManiPOS software?",
-      a: "ManiPOS (powered by Slant POS architecture) is a cloud-based restaurant POS and management software system that helps you grow sales, improve order prep speed, reduce food waste, and manage single or multi-location food outlets seamlessly."
+      q: "What is ManiPOS software?",
+      a: "ManiPOS is a modern cloud-based restaurant POS and management software system that helps physical restaurants, cafes, QSRs, and multi-location brands grow sales, improve order prep speed, reduce costs, and manage operations seamlessly."
     },
     {
       q: "Does the system work offline if internet drops?",
       a: "Yes. The POS terminal includes a local-first offline fallback. Orders and thermal kitchen tickets continue printing locally during internet outages, syncing automatically back to the cloud when internet restores."
     },
     {
-      q: "Can I manage multiple outlets and cloud kitchen brands?",
-      a: "Absolutely. ManiPOS supports multi-outlet configuration and virtual cloud kitchen brands under one master login, allowing you to track inventory, staff access, and sales analytics per outlet."
+      q: "Can I manage multiple outlets and restaurant brands?",
+      a: "Absolutely. ManiPOS supports multi-location setups and multi-brand menus under one master account, allowing you to track inventory, staff access, and sales analytics across all your branches."
     },
     {
       q: "What hardware is supported?",
@@ -89,11 +89,11 @@ export function LandingPage({ onProceedToLogin }) {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-sans antialiased selection:bg-amber-400 selection:text-slate-950 flex flex-col justify-between">
-      {/* SlantCo Navigation Bar */}
+      {/* Navigation Bar */}
       <header className="w-full max-w-7xl mx-auto px-6 py-4 flex items-center justify-between bg-white border-b border-slate-200/70 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-amber-400 rounded-xl flex items-center justify-center font-black text-slate-950 text-xl shadow-sm">
-            S
+            M
           </div>
           <div>
             <span className="text-2xl font-black tracking-tight text-slate-900">Mani<span className="text-amber-500">POS</span></span>
@@ -103,8 +103,8 @@ export function LandingPage({ onProceedToLogin }) {
 
         <nav className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-700">
           <a href="#features" className="hover:text-amber-500 transition-colors">Features</a>
-          <a href="#outlets" className="hover:text-amber-500 transition-colors">Outlet Types</a>
-          <a href="#metrics" className="hover:text-amber-500 transition-colors">Why Slant</a>
+          <a href="#outlets" className="hover:text-amber-500 transition-colors">Whom We Serve</a>
+          <a href="#metrics" className="hover:text-amber-500 transition-colors">Why ManiPOS</a>
           <a href="#faq" className="hover:text-amber-500 transition-colors">FAQ</a>
         </nav>
 
@@ -119,7 +119,7 @@ export function LandingPage({ onProceedToLogin }) {
         </div>
       </header>
 
-      {/* Hero Section - SlantCo Exact Replica */}
+      {/* Hero Section */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-10 pb-20 space-y-20">
         <div className="flex flex-col lg:flex-row items-center gap-12 text-left">
           {/* Hero Left Content */}
@@ -134,10 +134,10 @@ export function LandingPage({ onProceedToLogin }) {
             </h1>
 
             <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-medium">
-              Cloud-based POS and restaurant management software system that helps you grow your sales, improve service speed, cut costs, and manage your operations better.
+              Built for physical restaurants, multi-location dining groups, and quick-service outlets. Manage billing, kitchen displays, guest menus, and multi-brand operations seamlessly.
             </p>
 
-            {/* SlantCo Sign Up Form Card */}
+            {/* Sign Up Form Card */}
             <div id="signup" className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 max-w-xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-black text-slate-900">Start Your Free Trial</h3>
@@ -236,7 +236,7 @@ export function LandingPage({ onProceedToLogin }) {
             <div className="bg-white p-3 rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full">
               <img 
                 src="/posbytz_hero.png" 
-                alt="Slant POS Software & Hardware" 
+                alt="ManiPOS Software & Hardware" 
                 className="w-full h-auto rounded-2xl object-cover" 
               />
             </div>
@@ -263,7 +263,7 @@ export function LandingPage({ onProceedToLogin }) {
           </div>
         </div>
 
-        {/* SlantCo Main Features Grid */}
+        {/* Main Features Grid */}
         <div id="features" className="space-y-10">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <div className="inline-block bg-amber-100 text-slate-900 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
@@ -343,7 +343,7 @@ export function LandingPage({ onProceedToLogin }) {
           </div>
         </div>
 
-        {/* SlantCo Outlet Types Section */}
+        {/* Outlet Types Section */}
         <div id="outlets" className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-xl space-y-10">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <div className="inline-block bg-slate-100 text-slate-800 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
@@ -379,7 +379,7 @@ export function LandingPage({ onProceedToLogin }) {
               <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold">
                 <Building2 size={20} />
               </div>
-              <h4 className="text-base font-extrabold text-slate-900">Cloud Kitchens</h4>
+              <h4 className="text-base font-extrabold text-slate-900">Multi-Brand Outlets</h4>
               <p className="text-xs font-semibold text-slate-500 leading-relaxed">
                 Multi-brand dispatch, automated ticket routing, and central inventory.
               </p>
@@ -397,7 +397,7 @@ export function LandingPage({ onProceedToLogin }) {
           </div>
         </div>
 
-        {/* SlantCo CTA Banner */}
+        {/* CTA Banner */}
         <div className="bg-slate-900 text-white p-10 sm:p-14 rounded-3xl shadow-2xl text-center space-y-6 relative overflow-hidden">
           <div className="max-w-2xl mx-auto space-y-4 relative z-10">
             <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
@@ -457,17 +457,17 @@ export function LandingPage({ onProceedToLogin }) {
         </div>
       </main>
 
-      {/* SlantCo Dark Footer */}
+      {/* Dark Footer */}
       <footer className="w-full bg-slate-950 text-slate-400 py-12 border-t border-slate-800 text-xs font-semibold">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center font-black text-slate-950 text-sm">
-              S
+              M
             </div>
             <span className="text-white font-extrabold text-sm">ManiPOS</span>
             <span>&bull; Cloud Restaurant POS & Management System</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} Slant / ManiPOS. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
         </div>
       </footer>
     </div>
