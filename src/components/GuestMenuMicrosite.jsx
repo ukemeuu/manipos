@@ -66,7 +66,7 @@ export function GuestMenuMicrosite({ tenantSlug = 'potofjollof' }) {
   useEffect(() => {
     fetchMenu(true);
 
-    // Set up Realtime listener for immediate automatic sync when items are modified in pojmanagement.com
+    // Set up Realtime listener for immediate automatic sync when items are modified in manipos.com
     const channel = supabase
       .channel('guest_microsite_pos_menu')
       .on(
