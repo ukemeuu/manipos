@@ -245,8 +245,8 @@ export function LandingPage({ onProceedToLogin }) {
         {/* Statistics Metric Bar */}
         <div id="metrics" className="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xl grid grid-cols-2 md:grid-cols-4 gap-8 text-center divide-x divide-slate-100">
           <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-black text-slate-900">10,000+</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Orders Processed</p>
+            <p className="text-3xl sm:text-4xl font-black text-slate-900">&lt; 1s</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Order Entry Speed</p>
           </div>
           <div className="space-y-1">
             <p className="text-3xl sm:text-4xl font-black text-amber-500">99.9%</p>
