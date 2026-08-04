@@ -23,7 +23,7 @@ export function FeedbackForm() {
   const fileInputRef = useRef(null);
   const tenantInfo = getTenantInfo();
   const tenantSlug = tenantInfo.tenantSlug || 'potofjollof';
-  const tenantDisplayName = tenantSlug === 'potofjollof' ? 'MUTE KITCHENS' : tenantSlug.replace('-', ' ').toUpperCase();
+  const tenantDisplayName = (tenantSlug === 'potofjollof' || tenantSlug === 'mutekitchens') ? 'MUTE KITCHENS' : tenantSlug.replace('-', ' ').toUpperCase();
 
   const [currentStep, setCurrentStep] = useState(0); // 0 = Welcome, 1-7 = Questions, 8 = Success
   const [selectedBrand, setSelectedBrand] = useState('Pot of Jollof Kitchen');
