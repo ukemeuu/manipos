@@ -6,6 +6,7 @@ import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MenuMicrosite } from './components/MenuMicrosite';
 import { FeedbackForm } from './components/FeedbackForm';
+import { RestaurantLinkHub } from './components/RestaurantLinkHub';
 import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
 
 
@@ -104,6 +105,11 @@ function App() {
   // ROUTE 0: Guest Feedback Form (e.g. potofjollof.manipos.com/feedback or manipos.com?page=feedback)
   if (currentRoute === 'feedback' || tenantInfo.isFeedbackDomain) {
     return <FeedbackForm />;
+  }
+
+  // ROUTE 0.5: Restaurant Link Hub (e.g. potofjollof.manipos.com/links or manipos.com?page=links)
+  if (currentRoute === 'links' || tenantInfo.isLinkHubDomain) {
+    return <RestaurantLinkHub />;
   }
 
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)

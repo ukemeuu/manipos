@@ -36,18 +36,23 @@ import {
   Truck,
   MessageSquare,
   Star,
-  Inbox
+  Inbox,
+  Link2,
+  Video,
+  Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function AdminDashboard({ onBackToTerminal }) {
-  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads'
+  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads', 'linkhub'
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [feedbackList, setFeedbackList] = useState([]);
   const [leadsList, setLeadsList] = useState([]);
+  const [tenantLinks, setTenantLinks] = useState([]);
+  const [editingLink, setEditingLink] = useState(null);
   const [settings, setSettings] = useState({
     address: '',
     phone: '',
@@ -120,6 +125,17 @@ export function AdminDashboard({ onBackToTerminal }) {
         setLeadsList(fetchedLeads || []);
       } catch (e) {
         console.warn('Leads table notice:', e);
+      }
+
+      // 6. Fetch Restaurant Links for Link Hub
+      try {
+        const { data: fetchedLinks } = await supabase
+          .from('tenant_links')
+          .select('*')
+          .order('display_order', { ascending: true });
+        setTenantLinks(fetchedLinks || []);
+      } catch (e) {
+        console.warn('Tenant links fetch notice:', e);
       }
 
       // 5. Fetch Restaurant Settings
@@ -505,6 +521,18 @@ export function AdminDashboard({ onBackToTerminal }) {
           >
             <Inbox size={18} />
             Demo Signups & Leads
+          </button>
+
+          <button
+            onClick={() => setActiveTab('linkhub')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'linkhub' 
+                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/10' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+            }`}
+          >
+            <Link2 size={18} />
+            Link Hub & Socials
           </button>
 
           <button
@@ -1075,6 +1103,154 @@ export function AdminDashboard({ onBackToTerminal }) {
               </motion.div>
             )}
 
+            {/* LINK HUB & SOCIALS PANEL */}
+            {activeTab === 'linkhub' && (
+              <motion.div
+                key="linkhub"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-black text-white">Restaurant Link Hub & Socials</h2>
+                    <p className="text-slate-400 text-sm mt-1">Manage public landing links (UberEats, QR Menu, WhatsApp Order, Instagram) & background visuals.</p>
+                  </div>
+                  <button
+                    onClick={() => setEditingLink({ title: '', subtitle: '', url: '', icon: 'Utensils', badge_text: '', button_color: 'amber', is_active: true })}
+                    className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all cursor-pointer"
+                  >
+                    <Plus size={16} /> Add New Link
+                  </button>
+                </div>
+
+                {/* Background Customization Settings Box */}
+                <div className="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <h3 className="text-white font-extrabold text-sm flex items-center gap-2">
+                    <ImageIcon size={18} className="text-amber-400" />
+                    Landing Page Background Customization
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-semibold">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Background Style</label>
+                      <select
+                        value={settings.hub_bg_type || 'gradient'}
+                        onChange={(e) => setSettings({ ...settings, hub_bg_type: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white"
+                      >
+                        <option value="gradient">Dark Ambient Glow (Default)</option>
+                        <option value="image">Static Background Image</option>
+                        <option value="video">Looping Background Video (MP4)</option>
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-400 mb-1">Background Image or Video URL</label>
+                      <input
+                        type="text"
+                        value={settings.hub_bg_url || ''}
+                        onChange={(e) => setSettings({ ...settings, hub_bg_url: e.target.value })}
+                        placeholder="https://images.unsplash.com/photo... or https://domain.com/video.mp4"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      onClick={async () => {
+                        setSubmitting(true);
+                        try {
+                          await supabase
+                            .from('restaurant_settings')
+                            .upsert([settings]);
+                          alert('Background settings saved successfully!');
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                      disabled={submitting}
+                      className="bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs hover:bg-amber-300 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Save size={14} /> Save Background Settings
+                    </button>
+                  </div>
+                </div>
+
+                {/* Links Table */}
+                <div className="bg-slate-900/40 border border-slate-900 rounded-2xl overflow-hidden shadow-inner">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-900/80 bg-slate-900/20 text-xs text-slate-500 font-bold uppercase tracking-wider">
+                        <th className="py-4 px-6">Button Title</th>
+                        <th className="py-4 px-6">Target URL</th>
+                        <th className="py-4 px-6">Badge Text</th>
+                        <th className="py-4 px-6">Color</th>
+                        <th className="py-4 px-6 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-900/60 text-sm">
+                      {tenantLinks.length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="py-12 text-center text-slate-500 font-medium">
+                            No links created yet. Click "Add New Link" to create custom buttons for your landing hub.
+                          </td>
+                        </tr>
+                      ) : (
+                        tenantLinks.map((link) => (
+                          <tr key={link.id || Math.random()} className="hover:bg-slate-900/30 transition-colors">
+                            <td className="py-4 px-6 font-bold text-white">
+                              <div>{link.title}</div>
+                              {link.subtitle && <div className="text-xs text-slate-400 font-normal">{link.subtitle}</div>}
+                            </td>
+                            <td className="py-4 px-6 text-amber-400 font-mono text-xs truncate max-w-xs">
+                              {link.url}
+                            </td>
+                            <td className="py-4 px-6">
+                              {link.badge_text ? (
+                                <span className="bg-slate-800 text-slate-200 text-[10px] font-black uppercase px-2.5 py-1 rounded-md">
+                                  {link.badge_text}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className="capitalize font-bold text-xs text-slate-300">{link.button_color || 'amber'}</span>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setEditingLink(link)}
+                                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+                                >
+                                  <Edit3 size={16} />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm(`Delete "${link.title}"?`)) {
+                                      await supabase.from('tenant_links').delete().eq('id', link.id);
+                                      setTenantLinks(tenantLinks.filter(l => l.id !== link.id));
+                                    }
+                                  }}
+                                  className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            )}
+
           </AnimatePresence>
         </main>
       </div>
@@ -1322,6 +1498,145 @@ export function AdminDashboard({ onBackToTerminal }) {
                   className="w-full bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2 flex items-center justify-center"
                 >
                   {submitting ? <Loader2 className="animate-spin" size={18} /> : 'Save Supplier'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Link Hub Modal */}
+        {editingLink && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-900 border border-slate-800 w-full max-w-md p-8 rounded-3xl space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-white">{editingLink.id ? 'Edit Landing Link' : 'Add New Landing Link'}</h3>
+                <button onClick={() => setEditingLink(null)} className="text-slate-400 hover:text-white cursor-pointer"><X size={20} /></button>
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setSubmitting(true);
+                  const formData = new FormData(e.target);
+                  const linkData = {
+                    ...(editingLink.id ? { id: editingLink.id } : {}),
+                    tenant_id: getTenantInfo().tenantSlug || 'potofjollof',
+                    title: formData.get('title'),
+                    subtitle: formData.get('subtitle'),
+                    url: formData.get('url'),
+                    icon: formData.get('icon'),
+                    badge_text: formData.get('badge_text'),
+                    button_color: formData.get('button_color'),
+                    is_active: true
+                  };
+
+                  try {
+                    const { data, error } = await supabase.from('tenant_links').upsert([linkData]).select();
+                    if (!error && data) {
+                      setEditingLink(null);
+                      const { data: refreshed } = await supabase.from('tenant_links').select('*').order('display_order');
+                      setTenantLinks(refreshed || []);
+                    }
+                  } catch (err) {
+                    console.error(err);
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 block">Button Title <span className="text-amber-400">*</span></label>
+                  <input
+                    name="title"
+                    type="text"
+                    required
+                    defaultValue={editingLink.title}
+                    placeholder="e.g. Order on UberEats"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-amber-400 focus:outline-none font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 block">Subtitle / Caption (Optional)</label>
+                  <input
+                    name="subtitle"
+                    type="text"
+                    defaultValue={editingLink.subtitle}
+                    placeholder="e.g. Fast 30-min doorstep delivery"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 block">Target URL Link <span className="text-amber-400">*</span></label>
+                  <input
+                    name="url"
+                    type="text"
+                    required
+                    defaultValue={editingLink.url}
+                    placeholder="https://ubereats.com/... or https://wa.me/..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-amber-400 focus:outline-none font-mono text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-xs font-semibold">
+                  <div>
+                    <label className="text-slate-400 block mb-1">Icon</label>
+                    <select
+                      name="icon"
+                      defaultValue={editingLink.icon || 'Utensils'}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white"
+                    >
+                      <option value="Utensils">Utensils</option>
+                      <option value="Truck">Truck</option>
+                      <option value="ShoppingBag">ShoppingBag</option>
+                      <option value="Star">Star</option>
+                      <option value="Smartphone">Smartphone</option>
+                      <option value="Instagram">Instagram</option>
+                      <option value="Globe">Globe</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1">Badge Text</label>
+                    <input
+                      name="badge_text"
+                      type="text"
+                      defaultValue={editingLink.badge_text}
+                      placeholder="e.g. 10% Off"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white uppercase text-[11px] font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1">Color Accent</label>
+                    <select
+                      name="button_color"
+                      defaultValue={editingLink.button_color || 'amber'}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white"
+                    >
+                      <option value="amber">Amber Gold</option>
+                      <option value="emerald">Emerald Green</option>
+                      <option value="blue">Electric Blue</option>
+                      <option value="purple">Vibrant Purple</option>
+                      <option value="slate">Dark Glass</option>
+                      <option value="red">Rose Red</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2 flex items-center justify-center cursor-pointer"
+                >
+                  {submitting ? <Loader2 className="animate-spin" size={18} /> : 'Save Link Button'}
                 </button>
               </form>
             </motion.div>

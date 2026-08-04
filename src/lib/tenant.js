@@ -25,6 +25,7 @@ export function getTenantInfo() {
   let isPosDomain = false;
   let isGuestMicrosite = false;
   let isFeedbackDomain = false;
+  let isLinkHubDomain = false;
   let isMarketingDomain = false;
 
   // 1. Check Query Params / Hash overrides first
@@ -44,6 +45,9 @@ export function getTenantInfo() {
       } else if (parts[1] === 'feedback') {
         tenantSlug = parts[0];
         isFeedbackDomain = true;
+      } else if (parts[1] === 'links') {
+        tenantSlug = parts[0];
+        isLinkHubDomain = true;
       } else if (parts[1] === 'restaurant') {
         tenantSlug = parts[0];
         isGuestMicrosite = true;
@@ -51,6 +55,8 @@ export function getTenantInfo() {
         isPosDomain = true;
       } else if (parts[0] === 'feedback') {
         isFeedbackDomain = true;
+      } else if (parts[0] === 'links') {
+        isLinkHubDomain = true;
       } else if (parts[0] !== 'www') {
         tenantSlug = parts[0];
         isGuestMicrosite = true;
@@ -59,6 +65,8 @@ export function getTenantInfo() {
       isPosDomain = true;
     } else if (parts[0] === 'feedback') {
       isFeedbackDomain = true;
+    } else if (parts[0] === 'links') {
+      isLinkHubDomain = true;
     }
   }
 
@@ -69,6 +77,18 @@ export function getTenantInfo() {
     hash === '#/feedback'
   ) {
     isFeedbackDomain = true;
+    isGuestMicrosite = false;
+    isLinkHubDomain = false;
+  }
+
+  // Path or query fallback for restaurant link hub
+  if (
+    queryPage === 'links' || 
+    window.location.pathname.startsWith('/links') || 
+    hash === '#/links'
+  ) {
+    isLinkHubDomain = true;
+    isFeedbackDomain = false;
     isGuestMicrosite = false;
   }
 
@@ -84,16 +104,17 @@ export function getTenantInfo() {
     isFeedbackDomain = false;
   }
 
-  if (!isPosDomain && !isGuestMicrosite && !isFeedbackDomain && !tenantSlug) {
+  if (!isPosDomain && !isGuestMicrosite && !isFeedbackDomain && !isLinkHubDomain && !tenantSlug) {
     isMarketingDomain = true;
   }
 
   return {
     hostname,
-    tenantSlug: tenantSlug || (isGuestMicrosite || isFeedbackDomain ? 'potofjollof' : null),
+    tenantSlug: tenantSlug || (isGuestMicrosite || isFeedbackDomain || isLinkHubDomain ? 'potofjollof' : null),
     isPosDomain,
     isGuestMicrosite,
     isFeedbackDomain,
+    isLinkHubDomain,
     isMarketingDomain,
   };
 }
