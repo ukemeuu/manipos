@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { getTenantInfo } from '../lib/tenant';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,10 +14,13 @@ import {
   Utensils, 
   Truck, 
   Smartphone,
-  Check
+  Check,
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export function FeedbackForm() {
+  const fileInputRef = useRef(null);
   const tenantInfo = getTenantInfo();
   const tenantSlug = tenantInfo.tenantSlug || 'potofjollof';
   const tenantDisplayName = tenantSlug === 'potofjollof' ? 'MUTE KITCHENS' : tenantSlug.replace('-', ' ').toUpperCase();
@@ -35,9 +38,23 @@ export function FeedbackForm() {
   });
   const [comment, setComment] = useState('');
   const [photoUrl, setPhotoUrl] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState('');
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingImage(true);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoUrl(reader.result);
+      setUploadingImage(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Generate dynamic discount code (e.g. 36GQXR)
   const discountCode = useMemo(() => {
@@ -508,10 +525,45 @@ export function FeedbackForm() {
                 Add a photo of your food or receipt (Optional)
               </h2>
 
-              <div className="bg-[#16171D] border-2 border-dashed border-[#272932] p-8 rounded-3xl text-center space-y-3 cursor-pointer hover:border-[#FACC15] transition-all">
-                <UploadCloud size={36} className="text-slate-500 mx-auto" />
-                <p className="text-xs font-bold text-slate-400">Tap to upload food or receipt image</p>
-              </div>
+              {/* Hidden File Input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              {!photoUrl ? (
+                <div
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  className="bg-[#16171D] border-2 border-dashed border-[#272932] hover:border-[#FACC15] p-8 rounded-3xl text-center space-y-3 cursor-pointer transition-all group"
+                >
+                  <UploadCloud size={40} className="text-slate-500 group-hover:text-[#FACC15] transition-colors mx-auto" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-white">Tap to upload food or receipt image</p>
+                    <p className="text-xs font-medium text-slate-500">Supports JPG, PNG, WEBP</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-[#16171D] border border-[#272932] p-4 rounded-3xl space-y-4">
+                  <div className="relative rounded-2xl overflow-hidden max-h-56 bg-slate-950 flex items-center justify-center border border-slate-800">
+                    <img src={photoUrl} alt="Uploaded preview" className="object-contain max-h-56 w-full" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                      <Check size={14} /> Image Attached
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl(null)}
+                      className="text-xs font-bold text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer bg-red-500/10 px-3 py-1.5 rounded-xl border border-red-500/20"
+                    >
+                      <Trash2 size={14} /> Remove Photo
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between pt-2">
                 <button
