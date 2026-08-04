@@ -5,10 +5,11 @@
  * - manipos.com -> Marketing Landing Page
  * - pos.manipos.com -> Staff/POS App Login & General Terminal
  * - <slug>.pos.manipos.com -> Restaurant-specific Scoped POS Terminal (e.g. littlelagos.pos.manipos.com)
- * - <slug>.manipos.com / <slug>.restaurant.manipos.com -> Guest Public Menu Microsite (e.g. mutekitchens.manipos.com)
+ * - <slug>.manipos.com / <slug>.restaurant.manipos.com -> Guest Public Menu Microsite (e.g. potofjollof.manipos.com)
+ * - <slug>.manipos.com/feedback or <slug>.feedback.manipos.com -> Guest Feedback Form (e.g. potofjollof.manipos.com/feedback)
  * 
  * Local Development Fallback (localhost:5173):
- * - Supports ?tenant=mutekitchens or ?page=menu or #menu or subdomains (mutekitchens.localhost:5173)
+ * - Supports ?tenant=potofjollof or ?page=feedback or #feedback or subdomains (potofjollof.localhost:5173)
  */
 
 export function getTenantInfo() {
@@ -23,6 +24,7 @@ export function getTenantInfo() {
   let tenantSlug = null;
   let isPosDomain = false;
   let isGuestMicrosite = false;
+  let isFeedbackDomain = false;
   let isMarketingDomain = false;
 
   // 1. Check Query Params / Hash overrides first
@@ -33,28 +35,45 @@ export function getTenantInfo() {
   // 2. Check Hostname / Subdomains
   const parts = hostname.split('.');
 
-  // e.g. mutekitchens.pos.manipos.com or mutekitchens.manipos.com or mutekitchens.restaurant.manipos.com
+  // e.g. potofjollof.feedback.manipos.com or potofjollof.pos.manipos.com or potofjollof.manipos.com
   if (hostname.includes('manipos.com') || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
     if (parts.length >= 3) {
       if (parts[1] === 'pos') {
         tenantSlug = parts[0];
         isPosDomain = true;
+      } else if (parts[1] === 'feedback') {
+        tenantSlug = parts[0];
+        isFeedbackDomain = true;
       } else if (parts[1] === 'restaurant') {
         tenantSlug = parts[0];
         isGuestMicrosite = true;
       } else if (parts[0] === 'pos') {
         isPosDomain = true;
+      } else if (parts[0] === 'feedback') {
+        isFeedbackDomain = true;
       } else if (parts[0] !== 'www') {
         tenantSlug = parts[0];
         isGuestMicrosite = true;
       }
     } else if (parts[0] === 'pos') {
       isPosDomain = true;
+    } else if (parts[0] === 'feedback') {
+      isFeedbackDomain = true;
     }
   }
 
+  // Path or query fallback for guest feedback
+  if (
+    queryPage === 'feedback' || 
+    window.location.pathname.startsWith('/feedback') || 
+    hash === '#/feedback'
+  ) {
+    isFeedbackDomain = true;
+    isGuestMicrosite = false;
+  }
+
   // Path or query fallback for guest microsite
-  if (queryPage === 'menu' || queryPage === 'microsite' || window.location.pathname.startsWith('/menu') || hash === '#/menu') {
+  if (!isFeedbackDomain && (queryPage === 'menu' || queryPage === 'microsite' || window.location.pathname.startsWith('/menu') || hash === '#/menu')) {
     isGuestMicrosite = true;
   }
 
@@ -62,20 +81,32 @@ export function getTenantInfo() {
   if (hash === '#/pos' || hash === '#/terminal' || window.location.pathname === '/terminal' || queryPage === 'pos' || queryPage === 'terminal') {
     isPosDomain = true;
     isGuestMicrosite = false;
+    isFeedbackDomain = false;
   }
 
-  if (!isPosDomain && !isGuestMicrosite && !tenantSlug) {
+  if (!isPosDomain && !isGuestMicrosite && !isFeedbackDomain && !tenantSlug) {
     isMarketingDomain = true;
   }
 
   return {
     hostname,
-    tenantSlug: tenantSlug || (isGuestMicrosite ? 'potofjollof' : null),
+    tenantSlug: tenantSlug || (isGuestMicrosite || isFeedbackDomain ? 'potofjollof' : null),
     isPosDomain,
     isGuestMicrosite,
+    isFeedbackDomain,
     isMarketingDomain,
   };
+}
 
+export function getFeedbackUrl(tenantSlug = 'potofjollof') {
+  const isLocal = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+
+  if (isLocal) {
+    const port = window.location.port ? `:${window.location.port}` : '';
+    return `http://${window.location.hostname}${port}/?page=feedback&tenant=${tenantSlug}`;
+  }
+
+  return `https://${tenantSlug}.manipos.com/feedback`;
 }
 
 export function getPosLoginUrl(tenantSlug = null) {
@@ -106,4 +137,3 @@ export function getMarketingUrl() {
 
   return `https://manipos.com`;
 }
-

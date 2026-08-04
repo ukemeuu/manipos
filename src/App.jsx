@@ -5,6 +5,7 @@ import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MenuMicrosite } from './components/MenuMicrosite';
+import { FeedbackForm } from './components/FeedbackForm';
 import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
 
 
@@ -17,6 +18,9 @@ function App() {
   // Clean router supporting subdomain detection, subpaths, hashes, and search queries
   const [currentRoute, setCurrentRoute] = useState(() => {
     const info = getTenantInfo();
+    if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback') {
+      return 'feedback';
+    }
     if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
       return 'terminal';
     }
@@ -46,7 +50,9 @@ function App() {
     const handleLocationChange = () => {
       const info = getTenantInfo();
       setTenantInfo(info);
-      if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
+      if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback') {
+        setCurrentRoute('feedback');
+      } else if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
         setCurrentRoute('terminal');
       } else if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu') {
         setCurrentRoute('microsite');
@@ -93,6 +99,11 @@ function App() {
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div>
       </div>
     );
+  }
+
+  // ROUTE 0: Guest Feedback Form (e.g. potofjollof.manipos.com/feedback or manipos.com?page=feedback)
+  if (currentRoute === 'feedback' || tenantInfo.isFeedbackDomain) {
+    return <FeedbackForm />;
   }
 
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
