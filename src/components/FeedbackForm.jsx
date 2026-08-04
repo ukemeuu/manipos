@@ -56,7 +56,14 @@ export function FeedbackForm() {
     reader.readAsDataURL(file);
   };
 
-  // Generate dynamic discount code (e.g. 36GQXR)
+  // Compute brand-specific WhatsApp number
+  const targetWhatsappPhone = useMemo(() => {
+    if (selectedBrand === 'Pot of Jollof Kitchen') {
+      return '254795384140';
+    }
+    return '254799034617';
+  }, [selectedBrand]);
+
   const discountCode = useMemo(() => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -615,7 +622,7 @@ export function FeedbackForm() {
 
               <div className="space-y-3 max-w-md mx-auto">
                 <a
-                  href={`https://wa.me/254700000000?text=Hi%2C%20I%20have%20feedback%20discount%20code%20${discountCode}`}
+                  href={`https://wa.me/${targetWhatsappPhone}?text=${encodeURIComponent(`Hi, I ordered from ${selectedBrand} and have feedback discount voucher code ${discountCode}`)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="w-full bg-[#FACC15] hover:bg-amber-400 text-slate-950 font-black text-sm py-4 px-6 rounded-2xl transition-all shadow-xl shadow-amber-400/20 flex items-center justify-center gap-2"
