@@ -35,17 +35,19 @@ import {
   ChevronRight,
   Truck,
   MessageSquare,
-  Star
+  Star,
+  Inbox
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function AdminDashboard({ onBackToTerminal }) {
-  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback'
+  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads'
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [feedbackList, setFeedbackList] = useState([]);
+  const [leadsList, setLeadsList] = useState([]);
   const [settings, setSettings] = useState({
     address: '',
     phone: '',
@@ -107,6 +109,17 @@ export function AdminDashboard({ onBackToTerminal }) {
         setFeedbackList(fetchedFeedback || []);
       } catch (e) {
         console.warn('Feedback table not configured yet:', e);
+      }
+
+      // 5. Fetch Leads / Demo Signups
+      try {
+        const { data: fetchedLeads } = await supabase
+          .from('leads')
+          .select('*')
+          .order('created_at', { ascending: false });
+        setLeadsList(fetchedLeads || []);
+      } catch (e) {
+        console.warn('Leads table notice:', e);
       }
 
       // 5. Fetch Restaurant Settings
@@ -480,6 +493,18 @@ export function AdminDashboard({ onBackToTerminal }) {
           >
             <MessageSquare size={18} />
             Customer Feedback
+          </button>
+
+          <button
+            onClick={() => setActiveTab('leads')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'leads' 
+                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/10' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+            }`}
+          >
+            <Inbox size={18} />
+            Demo Signups & Leads
           </button>
 
           <button
@@ -982,6 +1007,70 @@ export function AdminDashboard({ onBackToTerminal }) {
                       </div>
                     ))
                   )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* DEMO SIGNUPS & LEADS PANEL */}
+            {activeTab === 'leads' && (
+              <motion.div
+                key="leads"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-black text-white">Demo Requests & Restaurant Leads</h2>
+                    <p className="text-slate-400 text-sm mt-1">Inbound restaurant owners who requested a live demo from manipos.com.</p>
+                  </div>
+                  <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-[#FACC15] font-black text-sm">
+                    {leadsList.length} Total Leads
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/40 border border-slate-900 rounded-2xl overflow-hidden shadow-inner">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-900/80 bg-slate-900/20 text-xs text-slate-500 font-bold uppercase tracking-wider">
+                        <th className="py-4 px-6">Restaurant Name</th>
+                        <th className="py-4 px-6">Owner Email</th>
+                        <th className="py-4 px-6">Phone Number</th>
+                        <th className="py-4 px-6">Location</th>
+                        <th className="py-4 px-6 text-right">Signup Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-900/60 text-sm">
+                      {leadsList.length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="py-12 text-center text-slate-500 font-medium">
+                            No demo requests received yet. When restaurant owners sign up on manipos.com, they will appear here.
+                          </td>
+                        </tr>
+                      ) : (
+                        leadsList.map((lead) => (
+                          <tr key={lead.id || Math.random()} className="hover:bg-slate-900/30 transition-colors">
+                            <td className="py-4 px-6 font-bold text-white">
+                              {lead.restaurant_name || 'N/A'}
+                            </td>
+                            <td className="py-4 px-6 text-emerald-400 font-medium">
+                              {lead.email || 'N/A'}
+                            </td>
+                            <td className="py-4 px-6 text-slate-300 font-medium">
+                              {lead.phone || 'N/A'}
+                            </td>
+                            <td className="py-4 px-6 text-slate-400 font-medium">
+                              {lead.locations || lead.location || 'N/A'}
+                            </td>
+                            <td className="py-4 px-6 text-right text-slate-500 text-xs font-semibold">
+                              {new Date(lead.created_at || Date.now()).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </motion.div>
             )}
