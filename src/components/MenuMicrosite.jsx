@@ -773,7 +773,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                     ? (customerName.trim() ? `${assignedTable} (${customerName.trim()})` : assignedTable)
                     : (customerName.trim() || 'Online Guest'),
                 dining_option: diningOption,
-                payment_method: 'Pay at Counter',
+                payment_method: 'Paid to App',
                 payment_status: 'Pending',
                 status: 'Pending',
                 total_amount: finalTotal,
