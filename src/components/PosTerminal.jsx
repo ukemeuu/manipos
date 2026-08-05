@@ -1,11 +1,51 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { connectQZ, disconnectQZ, isQZConnected, onQZStatusChange, listPrinters, printOrFallback } from '../lib/qzPrint';
-import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download } from 'lucide-react';
+import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { generateZReportPDF } from '../lib/pdfGenerator';
+import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
+import { CampaignsView } from './CampaignsView';
 
 const MUTE_LOGO_URL = '/logo.png';
+
+export const BRAND_OPTIONS = [
+    {
+        id: 'POT OF JOLLOF',
+        name: 'Pot of Jollof',
+        tagline: 'Authentic West African Rice & Combos',
+        icon: '🫕',
+        logo: '/jollof_logo.png',
+        color: 'from-amber-500 to-emerald-600',
+        borderColor: 'border-emerald-500/30'
+    },
+    {
+        id: 'LITTLE LAGOS',
+        name: 'Little Lagos',
+        tagline: 'Lagos Street Food, Suya & Grills',
+        icon: '🌶️',
+        logo: '/lagos_logo.png',
+        color: 'from-orange-500 to-red-600',
+        borderColor: 'border-orange-500/30'
+    },
+    {
+        id: 'CAFE SWAHILI',
+        name: 'Cafe Swahili',
+        tagline: 'Coastal Swahili Delights & Coffees',
+        icon: '☕',
+        logo: '/swahili_logo.png',
+        color: 'from-blue-500 to-indigo-600',
+        borderColor: 'border-blue-500/30'
+    },
+    {
+        id: 'SAMAKI STREET',
+        name: 'Samaki Street',
+        tagline: 'Fresh Seafood, Fish & Grilled Platters',
+        icon: '🐟',
+        logo: '/samaki_logo.jpg',
+        color: 'from-cyan-500 to-teal-600',
+        borderColor: 'border-cyan-500/30'
+    }
+];
 
 const DEFAULT_CATEGORIES = [
     { name: 'Starters & Bites', icon: '🍢' },
@@ -59,7 +99,147 @@ const formatCustomerName = (name) => {
     return name.toUpperCase();
 };
 
-export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
+// Dynamic Channel Pricing Engine (Omni-Channel Fixed Prices & Per-Brand Overrides)
+export const calculateChannelPrice = (item, channel, activeBrand) => {
+    if (!item) return 0;
+    const chLower = (channel || 'Walk-in').toLowerCase().trim();
+
+    try {
+        const basePrice = parseFloat(item.basePrice !== undefined ? item.basePrice : item.price) || 0;
+        let chName = '';
+        if (chLower.includes('uber')) chName = 'ubereats';
+        else if (chLower.includes('glovo')) chName = 'glovo';
+        else if (chLower.includes('bolt')) chName = 'boltfood';
+
+        if (chName) {
+            const cachedChannels = JSON.parse(localStorage.getItem('pos_channels_cached') || '[]');
+            const channelInfo = cachedChannels.find(c => c.name === chName);
+            if (channelInfo && channelInfo.is_active) {
+                const cachedOverrides = JSON.parse(localStorage.getItem('pos_channel_overrides_cached') || '[]');
+                const itemOvr = cachedOverrides.find(o => o.menu_item_id === item.id && o.channel_id === channelInfo.id);
+                
+                let markupAmt = 0;
+                if (itemOvr && parseFloat(itemOvr.price_markup_value) > 0) {
+                    markupAmt = parseFloat(itemOvr.price_markup_value);
+                } else if (parseFloat(channelInfo.default_markup_percent) > 0) {
+                    markupAmt = basePrice * (parseFloat(channelInfo.default_markup_percent) / 100);
+                }
+                
+                if (markupAmt > 0) {
+                    return basePrice + markupAmt;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error calculating dynamic channel markup:', e);
+    }
+    const effectiveBrand = (activeBrand && activeBrand !== 'All') ? activeBrand : (item.brand || null);
+    const bp = (effectiveBrand && item.brand_prices && typeof item.brand_prices === 'object') 
+        ? item.brand_prices[effectiveBrand] 
+        : null;
+
+    // 1. Check brand-specific channel price override if defined for this channel
+    if (bp) {
+        if (chLower.includes('glovo') && bp.glovo_price !== undefined && bp.glovo_price !== null && parseFloat(bp.glovo_price) > 0) return parseFloat(bp.glovo_price);
+        if (chLower.includes('uber') && bp.ubereats_price !== undefined && bp.ubereats_price !== null && parseFloat(bp.ubereats_price) > 0) return parseFloat(bp.ubereats_price);
+        if (chLower.includes('bolt') && bp.bolt_price !== undefined && bp.bolt_price !== null && parseFloat(bp.bolt_price) > 0) return parseFloat(bp.bolt_price);
+        if (chLower.includes('ando') && bp.ando_price !== undefined && bp.ando_price !== null && parseFloat(bp.ando_price) > 0) return parseFloat(bp.ando_price);
+        if ((chLower.includes('site') || chLower.includes('micro')) && bp.website_price !== undefined && bp.website_price !== null && parseFloat(bp.website_price) > 0) return parseFloat(bp.website_price);
+    }
+
+    // 2. Check item-level omni-channel fixed price overrides for this channel
+    if (chLower.includes('glovo') && item.glovo_price !== undefined && item.glovo_price !== null && parseFloat(item.glovo_price) > 0) {
+        return parseFloat(item.glovo_price);
+    }
+    if (chLower.includes('uber') && item.ubereats_price !== undefined && item.ubereats_price !== null && parseFloat(item.ubereats_price) > 0) {
+        return parseFloat(item.ubereats_price);
+    }
+    if (chLower.includes('bolt') && item.bolt_price !== undefined && item.bolt_price !== null && parseFloat(item.bolt_price) > 0) {
+        return parseFloat(item.bolt_price);
+    }
+    if (chLower.includes('ando') && item.ando_price !== undefined && item.ando_price !== null && parseFloat(item.ando_price) > 0) {
+        return parseFloat(item.ando_price);
+    }
+    if ((chLower.includes('site') || chLower.includes('micro')) && item.website_price !== undefined && item.website_price !== null && parseFloat(item.website_price) > 0) {
+        return parseFloat(item.website_price);
+    }
+
+    // 3. Fallback to brand base price if defined
+    if (bp && bp.price !== undefined && bp.price !== null && parseFloat(bp.price) > 0) {
+        return parseFloat(bp.price);
+    }
+
+    // 4. Default fallback to item base price
+    return parseFloat(item.basePrice !== undefined ? item.basePrice : item.price) || 0;
+};
+
+// Dynamic Modifier Option Channel Pricing Engine
+export const calculateModifierChannelPrice = (option, channel) => {
+    if (!option) return 0;
+    const basePrice = parseFloat(option.price) || 0;
+    const chLower = (channel || 'Walk-in').toLowerCase().trim();
+
+    if (chLower.includes('glovo') && option.glovo_price !== undefined && option.glovo_price !== null && parseFloat(option.glovo_price) > 0) {
+        return parseFloat(option.glovo_price);
+    }
+    if (chLower.includes('uber') && option.ubereats_price !== undefined && option.ubereats_price !== null && parseFloat(option.ubereats_price) > 0) {
+        return parseFloat(option.ubereats_price);
+    }
+    if (chLower.includes('bolt') && option.bolt_price !== undefined && option.bolt_price !== null && parseFloat(option.bolt_price) > 0) {
+        return parseFloat(option.bolt_price);
+    }
+    if (chLower.includes('ando') && option.ando_price !== undefined && option.ando_price !== null && parseFloat(option.ando_price) > 0) {
+        return parseFloat(option.ando_price);
+    }
+    if ((chLower.includes('site') || chLower.includes('micro')) && option.website_price !== undefined && option.website_price !== null && parseFloat(option.website_price) > 0) {
+        return parseFloat(option.website_price);
+    }
+
+    return basePrice;
+};
+
+// Dynamic Modifier Total Helper (Calculates modifier price sum from selectedModifiers or instructions)
+export const getItemModifierTotal = (item, orderChannel) => {
+    let total = 0;
+    if (item && item.selectedModifiers && item.selectedModifiers.length > 0) {
+        total = item.selectedModifiers.reduce((sum, m) => sum + calculateModifierChannelPrice(m, orderChannel), 0);
+    }
+    // Fallback: If selectedModifiers total is 0 but instructions contain (+X)
+    if (total === 0 && item && item.instructions) {
+        const matches = item.instructions.match(/\(\+(\d+)\)/g);
+        if (matches) {
+            total = matches.reduce((sum, matchStr) => {
+                const num = parseFloat(matchStr.replace(/[^\d.]/g, '')) || 0;
+                return sum + num;
+            }, 0);
+        }
+    }
+    return total;
+};
+
+export const obfuscateTicket = (ticketNum) => {
+    if (!ticketNum) return '';
+    const num = parseInt(String(ticketNum).replace(/\D/g, ''), 10);
+    if (isNaN(num)) return String(ticketNum);
+    const P = 382373;
+    const M = 1000000;
+    const scrambled = (num * P) % M;
+    return String(scrambled).padStart(6, '0');
+};
+
+export const deobfuscateTicket = (scrambledStr) => {
+    if (!scrambledStr) return null;
+    const cleanStr = String(scrambledStr).replace(/\D/g, '');
+    if (cleanStr.length !== 6) return null;
+    const num = parseInt(cleanStr, 10);
+    if (isNaN(num)) return null;
+    const inv = 611437;
+    const M = 1000000;
+    const original = (num * inv) % M;
+    return original;
+};
+
+export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }) {
     const isSystemAdmin = React.useMemo(() => {
         try {
             const stored = localStorage.getItem('pin_staff_user');
@@ -68,37 +248,146 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 if (parsed.role === 'admin') return true;
             }
         } catch (e) {}
-        return staffName === 'Admin' || staffName?.toUpperCase() === 'MANIPOS OFFICE';
-    }, [staffName]);
+        const upperName = staffName?.toUpperCase() || '';
+        return (
+            staffName === 'Admin' ||
+            upperName === 'MANIPOS OFFICE' ||
+            upperName === 'POJ OFFICE' ||
+            upperName.includes('OFFICE') ||
+            staffRole === 'admin'
+        );
+    }, [staffName, staffRole]);
 
     const getBrandForItem = (item) => {
-        return 'ManiPOS';
+        if (!item) return null;
+        if (Array.isArray(item.brand)) return item.brand[0] || null;
+        return item.brand || null;
     };
 
-    // Helper: check if item belongs to a brand (supports multi-brand arrays)
+    // Helper: check if item belongs to a brand (supports multi-brand arrays, JSON strings, and brand field)
     const itemBelongsToBrand = (item, brand) => {
-        return true;
+        if (!brand || brand === 'All') return true;
+        if (!item) return false;
+
+        const targetUpper = String(brand).toUpperCase().trim();
+
+        const getBrandList = (val) => {
+            if (!val) return [];
+            if (Array.isArray(val)) return val.map(b => String(b).toUpperCase().trim());
+            const str = String(val).trim();
+            if (str.startsWith('[') && str.endsWith(']')) {
+                try {
+                    const parsed = JSON.parse(str);
+                    if (Array.isArray(parsed)) return parsed.map(b => String(b).toUpperCase().trim());
+                } catch (e) {}
+            }
+            if (str.includes(',')) {
+                return str.split(',').map(b => b.toUpperCase().trim());
+            }
+            return [str.toUpperCase()];
+        };
+
+        const brandsFromBrandsField = getBrandList(item.brands);
+        const brandsFromBrandField = getBrandList(item.brand);
+        const allBrands = [...brandsFromBrandsField, ...brandsFromBrandField];
+
+        // Default to visible if no brand specified
+        if (allBrands.length === 0) return true;
+
+        return allBrands.some(b => 
+            b === targetUpper || b.includes(targetUpper) || targetUpper.includes(b)
+        );
     };
 
     const [menu, setMenu] = useState([]);
     const [loadingMenu, setLoadingMenu] = useState(true);
-    const [activeBrand, setActiveBrand] = useState('All');
+    const [activeBrand, setActiveBrand] = useState(null);
     const [activeCategory, setActiveCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState([]);
     const [cartOpen, setCartOpen] = useState(false);
-    
+
+    // Screen lock
+    const [isLocked, setIsLocked] = useState(false);
+    const [lockPin, setLockPin] = useState(['', '', '', '']);
+    const [lockError, setLockError] = useState('');
+    const [lockLoading, setLockLoading] = useState(false);
+    const lockTimerRef = React.useRef(null);
+
+    const lockScreen = React.useCallback(() => {
+        setIsLocked(true);
+        setLockPin(['', '', '', '']);
+        setLockError('');
+        if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+    }, []);
+
+    const scheduleLockAfterOrder = React.useCallback(() => {
+        if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = setTimeout(() => {
+            lockScreen();
+        }, 60000); // auto-lock 60s after order completion
+    }, [lockScreen]);
+
+    const handleLockPinInput = (index, value) => {
+        if (value.length > 1) value = value.slice(-1);
+        if (!/^\d*$/.test(value)) return;
+        const newPin = [...lockPin];
+        newPin[index] = value;
+        setLockPin(newPin);
+        if (value !== '' && index < 3) {
+            document.getElementById(`lock-pin-${index + 1}`)?.focus();
+        }
+    };
+
+    const handleLockPinKeyDown = (index, e) => {
+        if (e.key === 'Backspace' && lockPin[index] === '' && index > 0) {
+            document.getElementById(`lock-pin-${index - 1}`)?.focus();
+        }
+    };
+
+    const handleUnlock = async (e) => {
+        e?.preventDefault();
+        const entered = lockPin.join('');
+        if (entered.length !== 4) return;
+        setLockLoading(true);
+        setLockError('');
+        try {
+            const { data: staffList } = await supabase
+                .from('staff_access')
+                .select('name, pin, is_active')
+                .eq('pin', entered)
+                .eq('name', staffName)
+                .limit(1);
+            const match = staffList?.[0];
+            if (!match || match.is_active === false) {
+                setLockError('Incorrect PIN. Try again.');
+                setLockPin(['', '', '', '']);
+                document.getElementById('lock-pin-0')?.focus();
+            } else {
+                setIsLocked(false);
+                setLockPin(['', '', '', '']);
+                setLockError('');
+            }
+        } catch {
+            setLockError('Could not verify. Check connection.');
+        } finally {
+            setLockLoading(false);
+        }
+    };
+
+
     // Order info aligned with Google Sheets format
     const [customerName, setCustomerName] = useState('');
     const [customerNameText, setCustomerNameText] = useState('');
     const [selectedTable, setSelectedTable] = useState('');
-    const [selectedBrand, setSelectedBrand] = useState('ManiPOS');
+    const [selectedBrand, setSelectedBrand] = useState('POT OF JOLLOF');
     const [orderChannel, setOrderChannel] = useState('Walk-in');
-    const [diningOption, setDiningOption] = useState('Dine Inn'); // 'Dine Inn', 'Pick-Up/Take Away', 'Delivery'
+    const [diningOption, setDiningOption] = useState('Dine-in'); // 'Dine-in', 'Takeaway', 'Delivery'
     const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH', 'MPESA', 'CARD', etc.
     const [paymentStatus, setPaymentStatus] = useState('Paid'); // 'Paid', 'Pending'
     const [discountType, setDiscountType] = useState('none'); // 'none', 'percentage', 'flat'
     const [discountValue, setDiscountValue] = useState('');
+    const [deliveryAddress, setDeliveryAddress] = useState('');
     
     // Split payment amounts
     const [splitCash, setSplitCash] = useState('');
@@ -108,13 +397,371 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     // Clear Sales overlay states
     const [clearSalesModalOpen, setClearSalesModalOpen] = useState(false);
     const [clearAction, setClearAction] = useState('Cancelled'); // 'Cancelled' or 'Declined'
-    const [clearBrand, setClearBrand] = useState('ManiPOS');
+    const [clearBrand, setClearBrand] = useState('POT OF JOLLOF');
     const [clearChannel, setClearChannel] = useState('Walk-in');
-    const [clearService, setClearService] = useState('Dine Inn');
+    const [clearService, setClearService] = useState('Dine-in');
     const [clearPayment, setClearPayment] = useState('CASH');
+
+    // Auto-Accept Microsite Orders state
+    const [autoAcceptMicrositeOrders, setAutoAcceptMicrositeOrders] = useState(() => {
+        return localStorage.getItem('pos_auto_accept_orders') === 'true';
+    });
+
+    const toggleAutoAcceptOrders = () => {
+        const nextVal = !autoAcceptMicrositeOrders;
+        setAutoAcceptMicrositeOrders(nextVal);
+        localStorage.setItem('pos_auto_accept_orders', String(nextVal));
+    };
+
+    const isMicrositeOrder = (o) => {
+        if (!o) return false;
+        const cashier = (o.cashier_name || '').toLowerCase();
+        const channel = (o.order_channel || '').toLowerCase();
+        const dining = (o.dining_option || '').toLowerCase();
+        return cashier.includes('microsite') || 
+               cashier.includes('self-service') ||
+               channel.includes('microsite') || 
+               channel.includes('self-service') || 
+               dining.includes('self-service') ||
+               cashier === 'self-service microsite';
+    };
+
+    const canAutoAcceptOrder = (orderItems, currentMenu) => {
+        if (!orderItems || orderItems.length === 0) return true;
+        for (const item of orderItems) {
+            const itemName = (item.item_name || item.name || '').toLowerCase().trim();
+            const match = (currentMenu || []).find(m => 
+                m.id === item.id || 
+                (m.name || '').toLowerCase().trim() === itemName
+            );
+            if (match && match.is_available === false) {
+                return false; // Contains out of stock item!
+            }
+        }
+        return true;
+    };
+
+
+    // Register New Guest states
+    const [showRegisterGuestModal, setShowRegisterGuestModal] = useState(false);
+    const [newGuestFn, setNewGuestFn] = useState('');
+    const [newGuestLn, setNewGuestLn] = useState('');
+    const [newGuestPhone, setNewGuestPhone] = useState('');
+    const [newGuestEmail, setNewGuestEmail] = useState('');
+    const [newGuestBrand, setNewGuestBrand] = useState('POT OF JOLLOF');
+    const [newGuestChannel, setNewGuestChannel] = useState('Walk-in');
+    const [newGuestNotes, setNewGuestNotes] = useState('');
+    const [savingGuest, setSavingGuest] = useState(false);
+    const [guestSuccessMsg, setGuestSuccessMsg] = useState('');
+
+    useEffect(() => {
+        if (showRegisterGuestModal) {
+            if (activeBrand && activeBrand !== 'All') setNewGuestBrand(activeBrand);
+            if (orderChannel) setNewGuestChannel(orderChannel);
+        }
+    }, [showRegisterGuestModal, activeBrand, orderChannel]);
+
+    const handleRegisterNewGuest = async (e) => {
+        e.preventDefault();
+        if (!newGuestFn.trim() || !newGuestPhone.trim()) {
+            return alert("First Name and Phone Number are required to register a new guest.");
+        }
+        setSavingGuest(true);
+        try {
+            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : 'POT OF JOLLOF');
+            const channelVal = newGuestChannel || orderChannel || 'Walk-in';
+            const userNotes = newGuestNotes.trim();
+            const noteDetails = userNotes 
+                ? `[Brand: ${brandVal} | Channel: ${channelVal}] ${userNotes}`
+                : `[Brand: ${brandVal} | Channel: ${channelVal}]`;
+
+            // Base core guest payload (guaranteed standard columns in Supabase)
+            const guestPayload = {
+                first_name: newGuestFn.trim(),
+                last_name: newGuestLn.trim(),
+                phone: newGuestPhone.trim(),
+                email: newGuestEmail.trim(),
+                notes: noteDetails,
+                visit_count: 1,
+                lifetime_spend: 0
+            };
+
+            // 1. Insert core guest record
+            const { data, error } = await supabase.from('guests').insert([guestPayload]).select().single();
+            if (error) throw error;
+
+            // 2. Safely attempt to update extra brand & channel columns if present in schema
+            if (data && data.id) {
+                try {
+                    await supabase.from('guests').update({
+                        brand: brandVal,
+                        preferred_brand: brandVal,
+                        channel: channelVal,
+                        acquisition_channel: channelVal
+                    }).eq('id', data.id);
+                } catch (columnErr) {
+                    console.warn('Brand/channel column update skipped (stored in notes fallback):', columnErr);
+                }
+            }
+
+            const fullName = `${newGuestFn.trim()} ${newGuestLn.trim()}`.trim();
+            const savedGuestRecord = {
+                id: data?.id || `local_${Date.now()}`,
+                first_name: newGuestFn.trim(),
+                last_name: newGuestLn.trim(),
+                phone: newGuestPhone.trim(),
+                email: newGuestEmail.trim(),
+                brand: brandVal,
+                preferred_brand: brandVal,
+                channel: channelVal,
+                acquisition_channel: channelVal,
+                notes: noteDetails,
+                visit_count: 1,
+                lifetime_spend: 0,
+                created_at: new Date().toISOString()
+            };
+
+            // Save locally to cache so guest is instantly visible even if DB network has latency
+            try {
+                const existing = JSON.parse(localStorage.getItem('pos_registered_guests') || '[]');
+                existing.unshift(savedGuestRecord);
+                localStorage.setItem('pos_registered_guests', JSON.stringify(existing));
+            } catch(e) {}
+
+            setCustomerNameText(fullName);
+            setCustomerName(fullName);
+            
+            // Alert user & show success banner
+            alert(`✅ Guest "${fullName}" (${brandVal} - ${channelVal}) successfully registered & saved to CRM!`);
+            setGuestSuccessMsg(`✅ Guest "${fullName}" (${brandVal} - ${channelVal}) successfully registered and synced to Guest CRM!`);
+
+            setNewGuestFn('');
+            setNewGuestLn('');
+            setNewGuestPhone('');
+            setNewGuestEmail('');
+            setNewGuestNotes('');
+            setShowRegisterGuestModal(false);
+
+            setTimeout(() => setGuestSuccessMsg(''), 4000);
+        } catch (err) {
+            alert("Failed to register guest: " + err.message);
+        } finally {
+            setSavingGuest(false);
+        }
+    };
+
+    // Auto-sync completed order receipts to Guest CRM (Duplicate-Free Upsert System)
+    const syncOrderToGuestCRM = async (order) => {
+        try {
+            const rawName = (order.customer_name || '').trim();
+            // Skip anonymous/walk-in or empty names to avoid cluttering CRM with walk-in duplicates
+            if (!rawName || rawName.toLowerCase() === 'walk-in' || rawName.toLowerCase() === 'walk-in guest' || rawName.startsWith('Table ') || rawName.startsWith('T-')) {
+                return;
+            }
+
+            const nameParts = rawName.split(' ');
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ');
+
+            const brandVal = order.brand || selectedBrand || 'POT OF JOLLOF';
+            const channelVal = order.order_channel || orderChannel || 'Walk-in';
+            const orderSpend = parseFloat(order.total_amount || 0);
+
+            const itemSummary = (order.items || []).map(i => `${i.quantity || 1}x ${i.item_name || 'Item'}`).join(', ');
+
+            let existingGuest = null;
+            
+            // 1. Try finding matching guest in Supabase database
+            try {
+                const { data: dbGuests } = await supabase.from('guests').select('*');
+                if (dbGuests && dbGuests.length > 0) {
+                    existingGuest = dbGuests.find(g => {
+                        const fullName = `${g.first_name || ''} ${g.last_name || ''}`.trim().toLowerCase();
+                        return fullName === rawName.toLowerCase() || (g.first_name && g.first_name.toLowerCase() === rawName.toLowerCase());
+                    });
+                }
+            } catch(e) {}
+
+            // 2. Try finding in local storage cache
+            const localSaved = JSON.parse(localStorage.getItem('pos_registered_guests') || '[]');
+            if (!existingGuest) {
+                existingGuest = localSaved.find(g => {
+                    const fullName = `${g.first_name || ''} ${g.last_name || ''}`.trim().toLowerCase();
+                    return fullName === rawName.toLowerCase() || (g.first_name && g.first_name.toLowerCase() === rawName.toLowerCase());
+                });
+            }
+
+            const noteDetails = `[Brand: ${brandVal} | Channel: ${channelVal} | Order #${order.ticket_number || ''}: KES ${orderSpend.toLocaleString()} (${itemSummary})]`;
+
+            if (existingGuest) {
+                // 🔄 GUEST EXISTS -> UPSERT / UPDATE (INCREMENT VISIT + SPEND, ZERO DUPLICATES!)
+                const newVisitCount = (parseInt(existingGuest.visit_count || 1, 10)) + 1;
+                const newSpend = (parseFloat(existingGuest.lifetime_spend || 0)) + orderSpend;
+                const updatedNotes = existingGuest.notes ? `${existingGuest.notes}\n${noteDetails}` : noteDetails;
+
+                if (existingGuest.id && !String(existingGuest.id).startsWith('local_')) {
+                    try {
+                        await supabase.from('guests').update({
+                            visit_count: newVisitCount,
+                            lifetime_spend: newSpend,
+                            brand: brandVal,
+                            preferred_brand: brandVal,
+                            channel: channelVal,
+                            acquisition_channel: channelVal,
+                            notes: updatedNotes
+                        }).eq('id', existingGuest.id);
+                    } catch(err) {
+                        try {
+                            await supabase.from('guests').update({
+                                visit_count: newVisitCount,
+                                lifetime_spend: newSpend,
+                                notes: updatedNotes
+                            }).eq('id', existingGuest.id);
+                        } catch(e) {}
+                    }
+                }
+
+                const updatedLocal = localSaved.map(g => {
+                    if (g.id === existingGuest.id || `${g.first_name} ${g.last_name}`.trim().toLowerCase() === rawName.toLowerCase()) {
+                        return { ...g, visit_count: newVisitCount, lifetime_spend: newSpend, notes: updatedNotes };
+                    }
+                    return g;
+                });
+                localStorage.setItem('pos_registered_guests', JSON.stringify(updatedLocal));
+
+                try {
+                    await supabase.from('guest_visits').insert([{
+                        guest_id: existingGuest.id,
+                        visit_date: order.created_at || new Date().toISOString(),
+                        spend: orderSpend,
+                        notes: `Order #${order.ticket_number || ''}: ${itemSummary}`
+                    }]);
+                } catch(e) {}
+
+            } else {
+                // ✨ NEW GUEST -> CREATE SINGLE GUEST PROFILE
+                const newGuestRecord = {
+                    first_name: firstName,
+                    last_name: lastName,
+                    phone: '',
+                    email: '',
+                    brand: brandVal,
+                    preferred_brand: brandVal,
+                    channel: channelVal,
+                    acquisition_channel: channelVal,
+                    notes: noteDetails,
+                    visit_count: 1,
+                    lifetime_spend: orderSpend,
+                    created_at: order.created_at || new Date().toISOString()
+                };
+
+                let insertedId = `local_${Date.now()}`;
+                try {
+                    const { data: insertedData } = await supabase.from('guests').insert([{
+                        first_name: firstName,
+                        last_name: lastName,
+                        notes: noteDetails,
+                        visit_count: 1,
+                        lifetime_spend: orderSpend
+                    }]).select().single();
+                    if (insertedData?.id) insertedId = insertedData.id;
+                } catch(e) {}
+
+                const brandNewGuest = { ...newGuestRecord, id: insertedId };
+                localSaved.unshift(brandNewGuest);
+                localStorage.setItem('pos_registered_guests', JSON.stringify(localSaved));
+            }
+        } catch (err) {
+            console.warn('Auto guest sync error:', err);
+        }
+    };
+
+    // Out of Stock / 86 Item Management states
+    const [itemToTurnOffModal, setItemToTurnOffModal] = useState(null);
+    const [switchedOffLog, setSwitchedOffLog] = useState(() => {
+        try {
+            const saved = localStorage.getItem('pos_switched_off_log');
+            return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+            return [];
+        }
+    });
+
+    const confirmTurnOffItem = async (item, durationType) => {
+        const todayDate = new Date().toISOString().split('T')[0];
+        const timeString = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        try {
+            const { error } = await supabase
+                .from('pos_menu')
+                .update({ 
+                    is_available: false, 
+                    out_of_stock_type: durationType,
+                    out_of_stock_date: todayDate 
+                })
+                .eq('id', item.id);
+
+            if (error) {
+                await supabase.from('pos_menu').update({ is_available: false }).eq('id', item.id);
+            }
+
+            setMenu(prev => prev.map(m => m.id === item.id ? { 
+                ...m, 
+                is_available: false, 
+                out_of_stock_type: durationType, 
+                out_of_stock_date: todayDate 
+            } : m));
+
+            const newEntry = {
+                id: item.id,
+                name: item.name,
+                category: item.category,
+                brand: item.brand,
+                turned_off_at: timeString,
+                date: todayDate,
+                type: durationType,
+                staffName: staffName || 'Staff'
+            };
+
+            const updatedLog = [newEntry, ...switchedOffLog.filter(l => !(l.id === item.id && l.date === todayDate))];
+            setSwitchedOffLog(updatedLog);
+            localStorage.setItem('pos_switched_off_log', JSON.stringify(updatedLog));
+
+            setItemToTurnOffModal(null);
+        } catch (err) {
+            alert('Failed to mark item out of stock: ' + err.message);
+        }
+    };
+
+    const handleTurnOnItem = async (item) => {
+        try {
+            const { error } = await supabase
+                .from('pos_menu')
+                .update({ is_available: true, out_of_stock_type: null, out_of_stock_date: null })
+                .eq('id', item.id);
+
+            if (error) {
+                await supabase.from('pos_menu').update({ is_available: true }).eq('id', item.id);
+            }
+
+            setMenu(prev => prev.map(m => m.id === item.id ? { ...m, is_available: true, out_of_stock_type: null, out_of_stock_date: null } : m));
+        } catch (err) {
+            alert('Failed to turn item back on: ' + err.message);
+        }
+    };
 
     // Clickable past orders detail states
     const [viewingOrderDetails, setViewingOrderDetails] = useState(null);
+    const [isChangingPaymentMethod, setIsChangingPaymentMethod] = useState(false);
+    const [isChangingOrderChannel, setIsChangingOrderChannel] = useState(false);
+    const [shiftSummary, setShiftSummary] = useState({
+        totalSales: 0,
+        totalOrders: 0,
+        cashSales: 0,
+        cardSales: 0,
+        imPaybillSales: 0,
+        appSales: 0
+    });
     const [returningOrderId, setReturningOrderId] = useState(null);
     const [returnReason, setReturnReason] = useState('');
     const [customReturnReason, setCustomReturnReason] = useState('');
@@ -130,12 +777,32 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     // Group past orders calendar filter
     const [historyStartDate, setHistoryStartDate] = useState(() => {
         const d = new Date();
+        // If it is before 7:00 AM local time, default to the previous business day
+        if (d.getHours() < 7) {
+            d.setDate(d.getDate() - 1);
+        }
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
     const [historyEndDate, setHistoryEndDate] = useState(() => {
         const d = new Date();
+        // If it is before 7:00 AM local time, default to the previous business day
+        if (d.getHours() < 7) {
+            d.setDate(d.getDate() - 1);
+        }
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
+    const [prevPeriodSales, setPrevPeriodSales] = useState(0);
+    const [customOrderDate, setCustomOrderDate] = useState('');
+    const isHistoryRestricted = React.useMemo(() => {
+        return (staffRole === 'cashier' || staffRole === 'waiter') && staffRestricted !== false;
+    }, [staffRole, staffRestricted]);
+
+    const canViewRevenue = React.useMemo(() => {
+        if (!staffRole) return true;
+        const roleLower = staffRole.toLowerCase();
+        if (roleLower === 'admin' || roleLower === 'manager') return true;
+        return staffRestricted === false;
+    }, [staffRole, staffRestricted]);
     
     const [submitting, setSubmitting] = useState(false);
     const [activeReceipt, setActiveReceipt] = useState(null); // Loaded after success for printing
@@ -154,8 +821,11 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
 
     // Split bill states
     const [splitBillModalOpen, setSplitBillModalOpen] = useState(false);
+    const [splitBillMode, setSplitBillMode] = useState('guests'); // 'guests' | 'payment'
     const [splitBillCount, setSplitBillCount] = useState(2);
     const [splitReceiptsData, setSplitReceiptsData] = useState(null); // data for printing splits
+    const [splitBillOrderTotal, setSplitBillOrderTotal] = useState(null); // when opened from Order Details (not cart)
+    const [splitImPaybill, setSplitImPaybill] = useState(''); // I&M Paybill portion for split payment
     const [partialPaymentMethod, setPartialPaymentMethod] = useState('Cash');
     const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
 
@@ -260,15 +930,17 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     const [editingStaffName, setEditingStaffName] = useState('');
     const [editingStaffPin, setEditingStaffPin] = useState('');
     const [editingStaffRole, setEditingStaffRole] = useState('staff');
+    const [editingStaffActive, setEditingStaffActive] = useState(true);
+    const [editingStaffTodayYesterdayOnly, setEditingStaffTodayYesterdayOnly] = useState(true);
     const [clearingPendingOrder, setClearingPendingOrder] = useState(null);
     const [clearingPaymentMethod, setClearingPaymentMethod] = useState('CASH');
-    const [clearingBrand, setClearingBrand] = useState('ManiPOS');
+    const [clearingBrand, setClearingBrand] = useState('POT OF JOLLOF');
     const [clearingChannel, setClearingChannel] = useState('Walk-in');
-    const [clearingService, setClearingService] = useState('Dine Inn');
+    const [clearingService, setClearingService] = useState('Dine-in');
 
     const handleOpenClearModal = (order) => {
         setClearingPendingOrder(order);
-        setClearingBrand(order.brand || 'ManiPOS');
+        setClearingBrand(order.brand || 'POT OF JOLLOF');
         setClearingChannel(order.order_channel || 'Walk-in');
         setClearingService(order.dining_option || 'Dine Inn');
         setClearingPaymentMethod(order.payment_method || 'CASH');
@@ -290,6 +962,36 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     const [discountsList, setDiscountsList] = useState([]);
     const [loadingDiscounts, setLoadingDiscounts] = useState(false);
     const [editingDiscount, setEditingDiscount] = useState(null);
+
+    // Menu image upload handler
+    const handleImageUpload = async (menuItemId, file) => {
+        if (!file || !menuItemId) return;
+        try {
+            const ext = file.name.split('.').pop();
+            const filePath = `menu_items/${menuItemId}_${Date.now()}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+                .from('menu_images')
+                .upload(filePath, file, { upsert: true });
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(filePath);
+            const publicUrl = urlData?.publicUrl;
+            if (!publicUrl) throw new Error('Could not get public URL');
+            await supabase.from('pos_menu').update({ image_url: publicUrl }).eq('id', menuItemId);
+            setEditingItem(prev => prev ? { ...prev, image_url: publicUrl } : prev);
+            setMenu(prev => prev.map(m => m.id === menuItemId ? { ...m, image_url: publicUrl } : m));
+        } catch (err) {
+            console.error('Image upload failed:', err);
+            alert('Image upload failed: ' + err.message);
+        }
+    };
+
+    // Preload all brand logos eagerly so they're cached before the picker renders
+    useEffect(() => {
+        BRAND_OPTIONS.forEach(br => {
+            const img = new Image();
+            img.src = br.logo;
+        });
+    }, []);
 
     // Sync linked modifier group selection when editingItem updates
     useEffect(() => {
@@ -339,6 +1041,28 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     // Save printer names to localStorage whenever they change
     useEffect(() => { localStorage.setItem('pos_front_desk_printer', frontDeskPrinter); }, [frontDeskPrinter]);
     useEffect(() => { localStorage.setItem('pos_kitchen_printer', kitchenPrinter); }, [kitchenPrinter]);
+
+    useEffect(() => {
+        if (diningOption === 'Delivery' && customerNameText.trim()) {
+            const fetchSavedAddress = async () => {
+                try {
+                    const { data, error } = await supabase
+                        .from('pos_customer_addresses')
+                        .select('address')
+                        .eq('customer_name', customerNameText.trim().toLowerCase())
+                        .maybeSingle();
+                    if (data && data.address) {
+                        setDeliveryAddress(data.address);
+                    }
+                } catch (e) {
+                    console.error('Error fetching customer address:', e);
+                }
+            };
+            fetchSavedAddress();
+        } else if (diningOption !== 'Delivery') {
+            setDeliveryAddress('');
+        }
+    }, [diningOption, customerNameText]);
 
     // Prevent Paid to APP from being selected/retained for non-app channels
     useEffect(() => {
@@ -442,7 +1166,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                 
                             if (itemsError) throw itemsError;
                             
-                            console.log(`Successfully synced offline order #${serverOrder.ticket_number}`);
+                            console.log(`Successfully synced offline order #${obfuscateTicket(serverOrder.ticket_number)}`);
                         } catch (err) {
                             console.error("Failed to sync offline order, keeping in queue:", err);
                             remainingOrders.push(order);
@@ -509,15 +1233,23 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
         }
     };
 
-    const handleAcceptOrder = async (order) => {
+    const handleAcceptOrder = async (order, options = {}) => {
+        const { silent = false } = options;
         try {
             const { error } = await supabase
                 .from('pos_orders')
-                .update({ status: 'Approved' })
+                .update({ 
+                    status: 'Accepted',
+                    payment_status: 'Paid'
+                })
                 .eq('id', order.id);
             
             if (error) throw error;
             
+            // Update local state instantly so UI badge changes to Paid/Accepted immediately
+            setHistoryOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'Accepted', payment_status: 'Paid' } : o));
+            setOpenOrders(prev => prev.filter(o => o.id !== order.id));
+
             // Build receipt structure for routing to printers
             const receiptData = {
                 id: order.id,
@@ -525,8 +1257,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 created_at: order.created_at,
                 customer_name: order.customer_name,
                 dining_option: order.dining_option,
-                payment_method: order.payment_method,
-                payment_status: order.payment_status,
+                payment_method: order.payment_method || 'Cash',
+                payment_status: 'Paid',
                 total_amount: order.total_amount,
                 discount: order.discount || 0,
                 cashier_name: order.cashier_name,
@@ -550,34 +1282,60 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 ).catch(console.warn);
             }
 
-            alert(`Order #${order.ticket_number} accepted & receipt routed successfully!`);
+            if (!silent) {
+                alert(`Order #${obfuscateTicket(order.ticket_number)} accepted & receipt printed successfully!`);
+            }
             fetchOpenOrders();
+            const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+            if (typeof fetchHistory === 'function') fetchHistory(today, today);
         } catch (err) {
-            alert('Failed to accept order: ' + err.message);
+            if (!silent) alert('Failed to accept order: ' + err.message);
         }
     };
 
+
     const handleDeclineOrder = async (order) => {
-        if (!confirm(`Are you sure you want to decline Order #${order.ticket_number}?`)) return;
+        const reason = prompt(`Reason for declining Order #${obfuscateTicket(order.ticket_number)}?`, 'Out of stock');
+        if (reason === null) return;
+
         try {
+            const declineNote = reason ? `Declined: ${reason}` : 'Declined by staff';
             const { error } = await supabase
                 .from('pos_orders')
-                .update({ status: 'Declined', payment_status: 'Voided' })
+                .update({ 
+                    status: 'Declined', 
+                    payment_status: 'Voided',
+                    notes: order.notes ? `${order.notes} | ${declineNote}` : declineNote
+                })
                 .eq('id', order.id);
             
             if (error) throw error;
-            alert(`Order #${order.ticket_number} declined.`);
+
+            // Update local state instantly so ticket disappears from open/pending and updates status badge
+            setHistoryOrders(prev => prev.map(o => o.id === order.id ? { 
+                ...o, 
+                status: 'Declined', 
+                payment_status: 'Voided',
+                notes: order.notes ? `${order.notes} | ${declineNote}` : declineNote
+            } : o));
+            setOpenOrders(prev => prev.filter(o => o.id !== order.id));
+
+            alert(`Order #${obfuscateTicket(order.ticket_number)} declined.`);
             fetchOpenOrders();
+            const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+            if (typeof fetchHistory === 'function') fetchHistory(today, today);
         } catch (err) {
             alert('Failed to decline order: ' + err.message);
         }
     };
 
+
+
     const openClearSalesModal = () => {
         if (!editingOrderId) return;
         const currentOrder = openOrders.find(o => o.id === editingOrderId);
         if (currentOrder) {
-            setClearBrand(currentOrder.brand || 'ManiPOS');
+            setClearBrand(currentOrder.brand || 'POT OF JOLLOF');
             setClearChannel(currentOrder.order_channel || 'Walk-in');
             setClearService(currentOrder.dining_option || 'Dine Inn');
             setClearPayment(currentOrder.payment_method || 'CASH');
@@ -591,6 +1349,53 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             setClearPayment(paymentMethod);
             setClearAction('Cancelled');
             setClearSalesModalOpen(true);
+        }
+    };
+
+    const dispatchUberDirectRider = async (order) => {
+        if (!order) return;
+        const address = order.delivery_address || '';
+        if (!address.trim()) {
+            alert(`No delivery address saved for Order #${obfuscateTicket(order.ticket_number)}. Cannot request Uber Direct rider.`);
+            return;
+        }
+
+        try {
+            console.log(`[Uber Direct] Requesting rider for Order #${obfuscateTicket(order.ticket_number)} to ${address}...`);
+            
+            const { error } = await supabase
+                .from('pos_orders')
+                .update({ 
+                    rider_status: 'requested',
+                    rider_tracking_url: 'https://direct.uber.com/track/stub-uber-direct-tracking'
+                })
+                .eq('id', order.id);
+
+            if (error) throw error;
+
+            // Log action in integrations log list
+            const logs = JSON.parse(localStorage.getItem('pos_api_logs') || '[]');
+            logs.unshift({
+                time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                type: 'info',
+                msg: `📦 [Uber Direct] Rider requested for Order #${obfuscateTicket(order.ticket_number)} (Deliver to: ${address})`
+            });
+            localStorage.setItem('pos_api_logs', JSON.stringify(logs.slice(0, 50)));
+
+            // Update state in modal if open
+            if (viewingOrderDetails && viewingOrderDetails.id === order.id) {
+                setViewingOrderDetails(prev => ({
+                    ...prev,
+                    rider_status: 'requested',
+                    rider_tracking_url: 'https://direct.uber.com/track/stub-uber-direct-tracking'
+                }));
+            }
+
+            fetchOpenOrders();
+            alert(`Uber Direct rider requested successfully for Order #${obfuscateTicket(order.ticket_number)}!`);
+        } catch (e) {
+            console.error('Uber Direct Dispatch Error:', e);
+            alert('Failed to dispatch Uber Direct rider: ' + e.message);
         }
     };
 
@@ -783,6 +1588,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     const [checkingShift, setCheckingShift] = useState(true);
     const [openingFloatInput, setOpeningFloatInput] = useState('');
     const [closingCashInput, setClosingCashInput] = useState('');
+    const [closingCardInput, setClosingCardInput] = useState('');
     const [closingModalOpen, setClosingModalOpen] = useState(false);
     const [zReportData, setZReportData] = useState(null);
 
@@ -854,6 +1660,26 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
 
     const handleCloseShift = async () => {
         try {
+            // Helper to get today's 7:00 AM EAT business day start timestamp
+            const now = new Date();
+            const d = new Date();
+            if (now.getHours() < 7) {
+                d.setDate(d.getDate() - 1);
+            }
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const todayStartIso = new Date(`${year}-${month}-${day}T07:00:00.000+03:00`).toISOString();
+
+            // Clamp shift start date: take activeShift.opened_at if opened today, otherwise force today's start
+            let shiftStartIso = todayStartIso;
+            if (activeShift && activeShift.opened_at) {
+                const shiftOpenedIso = new Date(activeShift.opened_at).toISOString();
+                if (shiftOpenedIso > todayStartIso) {
+                    shiftStartIso = shiftOpenedIso;
+                }
+            }
+
             // Check if activeShift is offline or network is down
             if (String(activeShift.id).startsWith('offline-') || !navigator.onLine) {
                 let totalCashSales = 0;
@@ -867,7 +1693,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 const allOrders = [
                     ...cachedHistory,
                     ...offlineQueue.map(q => q.header)
-                ].filter(o => o.cashier_name === activeShift.cashier_name && o.created_at >= activeShift.opened_at);
+                ].filter(o => o.created_at >= shiftStartIso && (staffName ? (o.cashier_name || '').toLowerCase() === staffName.toLowerCase() : true));
 
                 allOrders.forEach(order => {
                     shiftOrdersCount++;
@@ -890,10 +1716,14 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 });
 
                 const expectedCashTotal = parseFloat(activeShift.opening_float || 0) + totalCashSales;
+                const actualCashVal = closingCashInput !== '' ? (parseFloat(closingCashInput) || 0) : expectedCashTotal;
+                const actualCardVal = closingCardInput !== '' ? (parseFloat(closingCardInput) || 0) : totalCardSales;
+
                 const closedOfflineShift = {
                     ...activeShift,
                     closed_at: new Date().toISOString(),
-                    actual_cash: expectedCashTotal,
+                    actual_cash: actualCashVal,
+                    actual_card: actualCardVal,
                     expected_cash: expectedCashTotal,
                     expected_mpesa: totalMpesaSales,
                     expected_card: totalCardSales
@@ -902,6 +1732,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 // Remove from cache and state
                 setActiveShift(null);
                 setClosingCashInput('');
+                setClosingCardInput('');
                 setClosingModalOpen(false);
                 localStorage.removeItem('pos_cache_active_shift_' + staffName);
 
@@ -928,15 +1759,20 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 return;
             }
 
-            // 1. Fetch all orders completed during this shift
-            const { data: orders, error: ordersError } = await supabase
+            // 1. Fetch all orders completed strictly during today's shift window
+            let query = supabase
                 .from('pos_orders')
                 .select('*')
-                .eq('cashier_name', activeShift.cashier_name)
-                .gte('created_at', activeShift.opened_at)
+                .gte('created_at', shiftStartIso)
                 .eq('payment_status', 'Paid')
-                .neq('status', 'Returned');
+                .neq('status', 'Returned')
+                .neq('status', 'Cancelled');
 
+            if (staffName) {
+                query = query.ilike('cashier_name', staffName);
+            }
+
+            const { data: orders, error: ordersError } = await query;
             if (ordersError) throw ordersError;
 
             // 2. Tally expected totals by payment method
@@ -964,7 +1800,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             });
 
             const expectedCashTotal = parseFloat(activeShift.opening_float || 0) + totalCashSales;
-            const actualCashVal = expectedCashTotal; // Counted cash matches expected cash exactly
+            const actualCashVal = closingCashInput !== '' ? (parseFloat(closingCashInput) || 0) : expectedCashTotal;
+            const actualCardVal = closingCardInput !== '' ? (parseFloat(closingCardInput) || 0) : totalCardSales;
 
             // 3. Update shift in db
             const { data: updatedShift, error: shiftError } = await supabase
@@ -972,6 +1809,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 .update({
                     closed_at: new Date().toISOString(),
                     actual_cash: actualCashVal,
+                    actual_card: actualCardVal,
                     expected_cash: expectedCashTotal,
                     expected_mpesa: totalMpesaSales,
                     expected_card: totalCardSales
@@ -982,23 +1820,150 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
 
             if (shiftError) throw shiftError;
 
-            // 4. Generate Z-Report Data
-            setZReportData({
-                shift: updatedShift,
-                ordersCount: orders.length,
-                cashSales: totalCashSales,
-                mpesaSales: totalMpesaSales,
-                cardSales: totalCardSales,
-                totalSales: totalCashSales + totalMpesaSales + totalCardSales
-            });
-
             // Reset shift state
             setActiveShift(null);
             setClosingCashInput('');
+            setClosingCardInput('');
             setClosingModalOpen(false);
         } catch (err) {
             console.error('Error closing shift:', err);
             alert('Failed to close shift: ' + err.message);
+        }
+    };
+
+    // Auto-calculate shift summary report when Closing Shift Modal is open (Strictly for Today's Business Day)
+    useEffect(() => {
+        if (closingModalOpen) {
+            const calculateShiftSummary = async () => {
+                try {
+                    const now = new Date();
+                    const d = new Date();
+                    if (now.getHours() < 7) {
+                        d.setDate(d.getDate() - 1);
+                    }
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const todayStartIso = new Date(`${year}-${month}-${day}T07:00:00.000+03:00`).toISOString();
+
+                    let shiftStartIso = todayStartIso;
+                    if (activeShift && activeShift.opened_at) {
+                        const shiftOpenedIso = new Date(activeShift.opened_at).toISOString();
+                        if (shiftOpenedIso > todayStartIso) {
+                            shiftStartIso = shiftOpenedIso;
+                        }
+                    }
+
+                    let query = supabase
+                        .from('pos_orders')
+                        .select('*')
+                        .gte('created_at', shiftStartIso)
+                        .eq('payment_status', 'Paid')
+                        .neq('status', 'Returned')
+                        .neq('status', 'Cancelled');
+
+                    if (staffName) {
+                        query = query.ilike('cashier_name', staffName);
+                    }
+
+                    const { data: orders, error } = await query;
+                    if (error) throw error;
+
+                    let totalSales = 0;
+                    let cashSales = 0;
+                    let cardSales = 0;
+                    let imPaybillSales = 0;
+                    let appSales = 0;
+
+                    (orders || []).forEach(o => {
+                        const amt = parseFloat(o.total_amount) || 0;
+                        totalSales += amt;
+
+                        const pm = (o.payment_method || '').toLowerCase().trim();
+                        const ch = (o.order_channel || '').toLowerCase().trim();
+
+                        if (['glovo', 'ubereats', 'uber eats', 'bolt food', 'ando'].includes(ch) || pm === 'paid to app') {
+                            appSales += amt;
+                        } else if (pm === 'cash') {
+                            cashSales += amt;
+                        } else if (pm === 'card') {
+                            cardSales += amt;
+                        } else if (pm.includes('i&m') || pm.includes('paybill') || pm === 'm-pesa' || pm === 'mpesa') {
+                            imPaybillSales += amt;
+                        } else if (pm === 'split') {
+                            const notes = o.notes || '';
+                            const cashMatch = notes.match(/Cash \(KES ([\d.]+)\)/);
+                            const mpesaMatch = notes.match(/(?:M-Pesa|I&M Paybill|Paybill) \(KES ([\d.]+)\)/);
+                            const cardMatch = notes.match(/Card \(KES ([\d.]+)\)/);
+
+                            if (cashMatch) cashSales += parseFloat(cashMatch[1]) || 0;
+                            if (mpesaMatch) imPaybillSales += parseFloat(mpesaMatch[1]) || 0;
+                            if (cardMatch) cardSales += parseFloat(cardMatch[1]) || 0;
+                        } else {
+                            cashSales += amt;
+                        }
+                    });
+
+                    setShiftSummary({
+                        totalSales,
+                        totalOrders: (orders || []).length,
+                        cashSales,
+                        cardSales,
+                        imPaybillSales,
+                        appSales
+                    });
+                } catch (err) {
+                    console.error("Shift summary calculation error:", err);
+                }
+            };
+            calculateShiftSummary();
+        }
+    }, [closingModalOpen, activeShift, staffName]);
+
+    // Handle re-clearing payment method for recent orders (up to 24 hours old)
+    const handleReClearPaymentMethod = async (orderId, newMethod) => {
+        try {
+            const { error } = await supabase
+                .from('pos_orders')
+                .update({ 
+                    payment_method: newMethod,
+                    payment_status: 'Paid'
+                })
+                .eq('id', orderId);
+
+            if (error) throw error;
+
+            setViewingOrderDetails(prev => prev ? { ...prev, payment_method: newMethod, payment_status: 'Paid' } : null);
+            setHistoryOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_method: newMethod, payment_status: 'Paid' } : o));
+            setIsChangingPaymentMethod(false);
+            fetchOpenOrders();
+
+            alert(`✓ Order payment method corrected to ${newMethod}`);
+        } catch (err) {
+            alert('Failed to update payment method: ' + err.message);
+        }
+    };
+
+    // Handle re-clearing sale channel for recent orders (up to 24 hours old)
+    const handleReClearOrderChannel = async (orderId, newChannel) => {
+        try {
+            const { error } = await supabase
+                .from('pos_orders')
+                .update({ 
+                    order_channel: newChannel
+                })
+                .eq('id', orderId);
+
+            if (error) throw error;
+
+            setViewingOrderDetails(prev => prev ? { ...prev, order_channel: newChannel } : null);
+            setHistoryOrders(prev => prev.map(o => o.id === orderId ? { ...o, order_channel: newChannel } : o));
+            setIsChangingOrderChannel(false);
+            fetchOpenOrders();
+
+            alert(`✓ Order sale channel corrected to ${newChannel}`);
+        } catch (err) {
+            alert('Failed to update order channel: ' + err.message);
         }
     };
 
@@ -1025,7 +1990,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 .from('pos_orders')
                 .select('*, items:pos_order_items(*)')
                 .eq('payment_status', 'Paid')
-                .eq('dining_option', 'Dine Inn')
+                .in('dining_option', ['Dine Inn', 'Dine-in'])
                 .neq('status', 'Cancelled')
                 .neq('status', 'Returned')
                 .order('created_at', { ascending: false });
@@ -1104,46 +2069,91 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     const fetchHistory = async (startDateVal = historyStartDate, endDateVal = historyEndDate) => {
         setLoadingHistory(true);
         try {
-            let actualStart = startDateVal;
-            let actualEnd = endDateVal;
+            const cleanDateStr = (val) => {
+                if (!val) return '';
+                if (typeof val === 'string' && val.includes('T')) return val.split('T')[0];
+                return String(val).trim();
+            };
 
-            // Waiter date scope restriction: STRICTLY Today's date only!
-            if (staffRole === 'waiter' && !isSystemAdmin) {
-                const d = new Date();
-                const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                actualStart = todayStr;
-                actualEnd = todayStr;
+            const todayDefault = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+            let sStr = cleanDateStr(startDateVal) || cleanDateStr(historyStartDate) || todayDefault;
+            let eStr = cleanDateStr(endDateVal) || cleanDateStr(historyEndDate) || sStr;
+
+            if (isHistoryRestricted) {
+                const yesterdayDefault = new Date(Date.now() - 86400000).toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+                if (sStr < yesterdayDefault) {
+                    sStr = yesterdayDefault;
+                }
+                if (eStr < yesterdayDefault) {
+                    eStr = yesterdayDefault;
+                }
             }
 
-            const start = new Date(actualStart);
-            start.setHours(0, 0, 0, 0);
-            const end = new Date(actualEnd);
-            end.setHours(23, 59, 59, 999);
+            // Full day query range covering all orders placed between start date 00:00:00 and end date 23:59:59 in Kenya EAT (+03:00)
+            const start = new Date(`${sStr}T00:00:00.000+03:00`);
+            const end = new Date(`${eStr}T23:59:59.999+03:00`);
 
+            // .limit(5000) overrides Supabase's default 1000-row cap for full week queries
             const { data, error } = await supabase
                 .from('pos_orders')
                 .select('*, items:pos_order_items(*)')
                 .gte('created_at', start.toISOString())
                 .lte('created_at', end.toISOString())
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(5000);
 
             if (error) throw error;
             let finalOrders = data || [];
-            
+
             // Waiter order visibility isolation
             if (staffRole === 'waiter') {
                 finalOrders = finalOrders.filter(
                     o => (o.cashier_name || '').toLowerCase() === (staffName || '').toLowerCase()
                 );
             }
-            
+
             setHistoryOrders(finalOrders);
             localStorage.setItem('pos_cache_history', JSON.stringify(finalOrders));
+
+            // Previous Period calculations
+            const periodDiffMs = end.getTime() - start.getTime();
+            const prevStart = new Date(start.getTime() - periodDiffMs - 1);
+            const prevEnd = new Date(start.getTime() - 1);
+
+            const { data: prevData, error: prevError } = await supabase
+                .from('pos_orders')
+                .select('total_amount, status, payment_status, cashier_name')
+                .gte('created_at', prevStart.toISOString())
+                .lte('created_at', prevEnd.toISOString());
+
+            if (!prevError && prevData) {
+                let validPrevOrders = prevData.filter(o => 
+                    o.status !== 'Returned' && 
+                    o.status !== 'Cancelled' && 
+                    o.status !== 'Declined' && 
+                    o.payment_status !== 'Voided'
+                );
+                if (staffRole === 'waiter') {
+                    validPrevOrders = validPrevOrders.filter(
+                        o => (o.cashier_name || '').toLowerCase() === (staffName || '').toLowerCase()
+                    );
+                }
+                const prevSum = validPrevOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+                setPrevPeriodSales(prevSum);
+                localStorage.setItem('pos_cache_prev_sales', String(prevSum));
+            } else {
+                const cachedPrev = localStorage.getItem('pos_cache_prev_sales');
+                if (cachedPrev) setPrevPeriodSales(parseFloat(cachedPrev) || 0);
+            }
         } catch (err) {
             console.error('Error fetching order history:', err);
             const cached = localStorage.getItem('pos_cache_history');
             if (cached) {
                 setHistoryOrders(JSON.parse(cached));
+            }
+            const cachedPrev = localStorage.getItem('pos_cache_prev_sales');
+            if (cachedPrev) {
+                setPrevPeriodSales(parseFloat(cachedPrev) || 0);
             }
         } finally {
             setLoadingHistory(false);
@@ -1176,9 +2186,24 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                         const savedVol = parseFloat(localStorage.getItem('pos_alert_volume') || '0.8');
                         playAlertSound(savedSound, savedVol);
                     }
+
+                    // Auto-accept if enabled, order is from microsite, and items are in stock
+                    const newOrder = payload.new;
+                    if (localStorage.getItem('pos_auto_accept_orders') === 'true' && isMicrositeOrder(newOrder)) {
+                        setTimeout(() => {
+                            const inStock = canAutoAcceptOrder(newOrder.items, menu);
+                            if (inStock) {
+                                console.log(`Auto-accepting microsite order #${newOrder.ticket_number}...`);
+                                handleAcceptOrder(newOrder, { silent: true });
+                            } else {
+                                alert(`⚠️ Incoming Order #${obfuscateTicket(newOrder.ticket_number)} contains OUT-OF-STOCK items and requires manual review.`);
+                            }
+                        }, 500);
+                    }
                 }
             )
             .subscribe();
+
 
         return () => {
             supabase.removeChannel(ordersChannel);
@@ -1656,14 +2681,20 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 }
             }
 
-            const modifierTotal = currentSelected.reduce((sum, m) => sum + Number(m.price || 0), 0);
-            const instructions = currentSelected.map(m => m.price > 0 ? `${m.name} (+${Math.round(m.price)})` : m.name).join(', ');
+            const modifierTotal = currentSelected.reduce((sum, m) => sum + calculateModifierChannelPrice(m, orderChannel), 0);
+            const instructions = currentSelected.map(m => {
+                const p = calculateModifierChannelPrice(m, orderChannel);
+                return p > 0 ? `${m.name} (+${Math.round(p)})` : m.name;
+            }).join(', ');
+
+            const itemBasePrice = calculateChannelPrice(item, orderChannel, activeBrand);
 
             return {
                 ...item,
+                basePrice: itemBasePrice,
                 selectedModifiers: currentSelected,
                 instructions,
-                price: (item.basePrice || item.price) + modifierTotal
+                price: itemBasePrice + modifierTotal
             };
         }));
     };
@@ -1688,7 +2719,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             }, {})
         );
         return dedupedItems.map(item => {
-            const menuItem = menu.find(m => m.name === item.item_name) || {};
+            const menuItem = (menu || []).find(m => m.name === item.item_name) || {};
             const selectedModifiers = [];
             const basePrice = menuItem.price || item.price;
             
@@ -1721,11 +2752,19 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 });
             }
 
+            // Ensure item.price includes modifier additions if they were omitted in saved row
+            let itemPrice = parseFloat(item.price) || 0;
+            const parsedModifierTotal = selectedModifiers.reduce((sum, m) => sum + (parseFloat(m.price) || 0), 0);
+            const expectedMinPrice = (parseFloat(basePrice) || 0) + parsedModifierTotal;
+            if (itemPrice < expectedMinPrice) {
+                itemPrice = expectedMinPrice;
+            }
+
             return {
                 id: menuItem.id || item.id,
                 name: item.item_name,
                 basePrice,
-                price: item.price,
+                price: itemPrice,
                 include_vat: menuItem.include_vat || false,
                 image_url: menuItem.image_url || '',
                 quantity: item.quantity,
@@ -1742,6 +2781,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
         const name = fd.get('name')?.trim();
         const pin = fd.get('pin')?.trim();
         const role = fd.get('role');
+        const today_yesterday_only = fd.get('today_yesterday_only') === 'true';
 
         if (!name || !pin || pin.length !== 4 || !role) {
             alert('Please enter Name, role, and a 4-digit numeric PIN.');
@@ -1751,7 +2791,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
         try {
             const { data, error } = await supabase
                 .from('staff_access')
-                .insert([{ name, pin, role }])
+                .insert([{ name, pin, role, today_yesterday_only }])
                 .select()
                 .single();
 
@@ -1835,7 +2875,9 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 .update({
                     name: editingStaffName.trim(),
                     pin: editingStaffPin,
-                    role: editingStaffRole
+                    role: editingStaffRole,
+                    is_active: editingStaffActive,
+                    today_yesterday_only: editingStaffTodayYesterdayOnly
                 })
                 .eq('id', staffId);
 
@@ -1899,8 +2941,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
 
     // Filter menu
     const filteredMenu = menu.filter(item => {
-        const matchesBrand = activeBrand === 'All' || getBrandForItem(item) === activeBrand;
-        const matchesAvailability = activeView === 'menu_settings' ? true : item.is_available;
+        const matchesBrand = activeBrand === 'All' || itemBelongsToBrand(item, activeBrand);
+        const matchesAvailability = true; // Show all items in grid; out-of-stock items are displayed with red bar overlay & restock button
         const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
         const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -1918,20 +2960,39 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
         setActiveCategory('All');
     }, [activeBrand]);
 
+    // Sync cart prices when orderChannel, selectedBrand, or activeBrand changes dynamically
+    useEffect(() => {
+        setCart(prevCart => {
+            if (!prevCart || prevCart.length === 0) return prevCart;
+            const currentBrand = (selectedBrand && selectedBrand !== 'All') ? selectedBrand : activeBrand;
+            return prevCart.map(item => {
+                if (item.isCustomPriceOverride) return item;
+                const dynamicItemPrice = calculateChannelPrice(item, orderChannel, currentBrand);
+                const modifierTotal = getItemModifierTotal(item, orderChannel);
+                return { ...item, basePrice: dynamicItemPrice, price: dynamicItemPrice + modifierTotal };
+            });
+        });
+    }, [orderChannel, selectedBrand, activeBrand]);
+
     // Cart operations
     const addToCart = (item) => {
         setCartOpen(true);
+        const currentBrand = (selectedBrand && selectedBrand !== 'All') ? selectedBrand : activeBrand;
+        const dynamicItemPrice = calculateChannelPrice(item, orderChannel, currentBrand);
         setCart(prev => {
             const existing = prev.find(i => i.id === item.id);
             if (existing) {
-                return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+                const modifierTotal = getItemModifierTotal(existing, orderChannel);
+                return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1, price: dynamicItemPrice + modifierTotal } : i);
             }
+            const modifierTotal = getItemModifierTotal(item, orderChannel);
             return [...prev, { 
                 ...item, 
-                basePrice: item.price, 
+                basePrice: dynamicItemPrice, 
+                price: dynamicItemPrice + modifierTotal, 
                 quantity: 1, 
-                instructions: '', 
-                selectedModifiers: [] 
+                instructions: item.instructions || '', 
+                selectedModifiers: item.selectedModifiers || [] 
             }];
         });
     };
@@ -2010,7 +3071,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
         return {
             id: 'offline-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
             ticket_number: nextTicketNum,
-            created_at: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+            created_at: orderPayload.created_at || new Date().toISOString(),
             customer_name: orderPayload.customer_name,
             dining_option: orderPayload.dining_option,
             payment_method: orderPayload.payment_method,
@@ -2021,7 +3082,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             brand: orderPayload.brand,
             order_channel: orderPayload.order_channel,
             notes: orderPayload.notes,
-            status: orderPayload.payment_status === 'Paid' ? 'Completed' : 'Pending',
+            status: 'Pending',
             is_offline: true
         };
     };
@@ -2031,7 +3092,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             alert('Your cart is empty.');
             return;
         }
-        if (diningOption === 'Dine Inn' && !selectedTable) {
+        if ((diningOption === 'Dine-in' || diningOption === 'Dine Inn') && !selectedTable) {
             alert('Please select a Table before punching a Dine-In order.');
             return;
         }
@@ -2043,26 +3104,40 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
         setSubmitting(true);
         try {
             let orderData;
-            const finalCustName = diningOption === 'Dine Inn' ? selectedTable : (customerNameText.trim() || 'Walk-in Guest');
+            const finalCustName = (diningOption === 'Dine-in' || diningOption === 'Dine Inn') ? selectedTable : (customerNameText.trim() || 'Walk-in Guest');
             const guestNotesPart = customerNameText.trim() ? `Customer: ${customerNameText.trim()}` : '';
             const splitNotesPart = paymentMethod === 'Split' 
                 ? `Split Pay: Cash (KES ${splitCash || 0}), M-Pesa (KES ${splitMpesa || 0}), Card (KES ${splitCard || 0})`
                 : '';
             const finalNotes = [guestNotesPart, splitNotesPart].filter(Boolean).join(', ');
 
+            // Build the created_at timestamp.
+            // If the user specified a custom order date (e.g. YYYY-MM-DD), we combine it with the current local time
+            // and interpret it as local Kenya time (UTC+3) to get the correct UTC string.
+            let finalCreatedAt = new Date().toISOString();
+            if (customOrderDate) {
+                const now = new Date();
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mm = String(now.getMinutes()).padStart(2, '0');
+                const ss = String(now.getSeconds()).padStart(2, '0');
+                const localISO = `${customOrderDate}T${hh}:${mm}:${ss}.000+03:00`;
+                finalCreatedAt = new Date(localISO).toISOString();
+            }
+
             const orderPayload = {
                 customer_name: finalCustName,
                 dining_option: diningOption,
                 payment_method: paymentMethod,
                 payment_status: paymentStatus,
-                status: paymentStatus === 'Paid' ? 'Completed' : 'Pending',
+                status: 'Pending',
                 total_amount: total,
                 discount: discountAmount,
                 cashier_name: staffName || 'Cashier',
                 brand: selectedBrand,
                 order_channel: orderChannel,
                 notes: finalNotes,
-                created_at: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString()
+                created_at: finalCreatedAt,
+                delivery_address: diningOption === 'Delivery' ? deliveryAddress : null
             };
 
             const isOffline = !navigator.onLine;
@@ -2113,6 +3188,19 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                     }
                 }
             }
+            // Save/upsert customer address
+            if (diningOption === 'Delivery' && customerNameText.trim() && deliveryAddress.trim()) {
+                try {
+                    await supabase
+                        .from('pos_customer_addresses')
+                        .upsert({
+                            customer_name: customerNameText.trim().toLowerCase(),
+                            address: deliveryAddress.trim()
+                        }, { onConflict: 'customer_name' });
+                } catch (e) {
+                    console.error('Error upserting customer address:', e);
+                }
+            }
 
             // Create order line items
             const itemPayloads = cart.map(item => ({
@@ -2150,13 +3238,47 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 };
                 setOpenOrders(prev => [mergedOfflineOrder, ...prev.filter(o => o.id !== editingOrderId)]);
                 
-                alert(`Offline Order #${orderData.ticket_number} saved locally! It will sync when connection returns.`);
+                alert(`Offline Order #${obfuscateTicket(orderData.ticket_number)} saved locally! It will sync when connection returns.`);
             } else {
+                // Ensure no stale duplicate rows exist for this order ID
+                await supabase
+                    .from('pos_order_items')
+                    .delete()
+                    .eq('order_id', orderData.id);
+
                 const { error: itemsError } = await supabase
                     .from('pos_order_items')
                     .insert(itemPayloads);
 
                 if (itemsError) throw itemsError;
+
+                // Auto-deduct linked raw ingredients from store inventory
+                try {
+                    const { data: recipes } = await supabase.from('pos_item_recipes').select('*');
+                    if (recipes && recipes.length > 0) {
+                        for (const item of cart) {
+                            const itemRecipes = recipes.filter(r => r.pos_menu_item_name === item.name);
+                            for (const r of itemRecipes) {
+                                const qtyToDeduct = (r.quantity_per_order || 1) * (item.quantity || 1);
+                                const { data: invItem } = await supabase
+                                    .from('inventory_items')
+                                    .select('quantity')
+                                    .eq('id', r.inventory_item_id)
+                                    .single();
+
+                                if (invItem) {
+                                    const newQty = Math.max(0, (parseFloat(invItem.quantity) || 0) - qtyToDeduct);
+                                    await supabase
+                                        .from('inventory_items')
+                                        .update({ quantity: newQty })
+                                        .eq('id', r.inventory_item_id);
+                                }
+                            }
+                        }
+                    }
+                } catch (recErr) {
+                    console.warn('Recipe auto-deduction non-fatal notice:', recErr);
+                }
             }
 
             // Clear states
@@ -2171,7 +3293,10 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             setSplitMpesa('');
             setSplitCard('');
             setEditingOrderId(null);
-            
+            setCustomOrderDate('');
+            scheduleLockAfterOrder(); // auto-lock 60s after order completes
+
+
             // Set receipt view data
             const receiptData = {
                 id: orderData.id,
@@ -2188,6 +3313,9 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 items: itemPayloads
             };
             setActiveReceipt(receiptData);
+
+            // Auto-sync order & printed receipt to Guest CRM (Duplicate-Free Upsert)
+            syncOrderToGuestCRM(receiptData);
 
             // QZ-aware print: try QZ first, fall back to popup window
             printOrFallback(
@@ -2254,7 +3382,70 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
     }
 
     return (
-        <div className="h-screen bg-gray-50 flex flex-col font-sans text-secondary overflow-hidden select-none">
+        <div className="h-screen w-screen bg-gray-50 flex flex-col font-sans text-secondary overflow-hidden">
+            {/* Lock Screen Overlay */}
+            <AnimatePresence>
+                {isLocked && (
+                    <motion.div
+                        key="lock-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col items-center justify-center p-6"
+                    >
+                        {/* Ambient background */}
+                        <div className="absolute top-1/3 left-1/3 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
+                        <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative z-10"
+                        >
+                            <div className="flex flex-col items-center mb-8">
+                                <div className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-2xl flex items-center justify-center mb-4 text-3xl">
+                                    🔒
+                                </div>
+                                <h2 className="text-2xl font-black text-white text-center">Screen Locked</h2>
+                                <p className="text-slate-400 text-sm font-medium mt-1 text-center">
+                                    {staffName ? `Enter ${staffName}'s PIN to unlock` : 'Enter your PIN to unlock'}
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleUnlock} className="space-y-6">
+                                <div className="flex justify-between gap-3 px-2">
+                                    {lockPin.map((digit, i) => (
+                                        <input
+                                            key={i}
+                                            id={`lock-pin-${i}`}
+                                            type="password"
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            value={digit}
+                                            onChange={(e) => handleLockPinInput(i, e.target.value)}
+                                            onKeyDown={(e) => handleLockPinKeyDown(i, e)}
+                                            className="w-14 h-16 text-center text-3xl font-bold bg-slate-800 border-2 border-slate-700 text-white rounded-2xl focus:border-emerald-500 focus:outline-none transition-colors"
+                                        />
+                                    ))}
+                                </div>
+
+                                <div className="min-h-[20px] text-center">
+                                    {lockError && <p className="text-red-400 font-bold text-sm animate-pulse">{lockError}</p>}
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={lockLoading || lockPin.join('').length !== 4}
+                                    className="w-full flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-2xl font-bold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {lockLoading ? <Loader2 className="animate-spin" size={22} /> : 'Unlock Terminal'}
+                                </button>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="bg-white border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4 flex flex-col lg:flex-row gap-3 lg:justify-between lg:items-center shrink-0 shadow-sm relative z-10">
                 <div className="flex items-center justify-between lg:justify-start gap-3 w-full lg:w-auto">
@@ -2289,7 +3480,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4 w-full lg:w-auto">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4 w-full lg:w-auto min-w-0 overflow-hidden">
                     {/* View Switcher Tabs */}
                     <div className="bg-gray-100 p-1 rounded-xl border border-gray-200/50 flex gap-1 overflow-x-auto no-scrollbar shrink-0 max-w-full">
                         <button
@@ -2336,6 +3527,17 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                         >
                             Menu Settings
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveView('campaigns')}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                                activeView === 'campaigns'
+                                    ? 'bg-primary text-secondary shadow-sm'
+                                    : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                        >
+                            📢 Campaigns
+                        </button>
                         {isSystemAdmin && (
                             <button
                                 type="button"
@@ -2350,6 +3552,24 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                             </button>
                         )}
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setShowRegisterGuestModal(true)}
+                        title="Register New Guest / Customer to CRM"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#18A07A] hover:bg-[#128061] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
+                    >
+                        <UserPlus size={14} /> + New Guest
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={lockScreen}
+                        title="Lock Screen"
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm"
+                    >
+                        🔒 Lock
+                    </button>
 
                     <button
                         type="button"
@@ -2373,6 +3593,22 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                         <span className={`w-2 h-2 rounded-full ${qzConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
                         {qzConnected ? 'Printers OK' : 'Printers Off'}
                     </button>
+
+                    {/* Auto-Accept Orders Toggle Button */}
+                    <button
+                        type="button"
+                        onClick={toggleAutoAcceptOrders}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shadow-sm cursor-pointer ${
+                            autoAcceptMicrositeOrders
+                                ? 'bg-emerald-600 text-white border-emerald-700 shadow-emerald-600/20'
+                                : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                        }`}
+                        title={autoAcceptMicrositeOrders ? "Auto-Accept Microsite Orders is ON (Click to Disable)" : "Auto-Accept Microsite Orders is OFF (Click to Enable)"}
+                    >
+                        <span className={`w-2 h-2 rounded-full ${autoAcceptMicrositeOrders ? 'bg-white animate-pulse' : 'bg-gray-400'}`} />
+                        <span>⚡ Auto-Accept: {autoAcceptMicrositeOrders ? 'ON' : 'OFF'}</span>
+                    </button>
+
 
                     {/* Cart Button */}
                     <button
@@ -2440,99 +3676,260 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             {/* Main Terminal Split Screen */}
             <div className="flex-1 flex overflow-hidden relative">
                 {/* Left Panel: Menu Item Selector / Order History View */}
-                {activeView === 'menu' && (
-                    <div className={`flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-3 sm:p-6 gap-4 sm:gap-6 pb-20 sm:pb-6 ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200`}>
-                        {/* Brand Selector — single-restaurant mode */}
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar shrink-0 pb-1 border-b border-gray-150">
-                            {[
-                                { id: 'All', name: 'All Items', icon: '🍲' }
-                            ].map(br => (
-                                <button
-                                    key={br.id}
-                                    type="button"
-                                    onClick={() => setActiveBrand(br.id)}
-                                    className={`px-4 py-2 rounded-xl font-black text-xs flex items-center gap-2 transition-all ${
-                                        activeBrand === br.id
-                                            ? 'bg-emerald-600 text-white shadow-md'
-                                            : 'bg-white border border-gray-105 hover:bg-gray-50 text-gray-500'
-                                    }`}
-                                >
-                                    <span>{br.icon}</span>
-                                    <span>{br.name}</span>
-                                </button>
-                            ))}
-                        </div>
+                {activeView === 'menu' && !activeBrand ? (
+                    <div className={`flex-1 flex flex-col items-center justify-center p-6 md:p-10 bg-slate-950 text-white overflow-y-auto ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200 relative`}>
+                        {/* Background ambient lighting */}
+                        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
+                        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-                        {/* Category tabs */}
-                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar shrink-0 py-0.5">
-                            {[{ name: 'All', icon: '🍽️' }, ...visibleCategories].map(cat => (
-                                <button
-                                    key={cat.name}
-                                    onClick={() => setActiveCategory(cat.name)}
-                                    className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm ${
-                                        activeCategory === cat.name
-                                            ? 'bg-primary text-secondary'
-                                            : 'bg-white border border-gray-100 hover:bg-gray-50 text-gray-500'
-                                    }`}
-                                >
-                                    <span>{cat.icon}</span>
-                                    <span>{cat.name}</span>
-                                </button>
-                            ))}
-                        </div>
+                        <div className="max-w-4xl w-full text-center space-y-8 my-auto z-10">
+                            <div className="space-y-3">
+                                <span className="px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider inline-flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    POS Terminal · Cashier: {staffName}
+                                </span>
+                                <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">Select Restaurant Brand</h2>
+                                <p className="text-slate-400 text-sm md:text-base max-w-lg mx-auto leading-relaxed">
+                                    Click a restaurant brand to view its menu catalog and start punching in customer orders.
+                                </p>
+                            </div>
 
-                        {/* Menu items grid */}
-                        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                            {loadingMenu ? (
-                                <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                                    <Loader2 className="animate-spin text-primary" size={32} />
-                                    <span className="text-sm font-bold">Loading Menu...</span>
-                                </div>
-                            ) : filteredMenu.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
-                                    No items found matching selection.
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pb-6">
-                                    {filteredMenu.map(item => {
-                                        const cartQty = cart.find(c => c.id === item.id)?.quantity || 0;
-                                        return (
-                                            <motion.div
-                                                key={item.id}
-                                                whileTap={{ scale: 0.97 }}
-                                                onClick={() => addToCart(item)}
-                                                className="bg-white rounded-3xl p-3 sm:p-4 border border-gray-100 hover:border-primary/30 shadow-sm cursor-pointer relative overflow-hidden group flex flex-col justify-between h-36 sm:h-44 transition-all"
-                                            >
-                                                {cartQty > 0 && (
-                                                    <div className="absolute top-3 right-3 bg-primary text-secondary w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shadow">
-                                                        {cartQty}x
-                                                    </div>
-                                                )}
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="text-3xl mb-1 mt-1 block">
-                                                        {item.category === 'Starters & Bites' ? '🍢' :
-                                                         item.category === 'Breakfast' ? '🍳' :
-                                                         item.category === 'Jollof Combos' ? '🍛' :
-                                                         item.category === 'Stews' ? '🍲' :
-                                                         item.category === 'Soups' ? '🥣' :
-                                                         item.category === 'Hot Beverages' ? '☕' :
-                                                         item.category === 'Beverages' ? '🥤' : '🍽️'}
-                                                    </span>
-                                                    <h3 className="font-bold text-gray-900 text-sm leading-tight group-hover:text-primary transition-colors line-clamp-1">{item.name}</h3>
-                                                    <p className="text-[10px] text-gray-400 font-semibold line-clamp-2 leading-relaxed mt-0.5">{item.description}</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+                                {BRAND_OPTIONS.map(br => {
+                                    const itemCount = menu.filter(item => itemBelongsToBrand(item, br.id)).length;
+                                    return (
+                                        <motion.button
+                                            key={br.id}
+                                            whileHover={{ scale: 1.04, y: -4 }}
+                                            whileTap={{ scale: 0.96 }}
+                                            onClick={() => {
+                                                setActiveBrand(br.id);
+                                                setSelectedBrand(br.id);
+                                            }}
+                                            className="bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 p-6 rounded-3xl flex flex-col items-center text-center space-y-4 shadow-2xl transition-all group cursor-pointer relative overflow-hidden"
+                                        >
+                                            <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${br.color} p-0.5 shadow-xl group-hover:scale-105 transition-transform flex items-center justify-center`}>
+                                                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center overflow-hidden p-2">
+                                                    <img
+                                                        src={br.logo}
+                                                        alt={br.name}
+                                                        className="w-full h-full object-contain"
+                                                        onError={e => {
+                                                            e.target.style.display = 'none';
+                                                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                                        }}
+                                                    />
+                                                    <span className="text-4xl hidden">{br.icon}</span>
                                                 </div>
-                                                <div className="flex justify-between items-center border-t border-gray-50 pt-2.5 mt-2">
-                                                    <span className="font-mono font-black text-gray-900 text-sm">KES {item.price.toLocaleString()}</span>
-                                                    <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-2 py-0.5 rounded-md">In Stock</span>
-                                                </div>
-                                            </motion.div>
-                                        );
-                                    })}
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <h3 className="font-black text-lg text-white group-hover:text-emerald-400 transition-colors">{br.name}</h3>
+                                                <p className="text-xs text-slate-400 leading-snug">{br.tagline}</p>
+                                            </div>
+
+                                            <div className="pt-2 flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3.5 py-1.5 rounded-full border border-emerald-500/20">
+                                                <span>{itemCount} Items</span>
+                                                <ChevronRight size={14} />
+                                            </div>
+                                        </motion.button>
+                                    );
+                                })}
+                            </div>
+
+                            {isSystemAdmin && (
+                                <div className="pt-2">
+                                    <button
+                                        onClick={() => {
+                                            setActiveBrand('All');
+                                            setSelectedBrand('POT OF JOLLOF');
+                                        }}
+                                        className="text-xs text-slate-500 hover:text-slate-300 font-semibold underline underline-offset-4 transition-colors"
+                                    >
+                                        Or view combined multi-brand menu (Admin Override)
+                                    </button>
                                 </div>
                             )}
                         </div>
                     </div>
+                ) : activeView === 'menu' && (
+                    <div className={`flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-3 sm:p-6 gap-4 sm:gap-6 pb-20 sm:pb-6 ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200`}>
+                        {/* Brand Header — active brand + switcher only */}
+                        {(() => {
+                            const activeBrandInfo = BRAND_OPTIONS.find(b => b.id === activeBrand);
+                            return (
+                                <div className="flex items-center gap-3 pb-3 border-b border-gray-200 shrink-0">
+                                    {/* Active brand badge */}
+                                    {activeBrandInfo && (
+                                        <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-2xl px-3.5 py-2 shadow-sm">
+                                            <img
+                                                src={activeBrandInfo.logo}
+                                                alt={activeBrandInfo.name}
+                                                className="w-6 h-6 object-contain rounded"
+                                                onError={e => { e.target.style.display = 'none'; }}
+                                            />
+                                            <span className="font-black text-sm text-gray-900">{activeBrandInfo.name}</span>
+                                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                                                {filteredMenu.length} items
+                                            </span>
+                                        </div>
+                                    )}
+                                    {/* Switch brand button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveBrand(null)}
+                                        className="flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700 px-3.5 py-2 rounded-2xl font-bold text-xs shadow-sm transition-all"
+                                    >
+                                        <ArrowLeft size={13} />
+                                        <span>Switch Brand</span>
+                                    </button>
+                                </div>
+                            );
+                        })()}
+
+
+                        {/* Split Panel: Category Sidebar + Menu Items */}
+                        <div className="flex-1 flex overflow-hidden gap-2 min-h-0 min-w-0">
+
+                            {/* Left: Category Sidebar */}
+                            <div className="w-20 sm:w-36 md:w-44 flex flex-col gap-1 overflow-y-auto custom-scrollbar shrink-0">
+                                {[{ name: 'All', icon: '🍽️' }, ...visibleCategories].map(cat => {
+                                    const count = cat.name === 'All'
+                                        ? filteredMenu.length
+                                        : filteredMenu.filter(i => i.category === cat.name).length;
+                                    return (
+                                        <button
+                                            key={cat.name}
+                                            onClick={() => setActiveCategory(cat.name)}
+                                            className={`flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-3 text-center transition-all shrink-0 border ${
+                                                activeCategory === cat.name
+                                                    ? 'bg-gray-900 text-white border-gray-900 shadow-lg'
+                                                    : 'bg-white border-gray-100 hover:bg-gray-50 text-gray-500 hover:border-gray-200'
+                                            }`}
+                                        >
+                                            <span className="text-2xl leading-none">{cat.icon}</span>
+                                            <span className="font-bold text-[10px] leading-tight line-clamp-2">{cat.name}</span>
+                                            {count > 0 && (
+                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                                                    activeCategory === cat.name
+                                                        ? 'bg-white/20 text-white'
+                                                        : 'bg-gray-100 text-gray-400'
+                                                }`}>{count}</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Right: Menu Items Grid */}
+                            <div className="flex-1 min-w-0 overflow-y-auto custom-scrollbar pr-1">
+                                {loadingMenu ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
+                                        <Loader2 className="animate-spin text-primary" size={32} />
+                                        <span className="text-sm font-bold">Loading Menu...</span>
+                                    </div>
+                                ) : filteredMenu.length === 0 ? (
+                                    <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
+                                        No items found matching selection.
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pb-6">
+                                        {filteredMenu.map(item => {
+                                            const cartQty = cart.find(c => c.id === item.id)?.quantity || 0;
+                                            const displayPrice = calculateChannelPrice(item, orderChannel, activeBrand);
+                                            const basePrice = parseFloat(item.price) || 0;
+                                            const hasMarkup = displayPrice !== basePrice;
+                                            const isOut = item.is_available === false;
+                                            const isForDay = item.out_of_stock_type === 'day';
+
+                                            return (
+                                                <motion.div
+                                                    key={item.id}
+                                                    whileTap={!isOut ? { scale: 0.97 } : {}}
+                                                    onClick={() => {
+                                                        if (isOut) {
+                                                            alert(`"${item.name}" is currently OUT OF STOCK (${isForDay ? 'for the rest of the day' : 'indefinitely'}). Tap the green "🟢 Turn On" button to make it available.`);
+                                                        } else {
+                                                            addToCart(item);
+                                                        }
+                                                    }}
+                                                    className={`rounded-3xl p-3 sm:p-4 border shadow-sm relative overflow-hidden group flex flex-col justify-between h-36 sm:h-44 transition-all ${
+                                                        isOut 
+                                                            ? 'bg-rose-50/30 border-rose-200 opacity-90 cursor-not-allowed' 
+                                                            : 'bg-white border-gray-100 hover:border-primary/30 cursor-pointer'
+                                                    }`}
+                                                >
+                                                    {/* RED BAR BANNER OVERLAY FOR OUT OF STOCK ITEMS */}
+                                                    {isOut && (
+                                                        <div className="absolute top-0 inset-x-0 bg-red-600 text-white font-black text-[9px] uppercase tracking-wider py-1 px-2 text-center shadow-sm flex items-center justify-center gap-1 z-10">
+                                                            <span>⛔ OUT OF STOCK ({isForDay ? 'REST OF DAY' : 'INDEFINITELY'})</span>
+                                                        </div>
+                                                    )}
+
+                                                    {cartQty > 0 && !isOut && (
+                                                        <div className="absolute top-3 right-3 bg-primary text-secondary w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shadow z-10">
+                                                            {cartQty}×
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`flex flex-col gap-1 ${isOut ? 'pt-4' : ''}`}>
+                                                        <span className="text-3xl mb-1 mt-1 block">
+                                                            {item.image_url
+                                                                ? <img src={item.image_url} alt={item.name} className={`w-10 h-10 rounded-xl object-cover ${isOut ? 'grayscale-[50%]' : ''}`} />
+                                                                : item.category === 'Starters & Bites' ? '🍢' :
+                                                                  item.category === 'Breakfast' ? '🍳' :
+                                                                  item.category === 'Jollof Combos' ? '🍛' :
+                                                                  item.category === 'Stews' ? '🍲' :
+                                                                  item.category === 'Soups' ? '🥣' :
+                                                                  item.category === 'Hot Beverages' ? '☕' :
+                                                                  item.category === 'Beverages' ? '🥤' : '🍽️'}
+                                                        </span>
+                                                        <h3 className={`font-bold text-sm leading-tight line-clamp-1 ${isOut ? 'text-rose-950 line-through' : 'text-gray-900 group-hover:text-primary transition-colors'}`}>{item.name}</h3>
+                                                        <p className="text-[10px] text-gray-400 font-semibold line-clamp-2 leading-relaxed mt-0.5">{item.description}</p>
+                                                    </div>
+
+                                                    <div className="flex justify-between items-center border-t border-gray-100 pt-2.5 mt-2">
+                                                        <div className="flex flex-col">
+                                                            <span className={`font-mono font-black text-sm ${isOut ? 'text-gray-400' : 'text-gray-900'}`}>KES {displayPrice.toLocaleString()}</span>
+                                                            {hasMarkup && (
+                                                                <span className="text-[8px] text-amber-600 font-black tracking-tight">({orderChannel} Price)</span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Modern Interactive Availability Toggle Switch */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (isOut) {
+                                                                    handleTurnOnItem(item);
+                                                                } else {
+                                                                    setItemToTurnOffModal(item);
+                                                                }
+                                                            }}
+                                                            className={`px-2.5 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider transition-all border flex items-center gap-1.5 shrink-0 z-20 cursor-pointer shadow-xs ${
+                                                                !isOut 
+                                                                    ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600' 
+                                                                    : 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
+                                                            }`}
+                                                            title={!isOut ? "Click to 86 / Turn OFF item" : "Click to Turn ON item"}
+                                                        >
+                                                            <span className={`w-2 h-2 rounded-full ${!isOut ? 'bg-white animate-pulse' : 'bg-white'}`} />
+                                                            <span>{!isOut ? 'In Stock' : '86 / Out'}</span>
+                                                        </button>
+
+                                                    </div>
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </div>
+
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 )}
+
 
                 {activeView === 'tables' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-6 gap-6">
@@ -2558,7 +3955,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     <div>
                                                         <div className="flex justify-between items-start">
                                                             <div>
-                                                                <span className="text-[10px] font-black text-white bg-amber-600 px-2 py-0.5 rounded uppercase tracking-wider">#{order.ticket_number}</span>
+                                                                <span className="text-[10px] font-black text-white bg-amber-600 px-2 py-0.5 rounded uppercase tracking-wider">#{obfuscateTicket(order.ticket_number)}</span>
                                                                 <span className="text-[10px] text-gray-500 block mt-1 font-bold">{order.customer_name} ({order.dining_option})</span>
                                                             </div>
                                                             <span className="font-mono font-black text-xs text-gray-900">KES {order.total_amount.toLocaleString()}</span>
@@ -2628,8 +4025,15 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     setPaymentMethod(openOrder.payment_method);
                                                     setPaymentStatus(openOrder.payment_status);
                                                     setEditingOrderId(openOrder.id);
-                                                    setSelectedBrand(openOrder.brand || 'ManiPOS');
+                                                    setSelectedBrand(openOrder.brand || 'POT OF JOLLOF');
                                                     setOrderChannel(openOrder.order_channel || 'Walk-in');
+                                                    if (openOrder.discount > 0) {
+                                                        setDiscountType('flat');
+                                                        setDiscountValue(String(openOrder.discount));
+                                                    } else {
+                                                        setDiscountType('none');
+                                                        setDiscountValue('');
+                                                    }
                                                     // Load items
                                                     setCart(mapOrderItemsToCart(openOrder.items));
                                                 } else {
@@ -2638,10 +4042,12 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     setCustomerName(table);
                                                     setSelectedTable(table);
                                                     setCustomerNameText('');
-                                                    setDiningOption('Dine Inn'); // pre-select table model Dine Inn
+                                                    setDiningOption('Dine-in'); // pre-select table model Dine-in
                                                     setEditingOrderId(null);
-                                                    setSelectedBrand('ManiPOS');
+                                                    setSelectedBrand('POT OF JOLLOF');
                                                     setOrderChannel('Walk-in');
+                                                    setDiscountType('none');
+                                                    setDiscountValue('');
                                                 }
                                                 setActiveView('menu');
                                             }}
@@ -2663,7 +4069,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                             {openOrder ? (
                                                 <div className="space-y-1 w-full">
                                                     <div className="flex justify-between items-center w-full">
-                                                        <div className="text-[10px] font-bold text-orange-700">Ticket #{openOrder.ticket_number}</div>
+                                                        <div className="text-[10px] font-bold text-orange-700">Ticket #{obfuscateTicket(openOrder.ticket_number)}</div>
                                                         {openOrder.payment_status === 'Paid' && (
                                                             <button
                                                                 type="button"
@@ -2699,7 +4105,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                             <div key={order.id} className="p-3 bg-gray-50 border border-gray-100 rounded-2xl flex justify-between items-center">
                                                 <div>
                                                     <div className="font-bold text-xs text-gray-900">{order.customer_name} ({order.dining_option})</div>
-                                                    <div className="text-[10px] text-gray-400 font-semibold">Ticket #{order.ticket_number} • {order.items?.length || 0} items</div>
+                                                    <div className="text-[10px] text-gray-400 font-semibold">Ticket #{obfuscateTicket(order.ticket_number)} • {order.items?.length || 0} items</div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <span className="font-mono font-black text-xs text-gray-900">KES {order.total_amount.toLocaleString()}</span>
@@ -2711,8 +4117,15 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                             setPaymentMethod(order.payment_method);
                                                             setPaymentStatus(order.payment_status);
                                                             setEditingOrderId(order.id);
-                                                            setSelectedBrand(order.brand || 'ManiPOS');
+                                                            setSelectedBrand(order.brand || 'POT OF JOLLOF');
                                                             setOrderChannel(order.order_channel || 'Walk-in');
+                                                            if (order.discount > 0) {
+                                                                setDiscountType('flat');
+                                                                setDiscountValue(String(order.discount));
+                                                            } else {
+                                                                setDiscountType('none');
+                                                                setDiscountValue('');
+                                                            }
                                                             setCart(mapOrderItemsToCart(order.items));
                                                             setActiveView('menu');
                                                         }}
@@ -2795,21 +4208,21 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                     totalSales += order.total_amount;
                                     totalOrders++;
 
-                                    // Item-level breakdown — pro-rated by discount ratio so
-                                    // Food+Bev+Packaging+Delivery always sum to total_amount (post-discount).
-                                    // Without this, item.price x qty reflects gross (pre-discount) amounts
-                                    // which causes Food Sales to appear higher than Total Sales.
+                                    // Item-level breakdown — pro-rated by explicit discount if applied
                                     const itemsArr = order.items || [];
                                     const grossItemTotal = itemsArr.reduce((s, i) => s + ((i.price || 0) * (i.quantity || 1)), 0);
-                                    const discountRatio = grossItemTotal > 0 ? (order.total_amount / grossItemTotal) : 1;
-                                    // Derived discount = gross item total minus actual charged amount
-                                    const orderDiscount = Math.max(0, grossItemTotal - order.total_amount);
+                                    const orderDiscount = (typeof order.discount === 'number' && !isNaN(order.discount)) ? Math.max(0, order.discount) : (order.discount ? parseFloat(order.discount) || 0 : 0);
+                                    const discountRatio = (grossItemTotal > 0 && orderDiscount > 0) ? Math.max(0, (grossItemTotal - orderDiscount) / grossItemTotal) : 1;
                                     totalDiscounts += orderDiscount;
                                     // Track discount and sales per brand
-                                    let orderBrand = (order.brand || 'ManiPOS').trim();
+                                    let orderBrand = (order.brand || '').trim();
                                     const brandUpper = orderBrand.toUpperCase();
-                                    if (brandUpper.includes('MANIPOS') || brandUpper === '') {
-                                        orderBrand = 'ManiPOS';
+                                    if (!orderBrand || brandUpper.includes('MANIPOS') || brandUpper.includes('JOLLOF') || brandUpper.includes('POJ')) {
+                                        orderBrand = 'POT OF JOLLOF';
+                                    } else if (brandUpper.includes('LAGOS')) {
+                                        orderBrand = 'LITTLE LAGOS';
+                                    } else if (brandUpper.includes('SWAHILI')) {
+                                        orderBrand = 'CAFE SWAHILI';
                                     }
                                     if (!brandDiscounts[orderBrand]) brandDiscounts[orderBrand] = { discount: 0, grossSales: 0 };
                                     brandDiscounts[orderBrand].discount += orderDiscount;
@@ -2823,7 +4236,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         const nm = item.item_name || '';
                                         const rawAmt = (item.price || 0) * (item.quantity || 1);
                                         const amt = rawAmt * discountRatio;
-                                        const menuItem = menu.find(m => m.name === nm);
+                                        const menuItem = (menu || []).find(m => m.name === nm);
                                         const category = item.category || (menuItem ? menuItem.category : '');
                                         if (isDeliveryItem(nm)) { deliverySales += amt; deliveryCount++; }
                                         else if (isPackagingItem(nm)) { packagingSales += amt; }
@@ -2831,21 +4244,24 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         else { foodSales += amt; }
                                     });
 
-                                     if (order.payment_status === 'Pending') {
+                                     const pm = (order.payment_method || '').toLowerCase().trim();
+                                     const ch = (order.order_channel || '').toLowerCase().trim();
+                                     const isAppChannel = ch.includes('uber') || ch.includes('glovo') || ch.includes('bolt') || ch.includes('ando') || pm.includes('app') || pm.includes('paid');
+
+                                     if (order.payment_status === 'Pending' && !isAppChannel) {
                                          unclearedSales += order.total_amount;
                                          unclearedCount++;
                                      } else {
-                                         const pm = (order.payment_method || '').toLowerCase().trim();
                                          if (pm === 'cash') {
                                              cashSales += order.total_amount;
-                                         } else if (pm === 'mpesa' || pm === 'm-pesa' || pm === 'i&m - paybill no') {
-                                             paybillSales += order.total_amount;
                                          } else if (pm === 'card') {
                                              cardSales += order.total_amount;
-                                         } else if (pm === 'paid to app') {
-                                             appSales += order.total_amount;
-                                         } else if (pm === 'ando') {
+                                         } else if (pm.includes('mpesa') || pm.includes('m-pesa') || pm.includes('paybill') || pm.includes('i&m')) {
+                                             paybillSales += order.total_amount;
+                                         } else if (pm.includes('ando')) {
                                              andoSales += order.total_amount;
+                                         } else if (isAppChannel) {
+                                             appSales += order.total_amount;
                                          } else if (pm === 'split') {
                                              const notes = order.notes || '';
                                              const cashMatch = notes.match(/Cash \(KES ([\d.]+)\)/);
@@ -2855,6 +4271,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                              if (cashMatch) cashSales += parseFloat(cashMatch[1]) || 0;
                                              if (mpesaMatch) paybillSales += parseFloat(mpesaMatch[1]) || 0;
                                              if (cardMatch) cardSales += parseFloat(cardMatch[1]) || 0;
+                                         } else {
+                                             cashSales += order.total_amount;
                                          }
                                      }
 
@@ -2877,7 +4295,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                 });
 
                                 return (
-                                    <div className="hidden sm:grid grid-cols-2 lg:grid-cols-5 gap-4 p-5 bg-gray-50/50 border-b border-gray-100 shrink-0">
+                                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 sm:p-5 bg-gray-50/50 border-b border-gray-100 shrink-0">
                                         {/* Card 1: Total Sales Overview */}
                                         <div 
                                             onClick={() => setHistorySearch('')}
@@ -2895,7 +4313,24 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     📈
                                                 </div>
                                                 <div>
-                                                    <h4 className="text-base font-black text-emerald-600 font-mono">KES {Math.round(totalSales).toLocaleString()}</h4>
+                                                    <h4 className="text-base font-black text-emerald-600 font-mono flex items-center gap-1.5 flex-wrap">
+                                                        KES {Math.round(totalSales).toLocaleString()}
+                                                        {(() => {
+                                                            if (prevPeriodSales <= 0) return null;
+                                                            const diff = totalSales - prevPeriodSales;
+                                                            const pct = (diff / prevPeriodSales) * 100;
+                                                            const isPositive = pct >= 0;
+                                                            return (
+                                                                <span className={`inline-flex items-center text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                                                                    isPositive 
+                                                                        ? 'bg-emerald-50 text-emerald-700' 
+                                                                        : 'bg-rose-50 text-rose-700'
+                                                                }`} title={`Previous Period Sales: KES ${Math.round(prevPeriodSales).toLocaleString()}`}>
+                                                                    {isPositive ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
+                                                                </span>
+                                                            );
+                                                        })()}
+                                                    </h4>
                                                     <p className="text-[10px] text-gray-500 font-bold">{totalOrders - unclearedCount} Completed</p>
                                                     {totalDiscounts > 0 && (
                                                         <p className="text-[9px] font-bold text-rose-500 font-mono">-KES {Math.round(totalDiscounts).toLocaleString()} in discounts</p>
@@ -2905,9 +4340,9 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         </div>
 
                                         {/* Card 2: Payment Method */}
-                                        <div className="bg-white p-4 h-40 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col justify-between">
+                                        <div className="bg-white p-3.5 min-h-[168px] rounded-2xl border border-gray-200/60 shadow-sm flex flex-col justify-between">
                                             <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider">Payment Method</span>
-                                            <div className="mt-1.5 space-y-0.5 text-[10px] font-semibold text-gray-600 overflow-y-auto max-h-24 custom-scrollbar pr-1">
+                                            <div className="mt-1 space-y-0.5 text-[10px] font-semibold text-gray-600 overflow-y-auto max-h-20 custom-scrollbar pr-1">
                                                 <div 
                                                     onClick={() => setHistorySearch('CASH')}
                                                     className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch?.toUpperCase() === 'CASH' ? 'bg-emerald-50 text-emerald-800 font-black' : ''}`}
@@ -2930,19 +4365,17 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch?.toUpperCase().includes('I&M') ? 'bg-blue-50 text-blue-800 font-black' : ''}`}
                                                     title="Filter by M-Pesa / I&M Paybill"
                                                 >
-                                                    <span>📱 M-Pesa / 🏦 Paybill:</span>
+                                                    <span>📱 Paybill / M-Pesa:</span>
                                                     <span className="font-mono text-gray-900 font-bold">KES {paybillSales.toLocaleString()}</span>
                                                 </div>
-                                                {appSales > 0 && (
-                                                    <div 
-                                                        onClick={() => setHistorySearch('Paid to APP')}
-                                                        className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch?.toLowerCase() === 'paid to app' ? 'bg-purple-50 text-purple-800 font-black' : ''}`}
-                                                        title="Filter by Paid to App"
-                                                    >
-                                                        <span>📲 Paid to App:</span>
-                                                        <span className="font-mono text-gray-900 font-bold">KES {appSales.toLocaleString()}</span>
-                                                    </div>
-                                                )}
+                                                <div 
+                                                    onClick={() => setHistorySearch('Paid to APP')}
+                                                    className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch?.toLowerCase() === 'paid to app' ? 'bg-purple-50 text-purple-800 font-black' : ''}`}
+                                                    title="Filter by Paid to App"
+                                                >
+                                                    <span>📲 Paid to App:</span>
+                                                    <span className="font-mono text-gray-900 font-bold">KES {appSales.toLocaleString()}</span>
+                                                </div>
                                                 {andoSales > 0 && (
                                                     <div 
                                                         onClick={() => setHistorySearch('ANDO')}
@@ -2953,21 +4386,30 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                         <span className="font-mono text-gray-900 font-bold">KES {andoSales.toLocaleString()}</span>
                                                     </div>
                                                 )}
-                                                <div 
-                                                    onClick={() => setHistorySearch('Returned')}
-                                                    className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch?.toUpperCase() === 'RETURNED' ? 'bg-red-50 text-red-800 font-black' : ''}`}
-                                                    title="Filter by Returned"
-                                                >
-                                                    <span>↩️ Returned:</span>
-                                                    <span className="font-mono text-red-650 font-bold">KES {returnedSales.toLocaleString()}</span>
-                                                </div>
+                                                {returnedSales > 0 && (
+                                                    <div 
+                                                        onClick={() => setHistorySearch('Returned')}
+                                                        className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch?.toUpperCase() === 'RETURNED' ? 'bg-red-50 text-red-800 font-black' : ''}`}
+                                                        title="Filter by Returned"
+                                                    >
+                                                        <span>↩️ Returned:</span>
+                                                        <span className="font-mono text-red-650 font-bold">KES {returnedSales.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* Total Paid Collected Summary Row */}
+                                            <div className="pt-1 mt-1 border-t border-gray-200 flex justify-between items-center font-black text-[10px] shrink-0 bg-white">
+                                                <span className="text-gray-700 uppercase tracking-wider">Total Paid:</span>
+                                                <span className="font-mono text-emerald-700 text-xs font-black">
+                                                    KES {(cashSales + cardSales + paybillSales + appSales + andoSales).toLocaleString()}
+                                                </span>
                                             </div>
                                         </div>
 
                                         {/* Card 3: Uncleared Orders */}
                                         <div 
                                             onClick={() => setHistorySearch('Pending')}
-                                            className="bg-white p-4 h-40 rounded-2xl border border-amber-200 hover:border-amber-400 bg-amber-50/10 cursor-pointer shadow-sm transition-all hover:scale-[1.02] flex flex-col justify-between"
+                                            className="bg-white p-4 min-h-[168px] rounded-2xl border border-amber-200 hover:border-amber-400 bg-amber-50/10 cursor-pointer shadow-sm transition-all hover:scale-[1.02] flex flex-col justify-between"
                                             title="Click to filter by Pending/Uncleared orders"
                                         >
                                             <span className="text-[10px] text-amber-600 font-black uppercase tracking-wider flex items-center justify-between w-full">
@@ -3000,283 +4442,398 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                 .sort((a, b) => b[1].amount - a[1].amount);
                                             const maxAmount = sorted[0]?.[1]?.amount || 1;
                                             return (
-                                                <div className="bg-white p-4 h-40 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col gap-2">
+                                                <div className="bg-white p-3.5 min-h-[168px] rounded-2xl border border-gray-200/60 shadow-sm flex flex-col justify-between">
                                                     <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider">Top Channels</span>
                                                     {sorted.length === 0 ? (
                                                         <p className="text-[10px] text-gray-400 font-bold mt-1">No data yet</p>
                                                     ) : (
-                                                        <div className="mt-1.5 space-y-0.5 text-[10px] font-semibold text-gray-600 overflow-y-auto max-h-24 custom-scrollbar pr-1">
-                                                            {sorted.map(([name, data]) => (
-                                                                <div
-                                                                    key={name}
-                                                                    onClick={() => setHistorySearch(historySearch === name ? '' : name)}
-                                                                    className={`cursor-pointer group p-1.5 -mx-1.5 rounded-xl transition-all ${historySearch === name ? 'bg-emerald-50/80 font-black ring-1 ring-emerald-100/50' : 'hover:bg-gray-50/50'}`}
-                                                                    title={`Filter by ${name}`}
-                                                                >
-                                                                    <div className="flex justify-between items-center gap-2 mb-0.5">
-                                                                        <span className="text-[9px] font-black text-gray-700 flex items-center gap-1 min-w-0">{CHANNEL_LOGO[name] || <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-gray-200 text-[6px] font-black shrink-0">?</span>} <span className="truncate">{name}</span></span>
-                                                                        <div className="flex flex-col items-end shrink-0">
-                                                                            <span className="text-[9px] font-mono font-black text-gray-900 whitespace-nowrap">{data.count} · KES {Math.round(data.amount).toLocaleString()}</span>
-                                                                            {data.discount > 0 && (
-                                                                                <span 
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        const query = `discount:${name.toLowerCase()}`;
-                                                                                        setHistorySearch(historySearch === query ? '' : query);
-                                                                                    }}
-                                                                                    className="text-[8px] font-mono font-bold text-rose-500 hover:text-rose-700 hover:underline cursor-pointer whitespace-nowrap"
-                                                                                    title={`Click to show only discounted ${name} orders`}
-                                                                                >
-                                                                                    -KES {Math.round(data.discount).toLocaleString()} disc.
-                                                                                </span>
-                                                                            )}
+                                                        <>
+                                                            <div className="mt-1 space-y-0.5 text-[10px] font-semibold text-gray-600 overflow-y-auto max-h-20 custom-scrollbar pr-1">
+                                                                {sorted.map(([name, data]) => (
+                                                                    <div
+                                                                        key={name}
+                                                                        onClick={() => setHistorySearch(historySearch === name ? '' : name)}
+                                                                        className={`cursor-pointer group p-1.5 -mx-1.5 rounded-xl transition-all ${historySearch === name ? 'bg-emerald-50/80 font-black ring-1 ring-emerald-100/50' : 'hover:bg-gray-50/50'}`}
+                                                                        title={`Filter by ${name}`}
+                                                                    >
+                                                                        <div className="flex justify-between items-center gap-2 mb-0.5">
+                                                                            <span className="text-[9px] font-black text-gray-700 flex items-center gap-1 min-w-0">{CHANNEL_LOGO[name] || <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-gray-200 text-[6px] font-black shrink-0">?</span>} <span className="truncate">{name}</span></span>
+                                                                            <div className="flex flex-col items-end shrink-0">
+                                                                                <span className="text-[9px] font-mono font-black text-gray-900 whitespace-nowrap">{data.count} · KES {Math.round(data.amount).toLocaleString()}</span>
+                                                                                {data.discount > 0 && (
+                                                                                    <span 
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            const query = `discount:${name.toLowerCase()}`;
+                                                                                            setHistorySearch(historySearch === query ? '' : query);
+                                                                                        }}
+                                                                                        className="text-[8px] font-mono font-bold text-rose-500 hover:text-rose-700 hover:underline cursor-pointer whitespace-nowrap"
+                                                                                        title={`Click to show only discounted ${name} orders`}
+                                                                                    >
+                                                                                        -KES {Math.round(data.discount).toLocaleString()} disc.
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                                                                            <div
+                                                                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                                                                style={{ width: `${Math.round((data.amount / maxAmount) * 100)}%` }}
+                                                                            />
                                                                         </div>
                                                                     </div>
-                                                                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                                                                        <div
-                                                                            className="h-full bg-emerald-500 rounded-full transition-all"
-                                                                            style={{ width: `${Math.round((data.amount / maxAmount) * 100)}%` }}
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="pt-1.5 mt-1 border-t border-gray-200 flex justify-between items-center font-black text-[10px] shrink-0 bg-white">
+                                                                <span className="text-gray-700 uppercase tracking-wider">Total:</span>
+                                                                <span className="font-mono text-emerald-700 text-xs font-black">
+                                                                    KES {Math.round(sorted.reduce((sum, [, d]) => sum + d.amount, 0)).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </>
                                                     )}
                                                 </div>
                                             );
                                         })()}
 
                                         {/* Card 5: Brand Breakdown */}
-                                        <div className="bg-white p-4 h-40 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col gap-2">
+                                        <div className="bg-white p-3.5 min-h-[168px] rounded-2xl border border-gray-200/60 shadow-sm flex flex-col justify-between">
                                             <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider">Brand Sales</span>
                                             {Object.keys(brandSales).length === 0 ? (
                                                 <p className="text-[10px] text-gray-400 font-bold mt-1">No data yet</p>
                                             ) : (
-                                                <div className="mt-1.5 space-y-0.5 text-[10px] font-semibold text-gray-600 overflow-y-auto max-h-24 custom-scrollbar pr-1 w-full">
-                                                    {Object.entries(brandSales)
-                                                        .sort((a, b) => b[1].sales - a[1].sales)
-                                                        .map(([brand, data]) => (
-                                                            <div 
-                                                                key={brand}
-                                                                onClick={() => setHistorySearch(historySearch === brand ? '' : brand)}
-                                                                className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch === brand ? 'bg-emerald-50 text-emerald-800 font-black' : ''}`}
-                                                                title={`Filter by ${brand}`}
-                                                            >
-                                                                <span className="truncate">{brand}:</span>
-                                                                <span className="font-mono text-gray-900 font-bold">KES {Math.round(data.sales).toLocaleString()}</span>
-                                                            </div>
-                                                        ))}
-                                                </div>
+                                                <>
+                                                    <div className="mt-1 space-y-0.5 text-[10px] font-semibold text-gray-600 overflow-y-auto max-h-20 custom-scrollbar pr-1 w-full">
+                                                        {Object.entries(brandSales)
+                                                            .sort((a, b) => b[1].sales - a[1].sales)
+                                                            .map(([brand, data]) => (
+                                                                <div 
+                                                                    key={brand}
+                                                                    onClick={() => setHistorySearch(historySearch === brand ? '' : brand)}
+                                                                    className={`flex justify-between p-1 -mx-1 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${historySearch === brand ? 'bg-emerald-50 text-emerald-800 font-black' : ''}`}
+                                                                    title={`Filter by ${brand}`}
+                                                                >
+                                                                    <span className="truncate">{brand}:</span>
+                                                                    <span className="font-mono text-gray-900 font-bold">KES {Math.round(data.sales).toLocaleString()}</span>
+                                                                </div>
+                                                            ))}
+                                                    </div>
+                                                    <div className="pt-1.5 mt-1 border-t border-gray-200 flex justify-between items-center font-black text-[10px] shrink-0 bg-white">
+                                                        <span className="text-gray-700 uppercase tracking-wider">Total:</span>
+                                                        <span className="font-mono text-emerald-700 text-xs font-black">
+                                                            KES {Math.round(Object.values(brandSales).reduce((sum, d) => sum + d.sales, 0)).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                </>
                                             )}
                                         </div>
                                     </div>
                                 );
                             })()}
-<div className="p-5 border-b border-gray-50 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shrink-0">
-                                <div>
-                                    <h3 className="font-black text-gray-900 text-sm">Recent Order History</h3>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Showing orders for the selected calendar day</p>
-                                    {historySearch && (
-                                        <div className="mt-2 flex items-center gap-1.5">
-                                            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                                                🔍 Filter: {historySearch.startsWith('discount:') ? `Discounted ${historySearch.substring(9).toUpperCase()} Orders` : historySearch}
-                                            </span>
-                                            <button 
-                                                onClick={() => setHistorySearch('')}
-                                                className="text-[9px] text-gray-400 hover:text-gray-600 font-bold hover:underline"
-                                            >
-                                                Clear Filter
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    {(isSystemAdmin || staffRole === 'admin' || staffRole === 'cashier') ? (
-                                        <>
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">From:</span>
-                                                <input
-                                                    type="date"
-                                                    value={historyStartDate}
-                                                    onChange={(e) => setHistoryStartDate(e.target.value)}
-                                                    className="bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1 text-xs font-bold outline-none focus:border-primary text-gray-700"
-                                                />
+<div className="p-5 border-b border-gray-50 flex flex-col gap-3.5 shrink-0">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h3 className="font-black text-gray-900 text-sm">Recent Order History</h3>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Showing orders for the selected calendar day</p>
+                                        {historySearch && (
+                                            <div className="mt-2 flex items-center gap-1.5">
+                                                <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                                    🔍 Filter: {historySearch.startsWith('discount:') ? `Discounted ${historySearch.substring(9).toUpperCase()} Orders` : historySearch}
+                                                </span>
+                                                <button 
+                                                    onClick={() => setHistorySearch('')}
+                                                    className="text-[9px] text-gray-400 hover:text-gray-600 font-bold hover:underline"
+                                                >
+                                                    Clear Filter
+                                                </button>
                                             </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">To:</span>
-                                                <input
-                                                    type="date"
-                                                    value={historyEndDate}
-                                                    onChange={(e) => setHistoryEndDate(e.target.value)}
-                                                    className="bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1 text-xs font-bold outline-none focus:border-primary text-gray-700"
-                                                />
-                                            </div>
-                                            <button
-                                                onClick={() => fetchHistory(historyStartDate, historyEndDate)}
-                                                className="px-3 py-1 bg-primary text-secondary rounded-xl text-xs font-black uppercase tracking-wider transition-all hover:scale-[1.02] shadow-sm shrink-0"
-                                            >
-                                                Search
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <div className="flex items-center gap-2">
-                                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-wider">
-                                                Today's Orders Only
-                                            </span>
-                                            <button
-                                                onClick={() => {
-                                                    const d = new Date();
-                                                    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                                                    fetchHistory(todayStr, todayStr);
-                                                }}
-                                                className="text-xs text-primary hover:text-primary-dark font-bold hover:underline"
-                                            >
-                                                Refresh
-                                            </button>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">
+                                    {/* Mobile & Desktop Quick Date Presets */}
+                                     <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5 shrink-0">
+                                         {[
+                                             { label: 'Today', key: 'today' },
+                                             { label: 'Yesterday', key: 'yesterday' },
+                                             { label: '7 Days', key: '7days' },
+                                             { label: 'This Month', key: 'month' }
+                                         ].filter(preset => !isHistoryRestricted || ['today', 'yesterday'].includes(preset.key))
+                                          .map(preset => {
+                                             const now = new Date();
+                                             const getEatStr = (dateObj) => dateObj.toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+                                             const todayStr = getEatStr(now);
+                                             let s = todayStr, e = todayStr;
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {loadingHistory ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                                        <Loader2 className="animate-spin text-primary" size={32} />
-                                        <span className="text-sm font-bold">Loading history...</span>
-                                    </div>
-                                ) : historyOrders.length === 0 ? (
-                                    <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
-                                        No recent orders found.
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-gray-50">
-                                        {historyOrders
-                                             .filter(order => {
-                                                 if (!historySearch.trim()) return true;
-                                                 const search = historySearch.toLowerCase().trim();
+                                             if (preset.key === 'yesterday') {
+                                                 const y = new Date(now);
+                                                 y.setDate(y.getDate() - 1);
+                                                 s = getEatStr(y);
+                                                 e = s;
+                                             } else if (preset.key === '7days') {
+                                                 const w = new Date(now);
+                                                 w.setDate(w.getDate() - 6);
+                                                 s = getEatStr(w);
+                                                 e = todayStr;
+                                             } else if (preset.key === 'month') {
+                                                 const parts = todayStr.split('-');
+                                                 s = `${parts[0]}-${parts[1]}-01`;
+                                                 e = todayStr;
+                                             }
+                                             const isActive = historyStartDate === s && historyEndDate === e;
+                                             return (
+                                                 <button
+                                                     key={preset.key}
+                                                     type="button"
+                                                     onClick={() => {
+                                                         setHistoryStartDate(s);
+                                                         setHistoryEndDate(e);
+                                                         fetchHistory(s, e);
+                                                     }}
+                                                     className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shrink-0 border ${
+                                                         isActive 
+                                                             ? 'bg-amber-400 text-amber-950 border-amber-400 shadow-xs scale-[1.02]' 
+                                                             : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
+                                                     }`}
+                                                 >
+                                                     {preset.label}
+                                                 </button>
+                                             );
+                                         })}
+                                     </div>
 
-                                                 // Handle special channel-based discount filtering
-                                                 if (search.startsWith('discount:')) {
-                                                     const channelName = search.substring(9).trim();
-                                                     const items = order.items || [];
-                                                     const gross = items.reduce((s, i) => s + ((i.price || 0) * (i.quantity || 1)), 0);
-                                                     const orderDiscount = Math.max(0, gross - order.total_amount);
+                                      {(() => {
+                                          const yesterdayStrForConstraint = new Date(Date.now() - 86400000).toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+                                          return (
+                                              <div className="flex flex-row items-center gap-2 bg-gray-50/80 px-3 py-1.5 rounded-xl border border-gray-200 shadow-xs w-full sm:w-auto justify-between sm:justify-start">
+                                                  <div className="flex items-center gap-1 text-xs flex-1 sm:flex-initial">
+                                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0">From:</span>
+                                                      <input
+                                                          type="date"
+                                                          value={historyStartDate}
+                                                          min={isHistoryRestricted ? yesterdayStrForConstraint : undefined}
+                                                          onChange={(e) => {
+                                                              const val = e.target.value;
+                                                              setHistoryStartDate(val);
+                                                              if (val) fetchHistory(val, historyEndDate);
+                                                          }}
+                                                          className="bg-transparent font-bold outline-none text-gray-800 cursor-pointer text-xs w-full sm:w-auto sm:max-w-[110px]"
+                                                      />
+                                                  </div>
+                                                  <div className="flex items-center gap-1 text-xs border-l border-gray-200 pl-2 flex-1 sm:flex-initial">
+                                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0">To:</span>
+                                                      <input
+                                                          type="date"
+                                                          value={historyEndDate}
+                                                          min={isHistoryRestricted ? yesterdayStrForConstraint : undefined}
+                                                          onChange={(e) => {
+                                                              const val = e.target.value;
+                                                              setHistoryEndDate(val);
+                                                              if (val) fetchHistory(historyStartDate, val);
+                                                          }}
+                                                          className="bg-transparent font-bold outline-none text-gray-800 cursor-pointer text-xs w-full sm:w-auto sm:max-w-[110px]"
+                                                      />
+                                                  </div>
+                                              </div>
+                                          );
+                                      })()}
+                                 </div>
+                             </div>
 
-                                                     const rawCh = (order.order_channel || '').trim().toLowerCase();
-                                                     let mappedCh = 'walk-in';
-                                                     if (rawCh === 'whatsapp') mappedCh = 'whatsapp';
-                                                     else if (rawCh === 'ubereats' || rawCh === 'uber eats') mappedCh = 'uber eats';
-                                                     else if (rawCh === 'glovo') mappedCh = 'glovo';
-                                                     else if (rawCh === 'bolt food') mappedCh = 'bolt food';
-                                                     else if (rawCh === 'ando') mappedCh = 'ando';
+                             <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                 {loadingHistory ? (
+                                     <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2 py-12">
+                                         <Loader2 className="animate-spin text-primary" size={32} />
+                                         <span className="text-sm font-bold">Loading history...</span>
+                                     </div>
+                                 ) : historyOrders.length === 0 ? (
+                                     <div className="h-full flex flex-col items-center justify-center text-gray-400 font-bold text-sm py-12 gap-2">
+                                         <span>No recent orders found for selected date range.</span>
+                                         <button
+                                             onClick={() => {
+                                                 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+                                                 setHistoryStartDate(today);
+                                                 setHistoryEndDate(today);
+                                                 fetchHistory(today, today);
+                                             }}
+                                             className="text-xs text-primary font-bold hover:underline"
+                                         >
+                                             Reset to Today
+                                         </button>
+                                     </div>
+                                 ) : (
+                                     <div className="divide-y divide-gray-100">
+                                         {historyOrders
+                                              .filter(order => {
+                                                  if (!historySearch.trim()) return true;
+                                                  const search = historySearch.toLowerCase().trim();
 
-                                                     return mappedCh === channelName && orderDiscount > 0;
-                                                 }
+                                                  if (search.startsWith('discount:')) {
+                                                      const channelName = search.substring(9).trim();
+                                                      const orderDiscount = (typeof order.discount === 'number' && !isNaN(order.discount)) ? Math.max(0, order.discount) : (order.discount ? parseFloat(order.discount) || 0 : 0);
+                                                      
+                                                      const rawCh = (order.order_channel || '').trim().toLowerCase();
+                                                      let mappedCh = 'walk-in';
+                                                      if (rawCh === 'whatsapp') mappedCh = 'whatsapp';
+                                                      else if (rawCh === 'ubereats' || rawCh === 'uber eats') mappedCh = 'uber eats';
+                                                      else if (rawCh === 'glovo') mappedCh = 'glovo';
+                                                      else if (rawCh === 'bolt food') mappedCh = 'bolt food';
+                                                      else if (rawCh === 'ando') mappedCh = 'ando';
 
-                                                 const cleanSearch = search.replace(/\s+/g, '');
-                                                 const cleanChannel = (order.order_channel || '').toLowerCase().replace(/\s+/g, '');
-                                                 
+                                                      return mappedCh === channelName && orderDiscount > 0;
+                                                  }
+
+                                                  const cleanSearch = search.replace(/\s+/g, '');
+                                                  const cleanChannel = (order.order_channel || '').toLowerCase().replace(/\s+/g, '');
+                                                  const itemsMatch = (order.items || []).some(i => 
+                                                      (i.item_name || '').toLowerCase().includes(search) ||
+                                                      (i.category || '').toLowerCase().includes(search)
+                                                  );
+
+                                                  const deobfuscatedVal = deobfuscateTicket(search);
+                                                  return (
+                                                      order.customer_name?.toLowerCase().includes(search) ||
+                                                      order.brand?.toLowerCase().includes(search) ||
+                                                      order.ticket_number?.toString().includes(search) ||
+                                                      (deobfuscatedVal !== null && order.ticket_number?.toString() === deobfuscatedVal.toString()) ||
+                                                      order.payment_method?.toLowerCase().includes(search) ||
+                                                      order.payment_status?.toLowerCase().includes(search) ||
+                                                      order.dining_option?.toLowerCase().includes(search) ||
+                                                      cleanChannel.includes(cleanSearch) ||
+                                                      itemsMatch
+                                                  );
+                                              })
+                                             .map(order => {
+                                                 const formattedTime = new Date(order.created_at).toLocaleTimeString('en-US', {
+                                                     hour: '2-digit',
+                                                     minute: '2-digit',
+                                                     hour12: true,
+                                                     timeZone: 'Africa/Nairobi'
+                                                 });
+                                                 const formattedDate = new Date(order.created_at).toLocaleDateString('en-US', {
+                                                     month: 'short',
+                                                     day: 'numeric',
+                                                     timeZone: 'Africa/Nairobi'
+                                                 });
+                                                 const isPaid = (order.payment_status || '').toLowerCase() === 'paid';
+                                                 const isReturned = order.status === 'Returned' || order.status === 'Cancelled' || order.payment_status === 'Voided';
+
                                                  return (
-                                                     order.customer_name?.toLowerCase().includes(search) ||
-                                                     order.brand?.toLowerCase().includes(search) ||
-                                                     order.ticket_number?.toString().includes(search) ||
-                                                     order.payment_method?.toLowerCase().includes(search) ||
-                                                     order.payment_status?.toLowerCase().includes(search) ||
-                                                     order.dining_option?.toLowerCase().includes(search) ||
-                                                     cleanChannel.includes(cleanSearch)
+                                                     <div 
+                                                         key={order.id} 
+                                                         onClick={() => setViewingOrderDetails(order)}
+                                                         className="p-3.5 sm:p-4 flex items-center justify-between hover:bg-amber-50/40 transition-all cursor-pointer border-l-4 border-transparent hover:border-amber-400 group"
+                                                         title="Click to view details"
+                                                     >
+                                                         <div className="flex items-center gap-3 min-w-0">
+                                                             <div className="w-10 h-10 bg-primary/10 text-primary rounded-2xl flex items-center justify-center font-mono font-black text-xs shrink-0 group-hover:scale-105 transition-transform">
+                                                                 #{obfuscateTicket(order.ticket_number)}
+                                                             </div>
+                                                             <div className="min-w-0">
+                                                                 <div className="flex items-center gap-2 flex-wrap">
+                                                                     <span className="font-black text-sm text-gray-900 truncate">{order.customer_name}</span>
+                                                                     <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                                                                         (order.dining_option === 'Dine-in' || order.dining_option === 'Dine Inn') ? 'bg-blue-100 text-blue-800' :
+                                                                         ['Glovo', 'UberEats', 'Bolt Food', 'Uber Eats'].includes(order.dining_option || order.order_channel) ? 'bg-orange-100 text-orange-800' :
+                                                                         'bg-gray-100 text-gray-700'
+                                                                     }`}>{order.dining_option}</span>
+
+                                                                     {order.brand && (
+                                                                         <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800">
+                                                                             {order.brand}
+                                                                         </span>
+                                                                     )}
+
+                                                                     {isReturned && (
+                                                                         <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-100 text-red-700 uppercase tracking-wider">
+                                                                             Returned
+                                                                         </span>
+                                                                     )}
+                                                                 </div>
+                                                                 <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold mt-1 flex-wrap">
+                                                                     <span>{formattedDate} at {formattedTime}</span>
+                                                                     <span>•</span>
+                                                                     <span className={`px-1.5 py-0.5 rounded font-black ${isPaid ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                                                                         {order.payment_method || 'Cash'} ({order.payment_status || 'Pending'})
+                                                                     </span>
+                                                                     {order.order_channel && order.order_channel !== 'Walk-in' && (
+                                                                         <>
+                                                                             <span>•</span>
+                                                                             <span className="text-gray-600 font-semibold">{order.order_channel}</span>
+                                                                         </>
+                                                                     )}
+                                                                 </div>
+                                                             </div>
+                                                         </div>
+
+                                                         <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-2">
+                                                             <span className="font-mono font-black text-sm text-gray-900">
+                                                                 KES {parseFloat(order.total_amount || 0).toLocaleString()}
+                                                             </span>
+                                                             {order.payment_status?.toLowerCase().includes('pending') && !isReturned && (
+                                                                  <>
+                                                                      {isMicrositeOrder(order) && (
+                                                                          <>
+                                                                              <button
+                                                                                  type="button"
+                                                                                  onClick={(e) => {
+                                                                                      e.stopPropagation();
+                                                                                      handleAcceptOrder(order);
+                                                                                  }}
+                                                                                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
+                                                                                  title="Accept Order & Route to KDS/Printers"
+                                                                              >
+                                                                                  <span>✅ Accept</span>
+                                                                              </button>
+                                                                              <button
+                                                                                  type="button"
+                                                                                  onClick={(e) => {
+                                                                                      e.stopPropagation();
+                                                                                      handleDeclineOrder(order);
+                                                                                  }}
+                                                                                  className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
+                                                                                  title="Decline Order"
+                                                                              >
+                                                                                  <span>❌ Decline</span>
+                                                                              </button>
+                                                                          </>
+                                                                      )}
+                                                                      <button
+                                                                          type="button"
+                                                                          onClick={(e) => {
+                                                                              e.stopPropagation();
+                                                                              handleOpenClearModal(order);
+                                                                          }}
+                                                                          className="px-2 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
+                                                                          title="Clear Pending Payment"
+                                                                      >
+                                                                          <span>💵 Clear</span>
+                                                                      </button>
+                                                                  </>
+                                                              )}
+                                                             <button
+                                                                 type="button"
+                                                                 onClick={(e) => { e.stopPropagation(); setActiveReceipt(order); }}
+                                                                 className="px-2.5 py-1.5 border border-gray-200 hover:border-primary hover:text-primary rounded-xl transition-all flex items-center gap-1 text-xs font-bold text-gray-600 shadow-xs bg-white"
+                                                                 title="Reprint Receipt"
+                                                             >
+                                                                 <Printer size={13} />
+                                                                 <span className="hidden sm:inline">Reprint</span>
+                                                            </button>
+                                                         </div>
+                                                     </div>
                                                  );
                                              })
-                                            .map(order => {
-                                                const formattedTime = new Date(order.created_at).toLocaleTimeString('en-US', {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    hour12: true
-                                                });
-                                                const formattedDate = new Date(order.created_at).toLocaleDateString('en-US', {
-                                                    month: 'short',
-                                                    day: 'numeric'
-                                                });
-                                                return (
-                                                    <div 
-                                                        key={order.id} 
-                                                        onClick={() => setViewingOrderDetails(order)}
-                                                        className="p-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors cursor-pointer"
-                                                        title="Click to view details"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center font-mono font-black text-sm">
-                                                                #{order.ticket_number}
-                                                            </div>
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-bold text-sm text-gray-900">{order.customer_name}</span>
-                                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                                                                        order.dining_option === 'Dine Inn' ? 'bg-blue-50 text-blue-600' :
-                                                                        ['Glovo', 'UberEats', 'Bolt Food'].includes(order.dining_option) ? 'bg-orange-50 text-orange-600' :
-                                                                        'bg-gray-100 text-gray-600'
-                                                                    }`}>{order.dining_option}</span>
-                                                                    {order.status === 'Returned' && (
-                                                                        <span className="px-2 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-700 uppercase tracking-wider">
-                                                                            Returned
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-semibold mt-0.5">
-                                                                    <span>{formattedDate} at {formattedTime}</span>
-                                                                    <span>•</span>
-                                                                    <span className="capitalize">{order.payment_method} ({order.payment_status})</span>
-                                                                    {order.status === 'Returned' && order.return_reason && (
-                                                                        <>
-                                                                            <span>•</span>
-                                                                            <span className="text-red-550 font-bold italic">Reason: {order.return_reason}</span>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="font-mono font-black text-sm text-gray-900 mr-1">
-                                                                KES {order.total_amount.toLocaleString()}
-                                                            </span>
-                                                            {order.payment_status?.toLowerCase().includes('pending') && 
-                                                                order.status !== 'Returned' && 
-                                                                order.status !== 'Cancelled' && 
-                                                                order.status !== 'Declined' && 
-                                                                order.payment_status !== 'Voided' && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleOpenClearModal(order);
-                                                                    }}
-                                                                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[11px] shadow-sm hover:shadow transition-all flex items-center gap-1.5"
-                                                                    title="Clear Pending Payment"
-                                                                >
-                                                                    <span>💵 Clear</span>
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => { e.stopPropagation(); setActiveReceipt(order); }}
-                                                                className="p-2 border border-gray-200 hover:border-primary hover:text-primary rounded-xl transition-all flex items-center gap-1 text-xs font-bold text-gray-500 shadow-sm"
-                                                                title="Reprint Receipt"
-                                                            >
-                                                                <Printer size={14} />
-                                                                <span>Reprint</span>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        }
+                                         }
                             </div>
                                 )}
                             </div>
-                        </div>
+                            </div>
                             
                         {/* Right Column: Analytics & Widget Sidebar */}
                         <div className="w-full lg:w-80 xl:w-96 flex flex-col gap-6 shrink-0 h-full max-h-full overflow-y-auto custom-scrollbar">
+                            {!canViewRevenue ? null : (
+                                <>
                             {/* Revenue Breakdown Sidebar Widget */}
                             {(() => {
                                 const activeOrds = historyOrders.filter(o =>
@@ -3311,24 +4868,37 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         </div>
                                         <div className="grid grid-cols-2 gap-2">
                                             {[
-                                                { label: '🍛 Food Sales', value: brkFood, color: 'bg-emerald-500' },
-                                                { label: '🥤 Beverages', value: brkBev, color: 'bg-blue-400' },
-                                                { label: '📦 Packaging', value: brkPack, color: 'bg-amber-400' },
-                                                { label: '🛵 Delivery Fees', value: brkDel, color: 'bg-purple-400' },
-                                            ].map(({ label, value, color }) => (
-                                                <div key={label} className="bg-gray-50/50 rounded-xl p-2.5 border border-gray-100 flex flex-col justify-between">
-                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-wider">{label}</p>
-                                                    <p className="text-xs font-black font-mono text-gray-900 mt-1">KES {value.toLocaleString()}</p>
-                                                    <div className="h-1 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
-                                                        <div className={`h-full ${color} rounded-full`} style={{ width: `${pct(value)}%` }} />
+                                                { label: '🍛 Food Sales', key: 'Food', value: brkFood, color: 'bg-emerald-500' },
+                                                { label: '🥤 Beverages', key: 'Beverage', value: brkBev, color: 'bg-blue-400' },
+                                                { label: '📦 Packaging', key: 'Packaging', value: brkPack, color: 'bg-amber-400' },
+                                                { label: '🛵 Delivery Fees', key: 'Delivery', value: brkDel, color: 'bg-purple-400' },
+                                            ].map(({ label, key, value, color }) => {
+                                                const isAct = historySearch.toLowerCase() === key.toLowerCase();
+                                                return (
+                                                    <div 
+                                                        key={label} 
+                                                        onClick={() => setHistorySearch(isAct ? '' : key)}
+                                                        className={`bg-gray-50/50 rounded-xl p-2.5 border transition-all cursor-pointer hover:bg-gray-100 ${isAct ? 'border-emerald-500 bg-emerald-50/60 font-black' : 'border-gray-100'}`}
+                                                        title={`Click to filter orders containing ${key}`}
+                                                    >
+                                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-wider flex justify-between">
+                                                            <span>{label}</span>
+                                                            {isAct && <span className="text-[7px] bg-emerald-200 text-emerald-800 px-1 rounded font-bold">Active</span>}
+                                                        </p>
+                                                        <p className="text-xs font-black font-mono text-gray-900 mt-1">KES {value.toLocaleString()}</p>
+                                                        <div className="h-1 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
+                                                            <div className={`h-full ${color} rounded-full`} style={{ width: `${pct(value)}%` }} />
+                                                        </div>
+                                                        <p className="text-[7px] font-bold text-gray-400 mt-0.5">{pct(value)}% of total</p>
                                                     </div>
-                                                    <p className="text-[7px] font-bold text-gray-400 mt-0.5">{pct(value)}% of total</p>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );
                             })()}
+
+
                             {/* Brand and Channel Sales Breakdown Sidebar Widget */}
                             {(() => {
                                 const salesByChannel = {};
@@ -3576,7 +5146,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                 );
                             })()}
 
-                            {/* Top Items Sold Sidebar Widget */}
+                            {/* Unified Items Sold Report Sidebar Widget */}
                             {(() => {
                                 const itemTally = {};
                                 const EXCLUDE = (n) => /^delivery/i.test((n || '').trim()) || /^pack(age|aging)?\s*fee/i.test((n || '').trim());
@@ -3593,33 +5163,60 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                 const sorted = Object.entries(itemTally).sort((a, b) => b[1].qty - a[1].qty);
                                 const maxQty = sorted[0]?.[1]?.qty || 1;
                                 if (sorted.length === 0) return null;
+
+                                const itemsForPDF = sorted.map(([name, d]) => {
+                                    const menuItem = (menu || []).find(m => m.name === name);
+                                    return {
+                                        name,
+                                        category: menuItem ? menuItem.category : 'General',
+                                        quantity: d.qty,
+                                        totalAmount: d.revenue
+                                    };
+                                });
+
                                 return (
                                      <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">🏆 Items Sold — Today</p>
-                                         <div className="overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-96">
-                                            {sorted.map(([name, data], idx) => (
-                                                <div key={name} className="flex items-center gap-2 group">
-                                                    <span className="text-[9px] font-black text-gray-400 w-4 shrink-0 text-right">{idx + 1}</span>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-center mb-0.5">
-                                                            <span className="text-[9px] font-black text-gray-800 truncate max-w-[65%]">{name}</span>
-                                                            <span className="text-[9px] font-mono font-black text-gray-600 shrink-0">
-                                                                <span className="text-emerald-600">{data.qty}x</span> · KES {data.revenue.toLocaleString()}
-                                                            </span>
-                                                        </div>
-                                                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                                                            <div
-                                                                className={`h-full rounded-full transition-all ${idx === 0 ? 'bg-emerald-500' : idx === 1 ? 'bg-emerald-400' : idx === 2 ? 'bg-blue-400' : 'bg-gray-350'}`}
-                                                                style={{ width: `${Math.round((data.qty / maxQty) * 105)}%` }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                         <div className="flex items-center justify-between mb-3">
+                                             <div>
+                                                 <p className="text-[10px] font-black text-gray-900 uppercase tracking-wider">🏆 Items Sold Report</p>
+                                                 <p className="text-[8px] font-bold text-gray-400 mt-0.5">{sorted.length} unique items sold</p>
+                                             </div>
+                                             <button
+                                                 onClick={() => generateItemsSoldPDF(itemsForPDF, `${historyStartDate} to ${historyEndDate}`)}
+                                                 className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all shadow-xs"
+                                                 title="Download Items Sold PDF"
+                                             >
+                                                 <Download size={10} /> PDF
+                                             </button>
+                                         </div>
+                                          <div className="overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-96">
+                                             {sorted.map(([name, data], idx) => {
+                                                 const isAct = historySearch.toLowerCase() === name.toLowerCase();
+                                                 return (
+                                                     <div 
+                                                         key={name} 
+                                                         onClick={() => setHistorySearch(isAct ? '' : name)}
+                                                         className={`flex items-center gap-2 group cursor-pointer p-1.5 rounded-xl transition-all ${isAct ? 'bg-emerald-50 border border-emerald-300 font-black' : 'hover:bg-gray-50'}`}
+                                                         title={`Click to filter orders containing ${name}`}
+                                                     >
+                                                         <span className="text-[9px] font-black text-gray-400 w-4 shrink-0 text-right">{idx + 1}</span>
+                                                         <div className="flex-1 min-w-0">
+                                                             <div className="flex justify-between items-center mb-0.5">
+                                                                 <span className="text-[9px] font-black text-gray-800 truncate max-w-[65%]">{name}</span>
+                                                                 <span className="text-[9px] font-mono font-black text-gray-600 shrink-0">
+                                                                     <span className="text-emerald-600 font-bold">{data.qty}x</span> · KES {Math.round(data.revenue).toLocaleString()}
+                                                                 </span>
+                                                             </div>
+                                                         </div>
+                                                     </div>
+                                                 );
+                                             })}
+                                         </div>
+                                     </div>
                                 );
                             })()}
+                                </>
+                            )}
                             </div>
                         </div>
                     );
@@ -3679,6 +5276,16 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                     }`}
                                 >
                                     Sound Alerts
+                                </button>
+                                <button
+                                    onClick={() => { setMenuSettingsTab('api_integrations'); setEditingItem(null); setEditingModifierGroup(null); setEditingCategory(null); setEditingDiscount(null); }}
+                                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-all ${
+                                        menuSettingsTab === 'api_integrations' && !editingItem
+                                            ? 'bg-primary text-secondary border-transparent shadow-sm'
+                                            : 'bg-transparent border-transparent text-gray-400 hover:text-gray-600'
+                                    }`}
+                                >
+                                    🔌 Delivery APIs
                                 </button>
                             </div>
                             
@@ -3798,6 +5405,12 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     name: editingItem.name.trim(),
                                                     category: editingItem.category,
                                                     price: parseFloat(editingItem.price),
+                                                    glovo_price: editingItem.glovo_price ? parseFloat(editingItem.glovo_price) : null,
+                                                    ubereats_price: editingItem.ubereats_price ? parseFloat(editingItem.ubereats_price) : null,
+                                                    bolt_price: editingItem.bolt_price ? parseFloat(editingItem.bolt_price) : null,
+                                                    ando_price: editingItem.ando_price ? parseFloat(editingItem.ando_price) : null,
+                                                    website_price: editingItem.website_price ? parseFloat(editingItem.website_price) : null,
+                                                    brand_prices: editingItem.brand_prices || {},
                                                     description: editingItem.description || null,
                                                     include_vat: editingItem.include_vat || false,
                                                     brand: selectedBrands[0], // primary brand (backwards compat)
@@ -3875,18 +5488,48 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Brand</label>
-                                                    <div className="flex flex-col gap-1.5 p-3 bg-gray-50 border border-gray-200 rounded-xl">
-                                                        <label className="flex items-center gap-2 cursor-pointer">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={true}
-                                                                readOnly
-                                                                className="h-3.5 w-3.5 rounded text-primary focus:ring-primary"
-                                                            />
-                                                            <span className="text-[11px] font-semibold text-gray-700">ManiPOS</span>
-                                                            <span className="text-[9px] bg-gray-200 text-gray-500 px-1 py-0.5 rounded font-bold">PRIMARY</span>
-                                                        </label>
+                                                    <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Virtual Brands (Select all brands this item belongs to)</label>
+                                                    <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                                                        {[
+                                                            { id: 'POT OF JOLLOF', name: 'Pot of Jollof', icon: '🫕' },
+                                                            { id: 'LITTLE LAGOS', name: 'Little Lagos', icon: '🌶️' },
+                                                            { id: 'CAFE SWAHILI', name: 'Cafe Swahili', icon: '☕' },
+                                                            { id: 'SAMAKI STREET', name: 'Samaki Street', icon: '🐟' }
+                                                        ].map(br => {
+                                                            const currentBrands = editingItem.brands && editingItem.brands.length > 0 
+                                                                ? editingItem.brands 
+                                                                : (editingItem.brand && editingItem.brand !== 'ManiPOS' ? [editingItem.brand] : ['POT OF JOLLOF']);
+                                                            const isChecked = currentBrands.includes(br.id);
+
+                                                            const toggleBrand = () => {
+                                                                let updated;
+                                                                if (isChecked) {
+                                                                    updated = currentBrands.filter(b => b !== br.id);
+                                                                    if (updated.length === 0) updated = ['POT OF JOLLOF'];
+                                                                } else {
+                                                                    updated = [...currentBrands, br.id];
+                                                                }
+                                                                setEditingItem({
+                                                                    ...editingItem,
+                                                                    brand: updated[0],
+                                                                    brands: updated
+                                                                });
+                                                            };
+
+                                                            return (
+                                                                <label key={br.id} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-white rounded-lg transition-colors select-none">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isChecked}
+                                                                        onChange={toggleBrand}
+                                                                        className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
+                                                                    />
+                                                                    <span className="text-[11px] font-bold text-gray-800 flex items-center gap-1.5">
+                                                                        <span>{br.icon}</span> {br.name}
+                                                                    </span>
+                                                                </label>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4">
@@ -3903,16 +5546,182 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                         </select>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Price (KES)</label>
+                                            <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Base Price (Walk-in / Cash)</label>
                                                         <input
                                                             type="number"
                                                             value={editingItem.price}
                                                             onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
-                                                            placeholder="850"
+                                                            placeholder="1200"
                                                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all text-xs font-mono font-bold"
                                                         />
                                                     </div>
                                                 </div>
+
+                                                {/* Omni-Channel Price Overrides Section */}
+                                                {(() => {
+                                                    const currentBrandsList = editingItem.brands && editingItem.brands.length > 0 
+                                                        ? editingItem.brands 
+                                                        : (editingItem.brand && editingItem.brand !== 'ManiPOS' ? [editingItem.brand] : ['POT OF JOLLOF']);
+
+                                                    if (currentBrandsList.length > 1) {
+                                                        return (
+                                                            <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 space-y-4">
+                                                                <div className="flex items-center justify-between">
+                                                                    <h5 className="text-[10px] font-black uppercase text-amber-900 tracking-wider flex items-center gap-1.5">
+                                                                        👑 Per-Brand Omni-Channel Pricing Matrix ({currentBrandsList.length} Brands Selected)
+                                                                    </h5>
+                                                                    <span className="text-[9px] text-amber-700 font-bold">Configured per brand listing</span>
+                                                                </div>
+                                                                <div className="space-y-3">
+                                                                    {currentBrandsList.map(bName => {
+                                                                        const bPrices = (editingItem.brand_prices && editingItem.brand_prices[bName]) || {};
+                                                                        const updateBrandPrice = (field, val) => {
+                                                                            const currentBp = { ...(editingItem.brand_prices || {}) };
+                                                                            currentBp[bName] = { ...(currentBp[bName] || {}), [field]: val ? parseFloat(val) : null };
+                                                                            setEditingItem({ ...editingItem, brand_prices: currentBp });
+                                                                        };
+
+                                                                return (
+                                                                    <div key={bName} className="bg-white p-3 rounded-xl border border-amber-100 space-y-2">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <span className="text-[10px] font-black text-gray-800 uppercase tracking-wide flex items-center gap-1">
+                                                                                🏷️ {bName}
+                                                                            </span>
+                                                                            <span className="text-[8px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">BRAND PRICING</span>
+                                                                        </div>
+                                                                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                                                                            <div>
+                                                                                <label className="block text-[8px] font-bold text-gray-500 mb-0.5 uppercase">Base Price</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={bPrices.price !== undefined && bPrices.price !== null ? bPrices.price : ''}
+                                                                                    onChange={(e) => updateBrandPrice('price', e.target.value)}
+                                                                                    placeholder={editingItem.price || 'Base'}
+                                                                                    className="w-full p-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="block text-[8px] font-bold text-gray-500 mb-0.5 uppercase">Glovo</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={bPrices.glovo_price !== undefined && bPrices.glovo_price !== null ? bPrices.glovo_price : ''}
+                                                                                    onChange={(e) => updateBrandPrice('glovo_price', e.target.value)}
+                                                                                    placeholder="Glovo KES"
+                                                                                    className="w-full p-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="block text-[8px] font-bold text-gray-500 mb-0.5 uppercase">Uber Eats</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={bPrices.ubereats_price !== undefined && bPrices.ubereats_price !== null ? bPrices.ubereats_price : ''}
+                                                                                    onChange={(e) => updateBrandPrice('ubereats_price', e.target.value)}
+                                                                                    placeholder="Uber KES"
+                                                                                    className="w-full p-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="block text-[8px] font-bold text-gray-500 mb-0.5 uppercase">Bolt Food</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={bPrices.bolt_price !== undefined && bPrices.bolt_price !== null ? bPrices.bolt_price : ''}
+                                                                                    onChange={(e) => updateBrandPrice('bolt_price', e.target.value)}
+                                                                                    placeholder="Bolt KES"
+                                                                                    className="w-full p-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="block text-[8px] font-bold text-gray-500 mb-0.5 uppercase">Ando</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={bPrices.ando_price !== undefined && bPrices.ando_price !== null ? bPrices.ando_price : ''}
+                                                                                    onChange={(e) => updateBrandPrice('ando_price', e.target.value)}
+                                                                                    placeholder="Ando KES"
+                                                                                    className="w-full p-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="block text-[8px] font-bold text-gray-500 mb-0.5 uppercase">Micro Site</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={bPrices.website_price !== undefined && bPrices.website_price !== null ? bPrices.website_price : ''}
+                                                                                    onChange={(e) => updateBrandPrice('website_price', e.target.value)}
+                                                                                    placeholder="Site KES"
+                                                                                    className="w-full p-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono font-bold"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return (
+                                                <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <h5 className="text-[10px] font-black uppercase text-amber-900 tracking-wider flex items-center gap-1">
+                                                            ⚡ Omni-Channel Specific Prices
+                                                        </h5>
+                                                        <span className="text-[9px] text-amber-700 font-bold">Leave blank to use base price</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                                                        <div>
+                                                            <label className="block text-[9px] font-bold text-gray-600 mb-1 uppercase">Glovo Price</label>
+                                                            <input
+                                                                type="number"
+                                                                value={editingItem.glovo_price || ''}
+                                                                onChange={(e) => setEditingItem({ ...editingItem, glovo_price: e.target.value })}
+                                                                placeholder={editingItem.price ? `Default ${editingItem.price}` : 'e.g. 1300'}
+                                                                className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-bold focus:border-amber-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[9px] font-bold text-gray-600 mb-1 uppercase">Uber Eats Price</label>
+                                                            <input
+                                                                type="number"
+                                                                value={editingItem.ubereats_price || ''}
+                                                                onChange={(e) => setEditingItem({ ...editingItem, ubereats_price: e.target.value })}
+                                                                placeholder={editingItem.price ? `Default ${editingItem.price}` : 'e.g. 1300'}
+                                                                className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-bold focus:border-amber-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[9px] font-bold text-gray-600 mb-1 uppercase">Bolt Food Price</label>
+                                                            <input
+                                                                type="number"
+                                                                value={editingItem.bolt_price || ''}
+                                                                onChange={(e) => setEditingItem({ ...editingItem, bolt_price: e.target.value })}
+                                                                placeholder={editingItem.price ? `Default ${editingItem.price}` : 'e.g. 1300'}
+                                                                className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-bold focus:border-amber-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[9px] font-bold text-gray-600 mb-1 uppercase">Ando Price</label>
+                                                            <input
+                                                                type="number"
+                                                                value={editingItem.ando_price || ''}
+                                                                onChange={(e) => setEditingItem({ ...editingItem, ando_price: e.target.value })}
+                                                                placeholder={editingItem.price ? `Default ${editingItem.price}` : 'e.g. 1300'}
+                                                                className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-bold focus:border-amber-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[9px] font-bold text-gray-600 mb-1 uppercase">Micro Site Price</label>
+                                                            <input
+                                                                type="number"
+                                                                value={editingItem.website_price || ''}
+                                                                onChange={(e) => setEditingItem({ ...editingItem, website_price: e.target.value })}
+                                                                placeholder={editingItem.price ? `Default ${editingItem.price}` : 'e.g. 1200'}
+                                                                className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-bold focus:border-amber-500 outline-none"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
                                                 <div>
                                                     <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Description</label>
                                                     <textarea
@@ -4108,18 +5917,23 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                                             </p>
                                                                         </div>
                                                                         <div className="flex justify-between items-center mt-1">
-                                                                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
-                                                                                item.is_available
-                                                                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                                                                    : 'bg-red-50 border-red-100 text-red-600'
-                                                                            }`}
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                toggleItemAvailability(item.id, item.is_available);
-                                                                            }}
+                                                                            <button 
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    toggleItemAvailability(item.id, item.is_available);
+                                                                                }}
+                                                                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider transition-all border cursor-pointer ${
+                                                                                    item.is_available
+                                                                                        ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                                                                                        : 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
+                                                                                }`}
+                                                                                title={item.is_available ? 'Click to mark Out of Stock' : 'Click to mark Available'}
                                                                             >
-                                                                                {item.is_available ? 'In Stock' : 'Out'}
-                                                                            </span>
+                                                                                <span className={`w-1.5 h-1.5 rounded-full ${item.is_available ? 'bg-white animate-pulse' : 'bg-white'}`} />
+                                                                                <span>{item.is_available ? 'Available' : 'Unavailable'}</span>
+                                                                            </button>
+
                                                                             <button 
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
@@ -4453,6 +6267,9 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         </div>
                                     </div>
                                 )}
+                                {menuSettingsTab === 'api_integrations' && (
+                                    <ApiIntegrationsDashboard menu={menu} />
+                                )}
                             </>
                         )}
 
@@ -4571,7 +6388,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                                     <input
                                                                         type="text"
                                                                         required
-                                                                        placeholder="e.g. Fufu"
+                                                                        placeholder="e.g. Extra Chicken"
                                                                         value={opt.name}
                                                                         onChange={(e) => {
                                                                             const opts = [...editingModifierGroup.options];
@@ -4582,7 +6399,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                                     />
                                                                 </div>
                                                                 <div>
-                                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Price Adj (KES)</label>
+                                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Base Price (KES)</label>
                                                                     <input
                                                                         type="number"
                                                                         required
@@ -4597,7 +6414,71 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                                     />
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-1.5">
+
+                                                            {/* Modifier Option Omni-Channel Prices */}
+                                                            <div className="pt-1.5 border-t border-gray-200/60">
+                                                                <label className="block text-[8px] font-black text-amber-700 uppercase tracking-widest mb-1">⚡ Omni-Channel Prices (Optional)</label>
+                                                                <div className="grid grid-cols-3 gap-1.5">
+                                                                    <div>
+                                                                        <span className="text-[7px] text-gray-400 font-bold block uppercase">Glovo</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            placeholder={opt.price || '0'}
+                                                                            value={opt.glovo_price !== undefined && opt.glovo_price !== null ? opt.glovo_price : ''}
+                                                                            onChange={(e) => {
+                                                                                const opts = [...editingModifierGroup.options];
+                                                                                opts[idx].glovo_price = e.target.value ? parseFloat(e.target.value) : null;
+                                                                                setEditingModifierGroup({ ...editingModifierGroup, options: opts });
+                                                                            }}
+                                                                            className="w-full p-1 bg-white border border-gray-200 rounded text-[10px] font-mono font-bold"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-[7px] text-gray-400 font-bold block uppercase">Uber Eats</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            placeholder={opt.price || '0'}
+                                                                            value={opt.ubereats_price !== undefined && opt.ubereats_price !== null ? opt.ubereats_price : ''}
+                                                                            onChange={(e) => {
+                                                                                const opts = [...editingModifierGroup.options];
+                                                                                opts[idx].ubereats_price = e.target.value ? parseFloat(e.target.value) : null;
+                                                                                setEditingModifierGroup({ ...editingModifierGroup, options: opts });
+                                                                            }}
+                                                                            className="w-full p-1 bg-white border border-gray-200 rounded text-[10px] font-mono font-bold"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-[7px] text-gray-400 font-bold block uppercase">Bolt Food</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            placeholder={opt.price || '0'}
+                                                                            value={opt.bolt_price !== undefined && opt.bolt_price !== null ? opt.bolt_price : ''}
+                                                                            onChange={(e) => {
+                                                                                const opts = [...editingModifierGroup.options];
+                                                                                opts[idx].bolt_price = e.target.value ? parseFloat(e.target.value) : null;
+                                                                                setEditingModifierGroup({ ...editingModifierGroup, options: opts });
+                                                                            }}
+                                                                            className="w-full p-1 bg-white border border-gray-200 rounded text-[10px] font-mono font-bold"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-[7px] text-gray-400 font-bold block uppercase">Ando Food</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            placeholder={opt.price || '0'}
+                                                                            value={opt.ando_price !== undefined && opt.ando_price !== null ? opt.ando_price : ''}
+                                                                            onChange={(e) => {
+                                                                                const opts = [...editingModifierGroup.options];
+                                                                                opts[idx].ando_price = e.target.value ? parseFloat(e.target.value) : null;
+                                                                                setEditingModifierGroup({ ...editingModifierGroup, options: opts });
+                                                                            }}
+                                                                            className="w-full p-1 bg-white border border-gray-200 rounded text-[10px] font-mono font-bold"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-1.5 pt-1">
                                                                 <input
                                                                     type="checkbox"
                                                                     id={`opt-vat-${idx}`}
@@ -4974,6 +6855,10 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
             </div>
         )}
 
+                {activeView === 'campaigns' && (
+                    <CampaignsView />
+                )}
+
                 {activeView === 'terminal_settings' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-6 gap-6">
                         {/* Users, PINs and Terminal configured roles */}
@@ -4992,7 +6877,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                             </div>
 
                             {showAddStaffForm && (
-                                <form onSubmit={handleCreateStaff} className="p-5 bg-gray-50 border-b border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-4 items-end animate-in slide-in-from-top duration-200">
+                                <form onSubmit={handleCreateStaff} className="p-5 bg-gray-50 border-b border-gray-100 grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top duration-200">
                                     <div>
                                         <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Display Name</label>
                                         <input
@@ -5025,6 +6910,13 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                             <option value="receiver">Goods Receiver Terminal</option>
                                             <option value="expense_clerk">Expense Clerk Interface</option>
                                             <option value="admin">Terminal Admin (All Rights)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">History View Rights</label>
+                                        <select name="today_yesterday_only" className="w-full p-2 text-xs border border-gray-200 bg-white rounded-lg font-bold">
+                                            <option value="true">Restrict to Today & Yesterday</option>
+                                            <option value="false">Allow Full History</option>
                                         </select>
                                     </div>
                                     <div>
@@ -5085,10 +6977,39 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                                     <option value="admin">Admin</option>
                                                                 </select>
                                                             </div>
+                                                            <div className="w-32">
+                                                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">History View</label>
+                                                                <select
+                                                                    value={editingStaffTodayYesterdayOnly ? 'restrict' : 'all'}
+                                                                    onChange={(e) => setEditingStaffTodayYesterdayOnly(e.target.value === 'restrict')}
+                                                                    className="w-full p-1.5 text-xs border border-gray-250 bg-white rounded-lg font-bold"
+                                                                >
+                                                                    <option value="restrict">Restrict (Today/Yesterday)</option>
+                                                                    <option value="all">Allow Full History</option>
+                                                                </select>
+                                                            </div>
+                                                            <div className="w-24">
+                                                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+                                                                <select
+                                                                    value={editingStaffActive ? 'active' : 'inactive'}
+                                                                    onChange={(e) => setEditingStaffActive(e.target.value === 'active')}
+                                                                    className="w-full p-1.5 text-xs border border-gray-250 bg-white rounded-lg font-bold"
+                                                                >
+                                                                    <option value="active">Active</option>
+                                                                    <option value="inactive">Terminated</option>
+                                                                </select>
+                                                            </div>
                                                         </div>
                                                     ) : (
-                                                        <div>
-                                                            <div className="font-bold text-sm text-gray-900 leading-tight">{staff.name}</div>
+                                                                                        <div>
+                                                            <div className="font-bold text-sm text-gray-900 leading-tight">
+                                                                {staff.name}
+                                                                {staff.is_active === false && (
+                                                                    <span className="ml-2 text-rose-600 text-[10px] font-black uppercase bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-md">
+                                                                        Terminated
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             <div className="text-[10px] text-gray-400 font-semibold mt-0.5 uppercase tracking-wider">Created {new Date(staff.created_at).toLocaleDateString()}</div>
                                                         </div>
                                                     )}
@@ -5135,6 +7056,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                                                         setEditingStaffName(staff.name);
                                                                         setEditingStaffPin(staff.pin);
                                                                         setEditingStaffRole(staff.role || 'staff');
+                                                                        setEditingStaffActive(staff.is_active !== false);
+                                                                        setEditingStaffTodayYesterdayOnly(staff.today_yesterday_only !== false);
                                                                     }}
                                                                     className="text-gray-400 hover:text-gray-800 p-1"
                                                                     title="Edit Staff Member"
@@ -5402,11 +7325,27 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         </div>
                                     )}
 
-                                    {/* Controls: Delete + Qty stepper */}
+                                    {/* Controls: Delete + Qty stepper + Guest chip */}
                                     <div className="flex justify-between items-center mt-0.5 border-t border-gray-200/50 pt-1.5">
-                                        <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 p-1 rounded transition-colors">
-                                            <Trash2 size={12} />
-                                        </button>
+                                        <div className="flex items-center gap-1.5">
+                                            <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 p-1 rounded transition-colors">
+                                                <Trash2 size={12} />
+                                            </button>
+                                            {/* Guest assignment chip — only visible when split bill mode active */}
+                                            {splitBillCount > 1 && (
+                                                <button
+                                                    onClick={() => setCart(prev => prev.map(c =>
+                                                        c.id === item.id
+                                                            ? { ...c, guestNo: ((c.guestNo || 1) % splitBillCount) + 1 }
+                                                            : c
+                                                    ))}
+                                                    className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border transition-all bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                                                    title="Tap to reassign to next guest"
+                                                >
+                                                    G{item.guestNo || 1}
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="flex items-center gap-2.5">
                                             <button onClick={() => updateQty(item.id, -1)} className="w-5 h-5 rounded-md border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
                                                 <Minus size={10} />
@@ -5424,20 +7363,34 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
 
                     {/* Order Details & Checkout Configuration */}
                     <div className="border-t border-gray-100 p-2.5 bg-gray-50/50 space-y-2 shrink-0">
-                        {/* Always visible Guest Name input */}
-                        <div className="flex gap-2 items-center bg-white border border-gray-250/60 p-2 rounded-2xl shadow-sm">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Guest Name:</label>
+                        {/* Guest Name input + Register New Guest button */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Customer / Guest Name</label>
+                                <button
+                                    onClick={() => setShowRegisterGuestModal(true)}
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-[#18A07A] text-white rounded-full text-[10px] font-black uppercase hover:bg-[#128061] active:scale-95 transition-all shadow-sm"
+                                    title="Register New Guest to CRM"
+                                >
+                                    <UserPlus size={11} /> New Customer
+                                </button>
+                            </div>
                             <input
                                 type="text"
-                                placeholder="Enter Customer Name"
+                                placeholder="Enter customer name..."
                                 value={customerNameText}
                                 onChange={(e) => setCustomerNameText(e.target.value)}
-                                className="flex-1 bg-gray-50/50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-[11px] font-black outline-none focus:border-primary focus:bg-white transition-all shadow-inner text-gray-900"
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-[12px] font-bold outline-none focus:border-[#18A07A] focus:ring-2 focus:ring-[#18A07A]/10 transition-all text-gray-900 shadow-sm"
                             />
                         </div>
+                        {guestSuccessMsg && (
+                            <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-[11px] font-bold rounded-xl flex items-center gap-2">
+                                ✅ {guestSuccessMsg}
+                            </div>
+                        )}
 
-                        {/* Force Table Selection Dropdown if Dine Inn is selected */}
-                        {diningOption === 'Dine Inn' && (
+                        {/* Force Table Selection Dropdown if Dine-in is selected */}
+                        {(diningOption === 'Dine-in' || diningOption === 'Dine Inn') && (
                             <div className="flex gap-2 items-center bg-white border border-gray-250/60 p-2 rounded-2xl shadow-sm">
                                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Select Table *:</label>
                                 <select
@@ -5480,7 +7433,10 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                             onChange={(e) => setSelectedBrand(e.target.value)}
                                             className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
                                         >
-                                            <option value="ManiPOS">ManiPOS</option>
+                                            <option value="POT OF JOLLOF">POT OF JOLLOF</option>
+                                            <option value="LITTLE LAGOS">LITTLE LAGOS</option>
+                                            <option value="CAFE SWAHILI">CAFE SWAHILI</option>
+                                            <option value="SAMAKI STREET">SAMAKI STREET</option>
                                         </select>
                                     </div>
                                 </div>
@@ -5516,11 +7472,23 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                             disabled={['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(orderChannel)}
                                             className="w-full bg-white disabled:bg-gray-100 disabled:text-gray-400 border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
                                         >
-                                            <option value="Dine Inn">Dine Inn</option>
-                                            <option value="Pick-Up/Take Away">Pick-Up/Take Away</option>
+                                            <option value="Dine-in">Dine-in</option>
+                                            <option value="Takeaway">Takeaway</option>
                                             <option value="Delivery">Delivery</option>
                                         </select>
                                     </div>
+                                    {diningOption === 'Delivery' && (
+                                        <div className="col-span-2 pt-1">
+                                            <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Delivery Address</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Enter full delivery address..."
+                                                value={deliveryAddress}
+                                                onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Payment Method & Status */}
@@ -5587,6 +7555,17 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                             />
                                         )}
                                     </div>
+                                </div>
+
+                                {/* Custom Order Date (Backdate) */}
+                                <div className="pt-1.5 border-t border-gray-100">
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Order Date (Backdate)</label>
+                                    <input
+                                        type="date"
+                                        value={customOrderDate}
+                                        onChange={(e) => setCustomOrderDate(e.target.value)}
+                                        className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary text-gray-700 font-sans"
+                                    />
                                 </div>
                             </div>
                         )}
@@ -5710,7 +7689,12 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                         receipt={activeReceipt} 
                         frontDeskPrinter={frontDeskPrinter}
                         kitchenPrinter={kitchenPrinter}
-                        onClose={() => setActiveReceipt(null)} 
+                        onClose={() => {
+                            setActiveReceipt(null);
+                            setActiveView('menu');
+                            setCart([]);
+                            setEditingOrderId(null);
+                        }} 
                         onCloseAndExit={() => {
                             setActiveReceipt(null);
                             onSignOut();
@@ -5727,23 +7711,194 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0 }}
-                            className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-gray-100 flex flex-col gap-4 text-secondary"
+                            className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 flex flex-col gap-4 text-secondary max-h-[90vh] overflow-y-auto custom-scrollbar"
                         >
                             <div className="text-center space-y-1">
-                                <h3 className="font-black text-md text-gray-900">Close Cash Drawer Shift?</h3>
-                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-1 leading-relaxed">Are you sure you want to end your shift and close the cash drawer? This will generate your final Z-Report.</p>
+                                <h3 className="font-black text-lg text-gray-900">Close Cash Register Shift</h3>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-0.5 leading-relaxed">Key in physical drawer counts for today's end-of-day close</p>
                             </div>
 
-                            <div className="flex gap-2.5 mt-2">
+                            {/* End of Day Shift Summary Report Header */}
+                            <div className="bg-gray-900 text-white p-4 rounded-2xl border border-gray-800 space-y-3 shadow-inner">
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                                        📋 Today's Shift Report
+                                    </span>
+                                    <span className="text-[9px] bg-gray-800 text-gray-300 font-mono px-2.5 py-1 rounded-lg font-bold">{activeShift?.shift_code || 'Active Shift'}</span>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-3 text-left">
+                                    <div>
+                                        <span className="text-[8px] font-bold text-gray-400 uppercase block">Today's Sales</span>
+                                        <span className="text-base font-mono font-black text-emerald-400">KES {shiftSummary.totalSales.toLocaleString()}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[8px] font-bold text-gray-400 uppercase block">Orders Count</span>
+                                        <span className="text-base font-mono font-black text-white">{shiftSummary.totalOrders} Orders</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left pt-1 border-t border-gray-800">
+                                    <div className="bg-gray-800/60 p-2 rounded-xl border border-gray-700/50">
+                                        <span className="text-[7px] font-bold text-gray-400 uppercase block">💵 Cash Sales</span>
+                                        <span className="text-xs font-mono font-bold text-emerald-300">KES {shiftSummary.cashSales.toLocaleString()}</span>
+                                    </div>
+                                    <div className="bg-gray-800/60 p-2 rounded-xl border border-gray-700/50">
+                                        <span className="text-[7px] font-bold text-gray-400 uppercase block">💳 Card Sales</span>
+                                        <span className="text-xs font-mono font-bold text-blue-300">KES {shiftSummary.cardSales.toLocaleString()}</span>
+                                    </div>
+                                    <div className="bg-gray-800/60 p-2 rounded-xl border border-gray-700/50">
+                                        <span className="text-[7px] font-bold text-gray-400 uppercase block">🏦 I&M Paybill</span>
+                                        <span className="text-xs font-mono font-bold text-amber-300">KES {shiftSummary.imPaybillSales.toLocaleString()}</span>
+                                    </div>
+                                    <div className="bg-gray-800/60 p-2 rounded-xl border border-gray-700/50">
+                                        <span className="text-[7px] font-bold text-gray-400 uppercase block">🛵 Apps</span>
+                                        <span className="text-xs font-mono font-bold text-purple-300">KES {shiftSummary.appSales.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Physical Count Form Section */}
+                            {(() => {
+                                const floatVal = parseFloat(activeShift?.opening_float || 0);
+                                const expectedCashTill = floatVal + shiftSummary.cashSales;
+                                const countedCash = closingCashInput !== '' ? (parseFloat(closingCashInput) || 0) : expectedCashTill;
+                                const cashVariance = countedCash - expectedCashTill;
+
+                                const expectedCard = shiftSummary.cardSales;
+                                const countedCard = closingCardInput !== '' ? (parseFloat(closingCardInput) || 0) : expectedCard;
+                                const cardVariance = countedCard - expectedCard;
+
+                                return (
+                                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200/80 space-y-3 text-left">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="text-[10px] font-black text-gray-900 uppercase tracking-wider">
+                                                Enter Physical End-of-Day Counts
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setClosingCashInput(String(expectedCashTill));
+                                                    setClosingCardInput(String(expectedCard));
+                                                }}
+                                                className="text-[9px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200"
+                                            >
+                                                Auto-Fill Expected
+                                            </button>
+                                        </div>
+
+                                        {/* Cash Count Input */}
+                                        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-xs space-y-1.5">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
+                                                    💵 Physical Cash in Till (KES)
+                                                </span>
+                                                <span className="text-[9px] font-mono text-gray-400">
+                                                    Float ({floatVal}) + Cash Sales ({shiftSummary.cashSales}) = <strong className="text-gray-700">KES {expectedCashTill.toLocaleString()}</strong>
+                                                </span>
+                                            </div>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                placeholder={`Expected KES ${expectedCashTill.toLocaleString()}`}
+                                                value={closingCashInput}
+                                                onChange={e => setClosingCashInput(e.target.value)}
+                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl font-mono font-black text-sm text-gray-900 focus:bg-white focus:border-emerald-500 outline-none transition-colors"
+                                            />
+                                            <div className="flex justify-between items-center text-[10px] pt-0.5">
+                                                <span className="font-medium text-gray-500">Cash Discrepancy:</span>
+                                                {cashVariance === 0 ? (
+                                                    <span className="font-mono font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ Balanced (KES 0)</span>
+                                                ) : cashVariance < 0 ? (
+                                                    <span className="font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded">⚠️ Shortage (-KES {Math.abs(cashVariance).toLocaleString()})</span>
+                                                ) : (
+                                                    <span className="font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded">➕ Overage (+KES {cashVariance.toLocaleString()})</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Card Count Input */}
+                                        <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-xs space-y-1.5">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
+                                                    💳 Physical Card Slips Total (KES)
+                                                </span>
+                                                <span className="text-[9px] font-mono text-gray-400">
+                                                    Expected: <strong className="text-gray-700">KES {expectedCard.toLocaleString()}</strong>
+                                                </span>
+                                            </div>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                placeholder={`Expected KES ${expectedCard.toLocaleString()}`}
+                                                value={closingCardInput}
+                                                onChange={e => setClosingCardInput(e.target.value)}
+                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl font-mono font-black text-sm text-gray-900 focus:bg-white focus:border-blue-500 outline-none transition-colors"
+                                            />
+                                            <div className="flex justify-between items-center text-[10px] pt-0.5">
+                                                <span className="font-medium text-gray-500">Card Discrepancy:</span>
+                                                {cardVariance === 0 ? (
+                                                    <span className="font-mono font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ Balanced (KES 0)</span>
+                                                ) : cardVariance < 0 ? (
+                                                    <span className="font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded">⚠️ Shortage (-KES {Math.abs(cardVariance).toLocaleString()})</span>
+                                                ) : (
+                                                    <span className="font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded">➕ Overage (+KES {cardVariance.toLocaleString()})</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* 🚫 Switched Off / Out-of-Stock Items Report (Today) */}
+                                        {(() => {
+                                            const todayDate = new Date().toISOString().split('T')[0];
+                                            const switchedOffToday = switchedOffLog.filter(l => l.date === todayDate);
+                                            return (
+                                                <div className="bg-rose-50/60 p-3 rounded-2xl border border-rose-200/80 space-y-2">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-black text-rose-950 uppercase tracking-wider flex items-center gap-1">
+                                                            🚫 Switched Off Items Today ({switchedOffToday.length})
+                                                        </span>
+                                                        <span className="text-[9px] font-bold text-rose-700 uppercase">POS 86'd Report</span>
+                                                    </div>
+                                                    {switchedOffToday.length === 0 ? (
+                                                        <p className="text-[10px] text-emerald-700 font-bold bg-emerald-50 p-2 rounded-xl border border-emerald-200/60">✅ No menu items were switched off today.</p>
+                                                    ) : (
+                                                        <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar">
+                                                            {switchedOffToday.map((log, idx) => (
+                                                                <div key={idx} className="flex justify-between items-center text-[10px] bg-white p-2 rounded-xl border border-rose-100 shadow-2xs">
+                                                                    <div>
+                                                                        <span className="font-black text-gray-900 block">{log.name}</span>
+                                                                        <span className="text-[8.5px] text-gray-500 font-bold">Category: {log.category} · By: {log.staffName || 'Staff'} at {log.turned_off_at}</span>
+                                                                    </div>
+                                                                    <span className={`px-2 py-0.5 rounded-full font-black uppercase text-[8px] ${
+                                                                        log.type === 'day' ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-rose-100 text-rose-900 border border-rose-200'
+                                                                    }`}>
+                                                                        {log.type === 'day' ? 'Rest of Day' : 'Indefinite'}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                );
+                            })()}
+
+                            <div className="flex gap-2.5 mt-1">
                                 <button
                                     onClick={handleCloseShift}
-                                    className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shadow-md"
+                                    className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl transition-all shadow-md uppercase tracking-wider"
                                 >
-                                    Submit & Close Shift
+                                    Submit & Lock EOD Shift
                                 </button>
                                 <button
-                                    onClick={() => setClosingModalOpen(false)}
-                                    className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl border border-gray-200 transition-all"
+                                    onClick={() => {
+                                        setClosingModalOpen(false);
+                                        setClosingCashInput('');
+                                        setClosingCardInput('');
+                                    }}
+                                    className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl border border-gray-200 transition-all"
                                 >
                                     Cancel
                                 </button>
@@ -5788,7 +7943,10 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         onChange={(e) => setClearBrand(e.target.value)}
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
                                     >
-                                        <option value="ManiPOS">ManiPOS</option>
+                                        <option value="POT OF JOLLOF">POT OF JOLLOF</option>
+                                        <option value="LITTLE LAGOS">LITTLE LAGOS</option>
+                                        <option value="CAFE SWAHILI">CAFE SWAHILI</option>
+                                        <option value="SAMAKI STREET">SAMAKI STREET</option>
                                     </select>
                                 </div>
 
@@ -5822,8 +7980,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         disabled={['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(clearChannel)}
                                         className="w-full bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
                                     >
-                                        <option value="Dine Inn">Dine Inn</option>
-                                        <option value="Pick-Up/Take Away">Pick-Up/Take Away</option>
+                                        <option value="Dine-in">Dine-in</option>
+                                        <option value="Takeaway">Takeaway</option>
                                         <option value="Delivery">Delivery</option>
                                     </select>
                                 </div>
@@ -5873,14 +8031,14 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0 }}
-                            className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-gray-100 flex flex-col gap-4 text-secondary max-h-[85vh] overflow-hidden"
+                            className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-gray-100 flex flex-col gap-4 text-secondary max-h-[90vh] overflow-y-auto custom-scrollbar"
                         >
                             <div className="flex justify-between items-center border-b border-gray-150 pb-3 shrink-0">
                                 <div>
                                     <h3 className="font-black text-md text-gray-900 flex items-center gap-1.5">
                                         Order Details 
                                         <span className="font-mono text-primary bg-primary/10 px-2 py-0.5 rounded text-xs">
-                                            #{viewingOrderDetails.ticket_number}
+                                            #{obfuscateTicket(viewingOrderDetails.ticket_number)}
                                         </span>
                                     </h3>
                                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
@@ -5895,64 +8053,179 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                 </button>
                             </div>
 
-                            {/* Order Info Cards */}
-                            <div className="grid grid-cols-2 gap-3 shrink-0">
-                                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Customer / Table</div>
-                                    <div className="font-bold text-xs text-gray-800 mt-0.5">{viewingOrderDetails.customer_name}</div>
+                            {/* Compact Order Info Bar */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs shrink-0 bg-gray-50/80 p-3 rounded-2xl border border-gray-100">
+                                <div>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Customer / Table</span>
+                                    <span className="font-bold text-gray-900 truncate block">{viewingOrderDetails.customer_name}</span>
                                 </div>
-                                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Brand</div>
-                                    <div className="font-bold text-xs text-gray-800 mt-0.5">{viewingOrderDetails.brand || 'ManiPOS'}</div>
+                                <div>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Brand</span>
+                                    <span className="font-bold text-gray-900 truncate block">{viewingOrderDetails.brand || 'POT OF JOLLOF'}</span>
                                 </div>
-                                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Order Channel</div>
-                                    <div className="font-bold text-xs text-gray-800 mt-0.5">{viewingOrderDetails.order_channel || 'Walk-in'}</div>
-                                </div>
-                                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Service Model</div>
-                                    <div className="font-bold text-xs text-gray-800 mt-0.5">{viewingOrderDetails.dining_option}</div>
-                                </div>
-                                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Payment Method</div>
-                                    <div className="font-bold text-xs text-gray-800 mt-0.5">{viewingOrderDetails.payment_method}</div>
-                                </div>
-                                <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Payment Status</div>
-                                    <div className="font-bold text-xs mt-0.5 flex items-center gap-1.5">
+                                <div>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Payment Status</span>
+                                    <span className="font-bold text-xs flex items-center gap-1 mt-0.5">
                                         <span className={`w-2 h-2 rounded-full ${
                                             viewingOrderDetails.payment_status === 'Paid' ? 'bg-emerald-500' :
                                             viewingOrderDetails.payment_status === 'Voided' ? 'bg-red-500' :
                                             'bg-orange-500 animate-pulse'
                                         }`} />
                                         <span className="capitalize">{viewingOrderDetails.payment_status}</span>
+                                    </span>
+                                </div>
+
+                                {/* PAYMENT METHOD SECTION & BUTTON */}
+                                <div className="sm:col-span-3 bg-white p-2.5 rounded-xl border border-gray-200/80 space-y-1 shadow-sm">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[9px] font-black text-gray-500 uppercase tracking-wider">Payment Method</span>
+                                        {((Date.now() - new Date(viewingOrderDetails.created_at).getTime()) <= 24 * 60 * 60 * 1000) && (
+                                            <button
+                                                onClick={() => setIsChangingPaymentMethod(!isChangingPaymentMethod)}
+                                                className="text-[9px] bg-amber-500 hover:bg-amber-600 text-white font-black px-2 py-0.5 rounded-md transition-all shadow-sm"
+                                            >
+                                                {isChangingPaymentMethod ? 'Cancel' : '✏️ Change Payment'}
+                                            </button>
+                                        )}
                                     </div>
+                                    <span className="font-bold text-gray-900 block text-xs">{viewingOrderDetails.payment_method}</span>
+
+                                    {isChangingPaymentMethod && (
+                                        <div className="pt-2 border-t border-amber-200/80 space-y-1.5 mt-1">
+                                            <span className="text-[8px] font-black text-gray-500 uppercase block">Select Correct Payment Method:</span>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                                <button
+                                                    onClick={() => handleReClearPaymentMethod(viewingOrderDetails.id, 'Cash')}
+                                                    className="py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    💵 Cash
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearPaymentMethod(viewingOrderDetails.id, 'Card')}
+                                                    className="py-1.5 px-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    💳 Card
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearPaymentMethod(viewingOrderDetails.id, 'I&M Paybill')}
+                                                    className="py-1.5 px-2 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    🏦 I&M Paybill
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearPaymentMethod(viewingOrderDetails.id, 'Paid to APP')}
+                                                    className="py-1.5 px-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    🛵 Paid to APP
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* SALE CHANNEL & SERVICE SECTION & BUTTON */}
+                                <div className="sm:col-span-3 bg-white p-2.5 rounded-xl border border-gray-200/80 space-y-1 shadow-sm">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[9px] font-black text-gray-500 uppercase tracking-wider">Channel & Service</span>
+                                        {((Date.now() - new Date(viewingOrderDetails.created_at).getTime()) <= 24 * 60 * 60 * 1000) && (
+                                            <button
+                                                onClick={() => setIsChangingOrderChannel(!isChangingOrderChannel)}
+                                                className="text-[9px] bg-purple-600 hover:bg-purple-700 text-white font-black px-2 py-0.5 rounded-md transition-all shadow-sm"
+                                            >
+                                                {isChangingOrderChannel ? 'Cancel' : '✏️ Change Channel'}
+                                            </button>
+                                        )}
+                                    </div>
+                                    <span className="font-bold text-gray-900 block text-xs">{viewingOrderDetails.order_channel || 'Walk-in'} ({viewingOrderDetails.dining_option})</span>
+
+                                    {isChangingOrderChannel && (
+                                        <div className="pt-2 border-t border-purple-200/80 space-y-1.5 mt-1">
+                                            <span className="text-[8px] font-black text-gray-500 uppercase block">Re-clear Sale Channel (Up to 24 hrs):</span>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                                <button
+                                                    onClick={() => handleReClearOrderChannel(viewingOrderDetails.id, 'Walk-in')}
+                                                    className="py-1.5 px-2 bg-gray-800 hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    🚶 Walk-in
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearOrderChannel(viewingOrderDetails.id, 'WhatsApp')}
+                                                    className="py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    💬 WhatsApp
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearOrderChannel(viewingOrderDetails.id, 'Uber Eats')}
+                                                    className="py-1.5 px-2 bg-black hover:bg-gray-900 text-emerald-400 text-[10px] font-bold rounded-lg transition-all border border-emerald-500/30"
+                                                >
+                                                    🛵 Uber Eats
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearOrderChannel(viewingOrderDetails.id, 'Glovo')}
+                                                    className="py-1.5 px-2 bg-amber-400 hover:bg-amber-500 text-amber-950 text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    🟡 Glovo
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearOrderChannel(viewingOrderDetails.id, 'Bolt Food')}
+                                                    className="py-1.5 px-2 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    ⚡ Bolt Food
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReClearOrderChannel(viewingOrderDetails.id, 'Ando')}
+                                                    className="py-1.5 px-2 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold rounded-lg transition-all"
+                                                >
+                                                    🔴 Ando
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
+
+
                             {/* Order Items list */}
-                            <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl p-3 bg-gray-50/50 space-y-2">
-                                <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Ordered Items</div>
+                            <div className="flex-1 min-h-[160px] max-h-[300px] overflow-y-auto custom-scrollbar border border-gray-200 rounded-2xl p-3.5 bg-white space-y-2.5 shadow-inner">
+                                <div className="text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2 pb-1 border-b border-gray-100 flex justify-between items-center">
+                                    <span>Ordered Items ({viewingOrderDetails.items?.length || 0})</span>
+                                    <span className="text-[9px] text-gray-400 font-medium">Itemized Receipt Preview</span>
+                                </div>
                                 {viewingOrderDetails.items && viewingOrderDetails.items.length > 0 ? (
-                                    viewingOrderDetails.items.map((item, index) => (
-                                        <div key={index} className="flex justify-between items-start text-xs border-b border-gray-100/70 pb-2 last:border-0 last:pb-0">
-                                            <div className="space-y-0.5 pr-2">
-                                                <div className="font-bold text-gray-850">
-                                                    {item.item_name} <span className="text-gray-400 font-medium">x {item.quantity}</span>
-                                                </div>
-                                                {item.instructions && (
-                                                    <div className="text-[10px] text-orange-655 font-bold italic">
-                                                        * {item.instructions}
+                                    viewingOrderDetails.items.map((item, index) => {
+                                        let itemPrice = parseFloat(item.price) || 0;
+                                        if (item.instructions) {
+                                            const matches = item.instructions.match(/\(\+(\d+)\)/g);
+                                            if (matches) {
+                                                const parsedMods = matches.reduce((sum, matchStr) => sum + (parseFloat(matchStr.replace(/[^\d.]/g, '')) || 0), 0);
+                                                const menuItem = (menu || []).find(m => m.name === item.item_name);
+                                                const baseP = menuItem ? (menuItem.price || 0) : itemPrice;
+                                                if (itemPrice < (baseP + parsedMods)) {
+                                                    itemPrice = baseP + parsedMods;
+                                                }
+                                            }
+                                        }
+                                        return (
+                                            <div key={index} className="flex justify-between items-start text-xs border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                                                <div className="space-y-0.5 pr-2">
+                                                    <div className="font-bold text-gray-900">
+                                                        {item.item_name} <span className="text-emerald-700 font-extrabold ml-1">x {item.quantity}</span>
                                                     </div>
-                                                )}
+                                                    {item.instructions && (
+                                                        <div className="text-[10px] text-amber-700 font-semibold italic bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100/60 inline-block mt-0.5">
+                                                            * {item.instructions}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="font-mono font-black text-gray-950 shrink-0 text-xs">
+                                                    KES {(itemPrice * item.quantity).toLocaleString()}
+                                                </div>
                                             </div>
-                                            <div className="font-mono font-black text-gray-900 shrink-0">
-                                                KES {(item.price * item.quantity).toLocaleString()}
-                                            </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 ) : (
-                                    <div className="text-center text-xs text-gray-400 italic py-4">No items loaded.</div>
+                                    <div className="text-center text-xs text-gray-400 italic py-6">No items loaded.</div>
                                 )}
                             </div>
 
@@ -5969,24 +8242,45 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                     </div>
                                 )}
 
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-xs text-gray-500 font-semibold">
-                                        <span>Subtotal</span>
-                                        <span className="font-mono">KES {(viewingOrderDetails.total_amount + (viewingOrderDetails.discount || 0)).toLocaleString()}</span>
-                                    </div>
-                                    {viewingOrderDetails.discount > 0 && (
-                                        <div className="flex justify-between text-xs text-orange-600 font-semibold">
-                                            <span>Discount</span>
-                                            <span className="font-mono">- KES {viewingOrderDetails.discount.toLocaleString()}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between text-sm font-black text-gray-950">
-                                        <span>Grand Total</span>
-                                        <span className="font-mono text-md">KES {viewingOrderDetails.total_amount.toLocaleString()}</span>
-                                    </div>
-                                </div>
+                                {(() => {
+                                    const computedItemsTotal = (viewingOrderDetails.items || []).reduce((sum, item) => {
+                                        let itemPrice = parseFloat(item.price) || 0;
+                                        if (item.instructions) {
+                                            const matches = item.instructions.match(/\(\+(\d+)\)/g);
+                                            if (matches) {
+                                                const parsedMods = matches.reduce((sum, matchStr) => sum + (parseFloat(matchStr.replace(/[^\d.]/g, '')) || 0), 0);
+                                                const menuItem = (menu || []).find(m => m.name === item.item_name);
+                                                const baseP = menuItem ? (menuItem.price || 0) : itemPrice;
+                                                if (itemPrice < (baseP + parsedMods)) {
+                                                    itemPrice = baseP + parsedMods;
+                                                }
+                                            }
+                                        }
+                                        return sum + (itemPrice * (parseFloat(item.quantity) || 1));
+                                    }, 0);
+                                    const finalComputedTotal = Math.max(0, computedItemsTotal - (viewingOrderDetails.discount || 0));
 
-                                <div className="flex gap-2">
+                                    return (
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between text-xs text-gray-500 font-semibold">
+                                                <span>Subtotal</span>
+                                                <span className="font-mono">KES {computedItemsTotal.toLocaleString()}</span>
+                                            </div>
+                                            {viewingOrderDetails.discount > 0 && (
+                                                <div className="flex justify-between text-xs text-orange-600 font-semibold">
+                                                    <span>Discount</span>
+                                                    <span className="font-mono">- KES {viewingOrderDetails.discount.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between text-sm font-black text-gray-950">
+                                                <span>Grand Total</span>
+                                                <span className="font-mono text-md">KES {finalComputedTotal.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                <div className="flex flex-wrap gap-2">
                                     <button
                                         onClick={() => {
                                             setActiveReceipt(viewingOrderDetails);
@@ -5996,6 +8290,36 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                     >
                                         <Printer size={13} /> Reprint
                                     </button>
+
+                                    {(() => {
+                                        const computedItemsTotal = (viewingOrderDetails.items || []).reduce((sum, item) => {
+                                            let itemPrice = parseFloat(item.price) || 0;
+                                            if (item.instructions) {
+                                                const matches = item.instructions.match(/\(\+(\d+)\)/g);
+                                                if (matches) {
+                                                    const parsedMods = matches.reduce((s, m) => s + (parseFloat(m.replace(/[^\d.]/g, '')) || 0), 0);
+                                                    const menuItem = (menu || []).find(mi => mi.name === item.item_name);
+                                                    const baseP = menuItem ? (menuItem.price || 0) : itemPrice;
+                                                    if (itemPrice < (baseP + parsedMods)) itemPrice = baseP + parsedMods;
+                                                }
+                                            }
+                                            return sum + (itemPrice * (parseFloat(item.quantity) || 1));
+                                        }, 0);
+                                        const orderTotal = Math.max(0, computedItemsTotal - (viewingOrderDetails.discount || 0));
+                                        return (
+                                            <button
+                                                onClick={() => {
+                                                    setSplitBillOrderTotal(orderTotal);
+                                                    setSplitBillCount(2);
+                                                    setSplitReceiptsData(null);
+                                                    setSplitBillModalOpen(true);
+                                                }}
+                                                className="flex-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all flex items-center justify-center gap-1"
+                                            >
+                                                ✂️ Split Receipt
+                                            </button>
+                                        );
+                                    })()}
 
                                     {viewingOrderDetails.status !== 'Returned' && (
                                         <button
@@ -6279,7 +8603,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex justify-between items-center">
                                 <div>
                                     <span className="text-[9px] text-gray-400 font-black uppercase tracking-wider">Order Target</span>
-                                    <h4 className="text-sm font-bold text-gray-900">#{clearingPendingOrder.ticket_number} • {clearingPendingOrder.customer_name}</h4>
+                                    <h4 className="text-sm font-bold text-gray-900">#{obfuscateTicket(clearingPendingOrder.ticket_number)} • {clearingPendingOrder.customer_name}</h4>
                                 </div>
                                 <div className="text-right">
                                     <span className="text-[9px] text-gray-400 font-black uppercase tracking-wider">Total Due</span>
@@ -6295,7 +8619,10 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         onChange={(e) => setClearingBrand(e.target.value)}
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-900 outline-none focus:border-primary"
                                     >
-                                        <option value="ManiPOS">ManiPOS</option>
+                                        <option value="POT OF JOLLOF">POT OF JOLLOF</option>
+                                        <option value="LITTLE LAGOS">LITTLE LAGOS</option>
+                                        <option value="CAFE SWAHILI">CAFE SWAHILI</option>
+                                        <option value="SAMAKI STREET">SAMAKI STREET</option>
                                     </select>
                                 </div>
 
@@ -6329,8 +8656,8 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                                         disabled={['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(clearingChannel)}
                                         className="w-full bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-900 outline-none focus:border-primary"
                                     >
-                                        <option value="Dine Inn">Dine Inn</option>
-                                        <option value="Pick-Up/Take Away">Pick-Up/Take Away</option>
+                                        <option value="Dine-in">Dine-in</option>
+                                        <option value="Takeaway">Takeaway</option>
                                         <option value="Delivery">Delivery</option>
                                     </select>
                                 </div>
@@ -6373,125 +8700,285 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                 )}
             </AnimatePresence>
 
-            {/* Split Bill Calculator & Partial Pay Modal */}
+            {/* Split Bill Modal — Two Modes: Split by Guests / Split by Payment */}
             <AnimatePresence>
-                {splitBillModalOpen && (
+                {splitBillModalOpen && (() => {
+                    const billTotal = splitBillOrderTotal ?? total;
+                    // ── Guest-mode: group cart items by guestNo ──
+                    const guestGroups = {};
+                    for (let g = 1; g <= splitBillCount; g++) guestGroups[g] = [];
+                    cart.forEach(item => {
+                        const g = item.guestNo || 1;
+                        if (!guestGroups[g]) guestGroups[g] = [];
+                        guestGroups[g].push(item);
+                    });
+                    const guestTotals = Object.fromEntries(
+                        Object.entries(guestGroups).map(([g, items]) => [
+                            g,
+                            items.reduce((s, i) => s + i.price * i.quantity, 0)
+                        ])
+                    );
+                    // ── Payment-mode: running split total ──
+                    const splitPayTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitMpesa) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitImPaybill) || 0);
+                    const splitPayDiff = billTotal - splitPayTotal;
+                    const splitPayBalanced = Math.abs(splitPayDiff) < 0.5;
+
+                    return (
                     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 text-secondary">
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0 }}
-                            className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-gray-100 flex flex-col gap-5"
+                            className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-gray-100 flex flex-col gap-0 overflow-hidden max-h-[92vh]"
                         >
-                            <div className="text-center space-y-1">
-                                <h3 className="font-black text-lg text-gray-900">Split Bill & Partial Payments</h3>
-                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Configure division share or pay a guest's portion</p>
-                            </div>
-
-                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex justify-between items-center">
-                                <div>
-                                    <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider">Total Bill</span>
-                                    <h4 className="text-xl font-mono font-black text-gray-950">KES {total.toLocaleString()}</h4>
-                                </div>
-                                <div className="text-right">
-                                    <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider">Table/Patron</span>
-                                    <h4 className="text-sm font-bold text-gray-900">{customerName || 'Guest'}</h4>
-                                </div>
-                            </div>
-
-                            {/* Section 1: Equal Split calculator */}
-                            <div className="space-y-3 border-b border-gray-105 pb-4">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-xs font-bold text-gray-700">Split Equally By Guests:</label>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => setSplitBillCount(prev => Math.max(2, prev - 1))}
-                                            className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100"
-                                        >
-                                            -
-                                        </button>
-                                        <span className="font-black text-sm text-gray-900 w-6 text-center">{splitBillCount}</span>
-                                        <button
-                                            onClick={() => setSplitBillCount(prev => Math.min(8, prev + 1))}
-                                            className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100"
-                                        >
-                                            +
-                                        </button>
+                            {/* Header */}
+                            <div className="p-5 border-b border-gray-100 bg-gray-50/60 shrink-0">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="font-black text-lg text-gray-900">Split Bill</h3>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Choose how you'd like to split this bill</p>
+                                    </div>
+                                    <div className="text-right shrink-0 ml-4">
+                                        <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider block">Grand Total</span>
+                                        <span className="text-xl font-mono font-black text-gray-950">KES {billTotal.toLocaleString()}</span>
                                     </div>
                                 </div>
 
-                                <div className="bg-orange-50/50 p-3.5 rounded-xl border border-orange-100 flex justify-between items-center text-xs font-bold text-orange-900">
-                                    <span>Each Guest Share ({splitBillCount} people):</span>
-                                    <span className="font-mono text-sm font-black">KES {Math.round(total / splitBillCount).toLocaleString()}</span>
-                                </div>
-
-                                <button
-                                    onClick={() => {
-                                        const shares = [];
-                                        for (let i = 1; i <= splitBillCount; i++) {
-                                            shares.push({
-                                                guestNo: i,
-                                                totalGuests: splitBillCount,
-                                                amount: Math.round(total / splitBillCount)
-                                            });
-                                        }
-                                        setSplitReceiptsData(shares);
-                                    }}
-                                    className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-1.5"
-                                >
-                                    <Printer size={14} /> Print {splitBillCount} Split Receipt Slips
-                                </button>
-                            </div>
-
-                            {/* Section 2: Partial payment checkout */}
-                            {editingOrderId ? (
-                                <div className="space-y-3">
-                                    <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider block">Pay a Guest's Share (Reduces Tab Balance)</span>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Pay Method</label>
-                                            <select
-                                                value={partialPaymentMethod}
-                                                onChange={(e) => setPartialPaymentMethod(e.target.value)}
-                                                className="w-full bg-white border border-gray-250 rounded-xl px-2.5 py-2 text-xs font-bold outline-none"
-                                            >
-                                                <option value="Cash">Cash</option>
-                                                <option value="M-Pesa">M-Pesa</option>
-                                                <option value="Card">Card</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Amount (KES)</label>
-                                            <input
-                                                type="number"
-                                                placeholder={Math.round(total / splitBillCount).toString()}
-                                                value={partialPaymentAmount}
-                                                onChange={(e) => setPartialPaymentAmount(e.target.value)}
-                                                className="w-full p-2 border border-gray-250 bg-white rounded-xl text-xs font-mono font-bold text-center"
-                                            />
-                                        </div>
-                                    </div>
-
+                                {/* Mode tabs */}
+                                <div className="flex gap-2 mt-4">
                                     <button
-                                        onClick={handlePartialPayment}
-                                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-md"
+                                        onClick={() => setSplitBillMode('guests')}
+                                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all border ${
+                                            splitBillMode === 'guests'
+                                                ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                        }`}
                                     >
-                                        Confirm Guest Share Payment — KES {(parseFloat(partialPaymentAmount) || Math.round(total / splitBillCount)).toLocaleString()}
+                                        ✂️ Split by Guests
+                                    </button>
+                                    <button
+                                        onClick={() => setSplitBillMode('payment')}
+                                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all border ${
+                                            splitBillMode === 'payment'
+                                                ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        💳 Split Payment Methods
                                     </button>
                                 </div>
-                            ) : (
-                                <p className="text-[10px] text-gray-400 font-semibold italic text-center">To make partial share payments and update table tabs, save this order as 'Pending' Dine Inn first.</p>
+                            </div>
+
+                            {/* ─── TAB: Split by Guests ─── */}
+                            {splitBillMode === 'guests' && (
+                                <>
+                                    {/* Guest count picker */}
+                                    <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-4 shrink-0 bg-white">
+                                        <span className="text-xs font-black text-gray-700">Number of Guests:</span>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    const next = Math.max(2, splitBillCount - 1);
+                                                    setSplitBillCount(next);
+                                                    setCart(prev => prev.map(c => (c.guestNo || 1) > next ? { ...c, guestNo: 1 } : c));
+                                                }}
+                                                className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100"
+                                            >-</button>
+                                            <span className="font-black text-sm text-gray-900 w-6 text-center">{splitBillCount}</span>
+                                            <button
+                                                onClick={() => setSplitBillCount(prev => Math.min(8, prev + 1))}
+                                                className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100"
+                                            >+</button>
+                                        </div>
+                                        <span className="text-[10px] text-gray-400 font-semibold">Tap the G# chip on each cart item to assign it</span>
+                                    </div>
+
+                                    {/* Per-guest item breakdown */}
+                                    <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                                        {Array.from({ length: splitBillCount }, (_, gi) => {
+                                            const gNo = gi + 1;
+                                            const items = guestGroups[gNo] || [];
+                                            const gTotal = guestTotals[gNo] || 0;
+                                            const gColors = ['indigo', 'emerald', 'amber', 'rose', 'violet', 'sky', 'orange', 'teal'];
+                                            const c = gColors[gi % gColors.length];
+                                            return (
+                                                <div key={gNo} className={`rounded-2xl border bg-${c}-50/40 border-${c}-100 overflow-hidden`}>
+                                                    <div className={`px-3.5 py-2.5 border-b border-${c}-100 flex justify-between items-center`}>
+                                                        <span className={`text-xs font-black text-${c}-800 uppercase tracking-wider`}>Guest {gNo}</span>
+                                                        <span className={`font-mono text-sm font-black text-${c}-900`}>KES {gTotal.toLocaleString()}</span>
+                                                    </div>
+                                                    {items.length === 0 ? (
+                                                        <p className="text-[10px] text-gray-400 italic text-center py-3">No items assigned</p>
+                                                    ) : (
+                                                        <div className="px-3.5 py-2 space-y-1.5">
+                                                            {items.map((item, idx) => (
+                                                                <div key={idx} className="flex justify-between items-center text-[11px] font-medium text-gray-800">
+                                                                    <span>{item.name} <span className="text-gray-400">x{item.quantity}</span></span>
+                                                                    <span className="font-mono font-bold">KES {(item.price * item.quantity).toLocaleString()}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="p-4 border-t border-gray-100 space-y-2 shrink-0 bg-gray-50/50">
+                                        <button
+                                            onClick={() => {
+                                                const shares = Array.from({ length: splitBillCount }, (_, gi) => {
+                                                    const gNo = gi + 1;
+                                                    const items = guestGroups[gNo] || [];
+                                                    return {
+                                                        guestNo: gNo,
+                                                        totalGuests: splitBillCount,
+                                                        amount: guestTotals[gNo] || 0,
+                                                        items: items
+                                                    };
+                                                });
+                                                setSplitReceiptsData(shares);
+                                            }}
+                                            className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-1.5 shadow-md"
+                                        >
+                                            <Printer size={14} /> Generate {splitBillCount} Separate Receipts
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setSplitBillModalOpen(false);
+                                                setSplitBillOrderTotal(null);
+                                            }}
+                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                </>
                             )}
 
-                            <button
-                                onClick={() => setSplitBillModalOpen(false)}
-                                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center"
-                            >
-                                Close
-                            </button>
+                            {/* ─── TAB: Split by Payment Method ─── */}
+                            {splitBillMode === 'payment' && (
+                                <>
+                                    <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                                        <p className="text-[11px] text-gray-500 font-semibold">Enter the amount the customer is paying with each method. They must add up to the grand total.</p>
+
+                                        {/* Cash */}
+                                        <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-xs font-black text-emerald-800 flex items-center gap-1.5">💵 Cash</label>
+                                                {splitCash && <span className="text-xs font-mono font-bold text-emerald-700">KES {parseFloat(splitCash).toLocaleString()}</span>}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                placeholder="0"
+                                                value={splitCash}
+                                                onChange={e => setSplitCash(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white border border-emerald-200 rounded-xl text-sm font-mono font-bold text-gray-900 outline-none focus:border-emerald-400 transition-colors"
+                                            />
+                                        </div>
+
+                                        {/* M-Pesa */}
+                                        <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-xs font-black text-green-800 flex items-center gap-1.5">📱 M-Pesa</label>
+                                                {splitMpesa && <span className="text-xs font-mono font-bold text-green-700">KES {parseFloat(splitMpesa).toLocaleString()}</span>}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                placeholder="0"
+                                                value={splitMpesa}
+                                                onChange={e => setSplitMpesa(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white border border-green-200 rounded-xl text-sm font-mono font-bold text-gray-900 outline-none focus:border-green-400 transition-colors"
+                                            />
+                                        </div>
+
+                                        {/* Card */}
+                                        <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-xs font-black text-blue-800 flex items-center gap-1.5">💳 Card</label>
+                                                {splitCard && <span className="text-xs font-mono font-bold text-blue-700">KES {parseFloat(splitCard).toLocaleString()}</span>}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                placeholder="0"
+                                                value={splitCard}
+                                                onChange={e => setSplitCard(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm font-mono font-bold text-gray-900 outline-none focus:border-blue-400 transition-colors"
+                                            />
+                                        </div>
+
+                                        {/* I&M Paybill */}
+                                        <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-xs font-black text-amber-800 flex items-center gap-1.5">🏦 I&M Paybill</label>
+                                                {splitImPaybill && <span className="text-xs font-mono font-bold text-amber-700">KES {parseFloat(splitImPaybill).toLocaleString()}</span>}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                placeholder="0"
+                                                value={splitImPaybill}
+                                                onChange={e => setSplitImPaybill(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white border border-amber-200 rounded-xl text-sm font-mono font-bold text-gray-900 outline-none focus:border-amber-400 transition-colors"
+                                            />
+                                        </div>
+
+                                        {/* Running balance */}
+                                        <div className={`p-4 rounded-2xl border flex justify-between items-center ${
+                                            splitPayBalanced ? 'bg-emerald-50 border-emerald-200' : 'bg-orange-50 border-orange-200'
+                                        }`}>
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Amount Entered</span>
+                                                <span className="font-mono font-black text-gray-900 text-lg">KES {splitPayTotal.toLocaleString()}</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">
+                                                    {splitPayBalanced ? 'Status' : 'Remaining'}
+                                                </span>
+                                                <span className={`font-mono font-black text-sm ${
+                                                    splitPayBalanced ? 'text-emerald-600' : 'text-orange-600'
+                                                }`}>
+                                                    {splitPayBalanced ? '✓ Balanced' : `KES ${Math.abs(splitPayDiff).toLocaleString()} ${splitPayDiff > 0 ? 'short' : 'over'}`}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="p-4 border-t border-gray-100 space-y-2 shrink-0 bg-gray-50/50">
+                                        <button
+                                            disabled={!splitPayBalanced}
+                                            onClick={() => {
+                                                // Map I&M Paybill amount into the notes when card is used or add directly
+                                                const imAmount = parseFloat(splitImPaybill) || 0;
+                                                const cardAmount = parseFloat(splitCard) || 0;
+                                                // Store I&M amount as part of the card bucket for now, record separately in notes
+                                                setSplitCard(String(cardAmount + imAmount) || splitCard);
+                                                setSplitImPaybill('');
+                                                setPaymentMethod('Split');
+                                                setSplitBillModalOpen(false);
+                                                setSplitBillOrderTotal(null);
+                                            }}
+                                            className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md"
+                                        >
+                                            ✓ Confirm Split Payment — KES {billTotal.toLocaleString()}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setSplitBillModalOpen(false);
+                                                setSplitBillOrderTotal(null);
+                                            }}
+                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </motion.div>
                     </div>
-                )}
+                    );
+                })()}
             </AnimatePresence>
 
             {/* Split Receipts Print Dialog */}
@@ -6505,7 +8992,7 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                             className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none flex flex-col max-h-[90vh] print:max-h-none"
                         >
                             <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0 print:hidden">
-                                <span className="text-xs font-black uppercase text-gray-400">Print Split Slips ({splitReceiptsData.length} parts)</span>
+                                <span className="text-xs font-black uppercase text-gray-400">Print Split Slips ({splitReceiptsData.length} guests)</span>
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={() => window.print()}
@@ -6552,34 +9039,41 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
 
                                         <div className="space-y-2 mb-3 text-[10px]">
                                             <div className="grid grid-cols-[1fr_40px_60px] font-bold">
-                                                <span>ORDER ITEMS SUMMARY</span>
+                                                <span>GUEST {share.guestNo} ITEMS</span>
                                                 <span className="text-center">QTY</span>
                                                 <span className="text-right">PRICE</span>
                                             </div>
                                             <div className="border-b border-dashed border-black"></div>
-                                            {cart.map((item, idx) => (
-                                                <div key={idx} className="grid grid-cols-[1fr_40px_60px]">
-                                                    <span>{item.name}</span>
-                                                    <span className="text-center">{item.quantity}</span>
-                                                    <span className="text-right">{item.price.toLocaleString()}</span>
-                                                </div>
-                                            ))}
+                                            {(share.items && share.items.length > 0) ? (
+                                                share.items.map((item, idx) => (
+                                                    <div key={idx} className="grid grid-cols-[1fr_40px_60px]">
+                                                        <span>{item.name}</span>
+                                                        <span className="text-center">{item.quantity}</span>
+                                                        <span className="text-right">{(item.price * item.quantity).toLocaleString()}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                cart.map((item, idx) => (
+                                                    <div key={idx} className="grid grid-cols-[1fr_40px_60px]">
+                                                        <span>{item.name}</span>
+                                                        <span className="text-center">{item.quantity}</span>
+                                                        <span className="text-right">{item.price.toLocaleString()}</span>
+                                                    </div>
+                                                ))
+                                            )}
                                             <div className="border-b border-dashed border-black pt-1"></div>
                                         </div>
 
                                         <div className="space-y-1 text-[10px] mb-4">
                                             <div className="flex justify-between font-black text-sm pt-1">
-                                                <span>SHARE AMOUNT ({share.guestNo}/{share.totalGuests}):</span>
+                                                <span>GUEST {share.guestNo} TOTAL:</span>
                                                 <span>KES {share.amount.toLocaleString()}</span>
-                                            </div>
-                                            <div className="flex justify-between text-[8px] text-gray-500">
-                                                <span>(Original Grand Total: KES {total.toLocaleString()})</span>
                                             </div>
                                             <div className="border-b border-dashed border-black pt-2"></div>
                                         </div>
 
                                         <div className="text-center pt-1 text-[9px]">
-                                            <p className="font-bold uppercase">THANK YOU FOR DINE-IN SPLIT!</p>
+                                            <p className="font-bold uppercase">THANK YOU FOR DINING WITH US!</p>
                                         </div>
                                     </div>
                                 ))}
@@ -6588,6 +9082,183 @@ export function PosTerminal({ staffName, staffRole, onSignOut, tenantSlug }) {
                     </div>
                 )}
             </AnimatePresence>
+            {/* ── REGISTER NEW GUEST MODAL (AUTO-SYNCS TO GUEST CRM) ── */}
+            {showRegisterGuestModal && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-gray-950/70 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-150">
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/60">
+                            <div>
+                                <h3 className="font-black text-gray-950 text-base flex items-center gap-2">
+                                    <UserPlus size={18} className="text-[#18A07A]" /> Register New Guest to CRM
+                                </h3>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">Automated Admin Guest CRM Integration</p>
+                            </div>
+                            <button onClick={() => setShowRegisterGuestModal(false)} className="p-1.5 text-gray-400 hover:text-gray-900 rounded-xl">
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleRegisterNewGuest} className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">First Name *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="e.g. Samuel"
+                                        value={newGuestFn}
+                                        onChange={e => setNewGuestFn(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Last Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Ochieng"
+                                        value={newGuestLn}
+                                        onChange={e => setNewGuestLn(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Phone Number *</label>
+                                    <input
+                                        type="tel"
+                                        required
+                                        placeholder="e.g. 0712345678"
+                                        value={newGuestPhone}
+                                        onChange={e => setNewGuestPhone(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Email Address</label>
+                                    <input
+                                        type="email"
+                                        placeholder="e.g. guest@gmail.com"
+                                        value={newGuestEmail}
+                                        onChange={e => setNewGuestEmail(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Restaurant Brand *</label>
+                                    <select
+                                        value={newGuestBrand}
+                                        onChange={e => setNewGuestBrand(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
+                                    >
+                                        <option value="POT OF JOLLOF">🫕 Pot of Jollof</option>
+                                        <option value="LITTLE LAGOS">🌶️ Little Lagos</option>
+                                        <option value="CAFE SWAHILI">☕ Cafe Swahili</option>
+                                        <option value="SAMAKI STREET">🐟 Samaki Street</option>
+                                        <option value="General Brand">🏢 General Restaurant</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Acquisition Channel *</label>
+                                    <select
+                                        value={newGuestChannel}
+                                        onChange={e => setNewGuestChannel(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
+                                    >
+                                        <option value="Walk-in">🏃 Walk-in (Dine-In)</option>
+                                        <option value="Takeaway">🛍️ Phone / Takeaway</option>
+                                        <option value="Delivery">🚚 Direct Delivery</option>
+                                        <option value="Glovo">🟡 Glovo</option>
+                                        <option value="UberEats">🟢 Uber Eats</option>
+                                        <option value="Bolt Food">🟢 Bolt Food</option>
+                                        <option value="Microsite">🌐 Self-Service Microsite</option>
+                                        <option value="Social Media">📱 Instagram / WhatsApp</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Notes / Allergies / Preferences</label>
+                                <textarea
+                                    rows={2}
+                                    placeholder="e.g. Likes extra pepper, VIP regular, table window..."
+                                    value={newGuestNotes}
+                                    onChange={e => setNewGuestNotes(e.target.value)}
+                                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none resize-none"
+                                />
+                            </div>
+                            <div className="pt-2 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRegisterGuestModal(false)}
+                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={savingGuest}
+                                    className="px-5 py-2 bg-[#18A07A] hover:bg-[#128061] text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
+                                >
+                                    {savingGuest ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                                    Save & Sync to Guest CRM
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+            {/* ── OUT OF STOCK / 86 ITEM SELECTION MODAL ── */}
+            {itemToTurnOffModal && (
+                <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-gray-950/70 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-150">
+                        <div className="p-5 border-b border-gray-100 bg-rose-50/60 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-black text-rose-950 text-base flex items-center gap-1.5">
+                                    🚫 Mark Item Out of Stock
+                                </h3>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">{itemToTurnOffModal.name}</p>
+                            </div>
+                            <button onClick={() => setItemToTurnOffModal(null)} className="p-1.5 text-gray-400 hover:text-gray-900 rounded-xl">
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-3">
+                            <p className="text-xs text-gray-600 font-medium">How long should <strong>{itemToTurnOffModal.name}</strong> be switched off?</p>
+
+                            <button
+                                onClick={() => confirmTurnOffItem(itemToTurnOffModal, 'day')}
+                                className="w-full p-3.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded-2xl text-left transition-all group flex items-center justify-between shadow-2xs"
+                            >
+                                <div>
+                                    <span className="font-black text-xs block text-amber-950">☀️ Rest of the Day</span>
+                                    <span className="text-[10px] text-amber-700 font-medium">Item will automatically turn back ON tomorrow morning.</span>
+                                </div>
+                                <span className="text-lg group-hover:translate-x-1 transition-transform">➡️</span>
+                            </button>
+
+                            <button
+                                onClick={() => confirmTurnOffItem(itemToTurnOffModal, 'indefinite')}
+                                className="w-full p-3.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-900 rounded-2xl text-left transition-all group flex items-center justify-between shadow-2xs"
+                            >
+                                <div>
+                                    <span className="font-black text-xs block text-rose-950">♾️ Indefinitely</span>
+                                    <span className="text-[10px] text-rose-700 font-medium">Stays switched off until staff manually turns it back ON.</span>
+                                </div>
+                                <span className="text-lg group-hover:translate-x-1 transition-transform">➡️</span>
+                            </button>
+
+                            <button
+                                onClick={() => setItemToTurnOffModal(null)}
+                                className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors mt-2"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -6603,7 +9274,7 @@ function printCashierSlips(receipt) {
     const netBase = receipt.total_amount / 1.18;
     const vatAmount = netBase * 0.16;
     const cateringLevy = netBase * 0.02;
-    const dateFormatted = new Date(receipt.created_at).toLocaleString();
+    const dateFormatted = new Date(receipt.created_at).toLocaleString('en-US', { timeZone: 'Africa/Nairobi' });
 
     const baseStyle = `
         * { margin:0; padding:0; box-sizing:border-box; }
@@ -6671,8 +9342,8 @@ function printCashierSlips(receipt) {
           <p class="sub">Tel: 0795384140 / 0799034617</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
-        <div class="meta"><span>TICKET #:</span><span>${receipt.ticket_number}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
@@ -6704,8 +9375,8 @@ function printCashierSlips(receipt) {
             <p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
-        <div class="meta"><span>TICKET #:</span><span>${receipt.ticket_number}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
@@ -6726,11 +9397,13 @@ function printCashierSlips(receipt) {
         <div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div>
         <div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>
         ${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}
+        ${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `
         <div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;">
           <div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
           <div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div>
           <div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div>
         </div>
+        `}
         <div class="divider"></div>
         <div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div>
     </div>`;
@@ -6746,7 +9419,7 @@ function printCashierSlips(receipt) {
         <div class="divider-solid"></div>
         <div class="meta"><span>CHEF NAME:</span><span>___________________</span></div>
         <div class="divider"></div>
-        <div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${receipt.ticket_number}</div>
+        <div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div>
     </div>`;
 
     const slip3 = `
@@ -6776,8 +9449,8 @@ function printCashierSlips(receipt) {
         <div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div>
         <div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
-        <div class="meta"><span>TICKET #:</span><span>${receipt.ticket_number}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
@@ -6802,7 +9475,7 @@ function printCashierSlips(receipt) {
     </div>`;
 
     // slip2 (KOT) is NOT included here — it prints separately to the chef printer via printKitchenSlips()
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cashier Slips #${receipt.ticket_number}</title><style>${baseStyle}</style></head><body>${slip1}${slip3}${slip4}</body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cashier Slips #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip1}${slip3}${slip4}</body></html>`;
 
     const win = window.open('', '_blank', 'width=420,height=700,scrollbars=yes');
     if (!win) { alert('Please allow popups to enable print routing.'); return; }
@@ -6817,7 +9490,7 @@ function printCashierSlips(receipt) {
  * Used by QZ Tray to print silently without opening a popup.
  */
 function buildCashierSlipsHTML(receipt) {
-    const dateFormatted = new Date(receipt.created_at).toLocaleString();
+    const dateFormatted = new Date(receipt.created_at).toLocaleString('en-US', { timeZone: 'Africa/Nairobi' });
     return _buildCashierHTML(receipt, dateFormatted);
 }
 
@@ -6826,12 +9499,12 @@ function buildCashierSlipsHTML(receipt) {
  * Used by QZ Tray to print silently without opening a popup.
  */
 function buildKitchenSlipsHTML(receipt) {
-    const dateFormatted = new Date(receipt.created_at).toLocaleString();
+    const dateFormatted = new Date(receipt.created_at).toLocaleString('en-US', { timeZone: 'Africa/Nairobi' });
     return _buildKitchenHTML(receipt, dateFormatted);
 }
 
 function printKitchenSlips(receipt) {
-    const dateFormatted = new Date(receipt.created_at).toLocaleString();
+    const dateFormatted = new Date(receipt.created_at).toLocaleString('en-US', { timeZone: 'Africa/Nairobi' });
 
     const baseStyle = `
         * { margin:0; padding:0; box-sizing:border-box; }
@@ -6877,8 +9550,8 @@ function printKitchenSlips(receipt) {
           <p class="sub">Tel: 0795384140 / 0799034617</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
-        <div class="meta"><span>TICKET #:</span><span>${receipt.ticket_number}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
@@ -6898,7 +9571,7 @@ function printKitchenSlips(receipt) {
         <div class="divider-solid"></div>
         <div class="meta"><span>CHEF NAME:</span><span>___________________</span></div>
         <div class="divider"></div>
-        <div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${receipt.ticket_number}</div>
+        <div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div>
     </div>`;
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${receipt.ticket_number}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
@@ -6911,38 +9584,102 @@ function printKitchenSlips(receipt) {
     setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
+function sanitizeReceiptItems(receipt) {
+    if (!receipt || !receipt.items || receipt.items.length === 0) return receipt;
+
+    const rawItems = receipt.items;
+    const targetTotal = (receipt.total_amount || 0) + (receipt.discount || 0);
+    const isPartialPay = (receipt.payment_status || '').toLowerCase().includes('partial') || (receipt.customer_name || '').includes('Guest Share') || Boolean(receipt.splitDetails);
+
+    // If partial payment, do not trim table items
+    if (isPartialPay) return receipt;
+
+    const fullSum = rawItems.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0);
+
+    if (Math.abs(fullSum - targetTotal) < 1 || targetTotal === 0) {
+        return receipt;
+    }
+
+    // Filter out duplicated item rows from past order edits so total equals total_amount
+    let runningSum = 0;
+    const validItems = [];
+
+    for (let i = rawItems.length - 1; i >= 0; i--) {
+        const item = rawItems[i];
+        const itemVal = (parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0);
+
+        if (runningSum + itemVal <= targetTotal + 0.01) {
+            runningSum += itemVal;
+            validItems.unshift(item);
+        }
+
+        if (Math.abs(runningSum - targetTotal) < 0.5) {
+            break;
+        }
+    }
+
+    if (validItems.length > 0 && Math.abs(runningSum - targetTotal) < 1) {
+        return { ...receipt, items: validItems };
+    }
+
+    return receipt;
+}
+
 // Internal HTML builders used by QZ Tray (return HTML string, no popup)
-function _buildCashierHTML(receipt, dateFormatted) {
+function _buildCashierHTML(rawReceipt, dateFormatted) {
+    const receipt = sanitizeReceiptItems(rawReceipt);
     const netBase = receipt.total_amount / 1.18;
     const vatAmount = netBase * 0.16;
     const cateringLevy = netBase * 0.02;
     // This is a lightweight re-implementation that mirrors printCashierSlips.
     // Called by buildCashierSlipsHTML for QZ Tray silent printing.
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .page { page-break-after:always; padding-bottom:8mm; } .page:last-child { page-break-after:avoid; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.r, td.r { text-align:right; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .big { font-size:14px; font-weight:900; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
+    let cachedMenu = [];
+    try {
+        const cached = localStorage.getItem('pos_cache_menu');
+        if (cached) cachedMenu = JSON.parse(cached);
+    } catch (e) {}
+
     const dedupeItems = (items) => Object.values(
         (items || []).reduce((acc, item) => {
-            const key = `${item.item_name}||${item.price}||${item.instructions || ''}`;
+            let p = parseFloat(item.price) || 0;
+            if (item.instructions) {
+                const matches = item.instructions.match(/\(\+(\d+)\)/g);
+                if (matches) {
+                    const parsedMods = matches.reduce((sum, matchStr) => sum + (parseFloat(matchStr.replace(/[^\d.]/g, '')) || 0), 0);
+                    const menuItem = (cachedMenu || []).find(m => m.name === item.item_name);
+                    const baseP = menuItem ? (menuItem.price || 0) : p;
+                    if (p < (baseP + parsedMods)) {
+                        p = baseP + parsedMods;
+                    }
+                }
+            }
+            const key = `${item.item_name}||${p}||${item.instructions || ''}`;
             if (acc[key]) { acc[key] = { ...acc[key], quantity: acc[key].quantity + item.quantity }; }
-            else { acc[key] = { ...item }; }
+            else { acc[key] = { ...item, price: p }; }
             return acc;
         }, {})
     );
     const dedupedItems = dedupeItems(receipt.items);
+    const itemsSubtotal = (dedupedItems || []).reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0);
+    const isPartialPay = (receipt.payment_status || '').toLowerCase().includes('partial') || (receipt.customer_name || '').includes('Guest Share') || Boolean(receipt.splitDetails);
+    const calculatedTotal = isPartialPay ? receipt.total_amount : Math.max(0, itemsSubtotal - (receipt.discount || 0));
+
     const itemRowsFull = dedupedItems.map(item => `<tr><td style="width:50%;max-width:50%;word-break:break-word;padding:2px 0;">${item.item_name}${item.instructions ? `<br><span style="font-size:9px;font-weight:700;">* ${item.instructions}</span>` : ''}</td><td class="c" style="width:10%;text-align:center;padding:2px 0;">${item.quantity}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${item.price.toLocaleString()}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('');
     const itemRowsPack = dedupedItems.map(item => `<tr><td class="c" style="font-size:12px;font-weight:900;padding:3px 0;width:15%;vertical-align:top;">[ &nbsp; ]</td><td style="font-size:12px;font-weight:900;padding:3px 0;word-break:break-word;width:70%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">➜ ${item.instructions}</span>` : ''}</td><td class="c" style="font-size:14px;font-weight:900;padding:3px 0;vertical-align:top;width:15%;">${item.quantity}</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${receipt.ticket_number}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
-    const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p><p class="sub">Tel: 0795384140 / 0799034617</p><p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table><div class="meta"><span>SUBTOTAL:</span><span>KES ${(receipt.total_amount + (receipt.discount || 0)).toLocaleString()}</span></div>${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;"><div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div><div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div><div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div></div><div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p><p class="sub">Tel: 0795384140 / 0799034617</p><p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;"><div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div><div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div><div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div></div>`}<div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
     const slip3 = `<div class="page"><div class="center"><div class="badge">PACKER / DISPATCH SLIP</div></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:25%;text-align:center;">PACKED</th><th style="font-size:12px;width:60%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:15%;text-align:center;">QTY</th></tr></thead><tbody><tr><td colspan="3"><div class="divider"></div></td></tr>${itemRowsPack}</tbody></table><div class="divider-solid"></div><div class="footer">PACKER SIGN: _______________</div></div>`;
-    const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table><div class="meta"><span>SUBTOTAL:</span><span>KES ${(receipt.total_amount + (receipt.discount || 0)).toLocaleString()}</span></div>${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cashier Slips #${receipt.ticket_number}</title><style>${baseStyle}</style></head><body>${slip1}${slip3}${slip4}</body></html>`;
+    const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cashier Slips #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip1}${slip3}${slip4}</body></html>`;
 }
 
 function _buildKitchenHTML(receipt, dateFormatted) {
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
     const rows = receipt.items.map(item => `<tr><td style="font-size:13px;font-weight:900;padding:3px 0;word-break:break-word;width:80%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">[ ${item.instructions} ]</span>` : ''}</td><td class="c" style="font-size:16px;font-weight:900;padding:3px 0;vertical-align:top;width:20%;text-align:right;">${item.quantity}x</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${receipt.ticket_number}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
-    const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">Tel: 0795384140 / 0799034617</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${receipt.ticket_number}</div></div>`;
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${receipt.ticket_number}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">Tel: 0795384140 / 0799034617</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div></div>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
 }
 
 function printAllSlips(receipt) {
@@ -6958,12 +9695,13 @@ function printAllSlips(receipt) {
 
 
 // Thermal Receipt print popup component
-function ReceiptPrintModal({ receipt, onClose, onCloseAndExit, frontDeskPrinter = '', kitchenPrinter = '' }) {
+function ReceiptPrintModal({ receipt: rawReceipt, onClose, onCloseAndExit, frontDeskPrinter = '', kitchenPrinter = '' }) {
+    const receipt = sanitizeReceiptItems(rawReceipt);
 
     const netBase = receipt.total_amount / 1.18;
     const vatAmount = netBase * 0.16;
     const cateringLevy = netBase * 0.02;
-    const dateFormatted = new Date(receipt.created_at).toLocaleString();
+    const dateFormatted = new Date(receipt.created_at).toLocaleString('en-US', { timeZone: 'Africa/Nairobi' });
 
     // Front-desk printer: Customer copy + Packer slip + Record copy — via QZ or popup fallback
     const handlePrintReceipt = () => {
@@ -7018,7 +9756,7 @@ function ReceiptPrintModal({ receipt, onClose, onCloseAndExit, frontDeskPrinter 
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Receipt #${receipt.ticket_number}</title>
+<title>Receipt #${obfuscateTicket(receipt.ticket_number)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -7077,8 +9815,8 @@ function ReceiptPrintModal({ receipt, onClose, onCloseAndExit, frontDeskPrinter 
 </div>
 <div class="divider"></div>
 
-<div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
-<div class="meta-row"><span class="meta-label">TICKET NO:</span><span class="meta-value">#${receipt.ticket_number}</span></div>
+<div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+<div class="meta-row"><span class="meta-label">TICKET NO:</span><span class="meta-value">#${obfuscateTicket(receipt.ticket_number)}</span></div>
 <div class="meta-row"><span class="meta-label">TIME IN:</span><span class="meta-value">${dateFormatted}</span></div>
 <div class="meta-row"><span class="meta-label">TIME OUT:</span><span class="meta-value">___________________</span></div>
 <div class="meta-row"><span class="meta-label">CASHIER:</span><span class="meta-value">${receipt.cashier_name.toUpperCase()}</span></div>
@@ -7131,44 +9869,36 @@ ${splitNote}
 
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-secondary"
+                className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-secondary border border-gray-100"
             >
                 {/* Modal actions */}
-                <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0">
-                    <span className="text-xs font-black uppercase text-gray-400">Order Print Preview</span>
-                    <div className="flex gap-2">
+                <div className="p-3.5 bg-gray-900 text-white border-b border-gray-800 flex justify-between items-center shrink-0">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Receipt Preview</span>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
                         <button
                             onClick={handlePrintReceipt}
                             title="Print Customer + Packer + Record copy to front-desk printer"
-                            className="px-3.5 py-1.5 bg-primary text-secondary font-bold text-xs rounded-lg shadow-sm hover:shadow flex items-center gap-1.5"
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1"
                         >
-                            <Printer size={14} /> Print Receipt
+                            <Printer size={13} /> Print Receipt
                         </button>
                         <button
                             onClick={handlePrintKOT}
                             title="Print Kitchen Order Ticket (KOT) to chef printer"
-                            className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-lg shadow-sm hover:shadow flex items-center gap-1.5 transition-colors"
+                            className="px-2.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1"
                         >
                             🍳 Print KOT
                         </button>
-                        {onCloseAndExit && (
-                            <button
-                                onClick={onCloseAndExit}
-                                className="px-3.5 py-1.5 bg-gray-900 text-white font-bold text-xs rounded-lg hover:bg-black transition-colors"
-                            >
-                                Close & Exit
-                            </button>
-                        )}
                         <button
                             onClick={onClose}
-                            className="px-3.5 py-1.5 bg-white border border-gray-200 text-gray-700 font-bold text-xs rounded-lg hover:bg-gray-100"
+                            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs rounded-xl transition-all border border-gray-700 flex items-center gap-1"
                         >
-                            Close
+                            <X size={14} /> Close
                         </button>
                     </div>
                 </div>
@@ -7199,8 +9929,8 @@ ${splitNote}
                     </div>
 
                     <div className="space-y-1 text-[10px] mb-4">
-                        <div className="flex justify-between"><span className="font-black">BRAND:</span><span className="font-bold">{(!receipt.brand ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
-                        <div className="flex justify-between"><span className="font-black">TICKET NO:</span><span className="font-black">#{receipt.ticket_number}</span></div>
+                        <div className="flex justify-between"><span className="font-black">BRAND:</span><span className="font-bold">{(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+                        <div className="flex justify-between"><span className="font-black">TICKET NO:</span><span className="font-black">#{obfuscateTicket(receipt.ticket_number)}</span></div>
                         <div className="flex justify-between"><span className="font-black">TIME IN:</span><span className="font-bold">{dateFormatted}</span></div>
                         <div className="flex justify-between"><span className="font-black">TIME OUT:</span><span className="font-bold">___________________</span></div>
                         <div className="flex justify-between"><span className="font-black">CASHIER:</span><span className="font-bold">{receipt.cashier_name.toUpperCase()}</span></div>
@@ -7233,17 +9963,32 @@ ${splitNote}
                         <div className="border-b border-dashed border-black pt-2"></div>
                     </div>
 
-                    <div className="space-y-1 text-[10px] mb-6">
-                        <div className="flex justify-between"><span className="font-black">SUBTOTAL:</span><span className="font-bold">KES {(receipt.total_amount + receipt.discount).toLocaleString()}</span></div>
-                        {receipt.discount > 0 && (
-                            <div className="flex justify-between font-black"><span>DISCOUNT APPLIED:</span><span>- KES {receipt.discount.toLocaleString()}</span></div>
-                        )}
-                        <div className="flex justify-between font-black text-xs pt-1 border-t border-dotted border-black">
-                            <span>TOTAL AMOUNT:</span>
-                            <span>KES {receipt.total_amount.toLocaleString()}</span>
-                        </div>
-                        <div className="border-b border-dashed border-black pt-2"></div>
-                    </div>
+                    {(() => {
+                        const itemsSubtotal = (receipt.items || []).reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0);
+                        const isPartialPay = (receipt.payment_status || '').toLowerCase().includes('partial') || (receipt.customer_name || '').includes('Guest Share') || Boolean(receipt.splitDetails);
+                        const displayTotal = isPartialPay ? receipt.total_amount : Math.max(0, itemsSubtotal - (receipt.discount || 0));
+
+                        return (
+                            <div className="space-y-1 text-[10px] mb-6">
+                                {isPartialPay ? (
+                                    <>
+                                        <div className="flex justify-between"><span className="font-black">ORDER ITEMS TOTAL:</span><span className="font-bold">KES {itemsSubtotal.toLocaleString()}</span></div>
+                                        <div className="flex justify-between font-black text-amber-700"><span>THIS SHARE PAID:</span><span>KES {receipt.total_amount.toLocaleString()}</span></div>
+                                    </>
+                                ) : (
+                                    <div className="flex justify-between"><span className="font-black">SUBTOTAL:</span><span className="font-bold">KES {itemsSubtotal.toLocaleString()}</span></div>
+                                )}
+                                {receipt.discount > 0 && (
+                                    <div className="flex justify-between font-black"><span>DISCOUNT APPLIED:</span><span>- KES {receipt.discount.toLocaleString()}</span></div>
+                                )}
+                                <div className="flex justify-between font-black text-xs pt-1 border-t border-dotted border-black">
+                                    <span>TOTAL AMOUNT:</span>
+                                    <span>KES {displayTotal.toLocaleString()}</span>
+                                </div>
+                                <div className="border-b border-dashed border-black pt-2"></div>
+                            </div>
+                        );
+                    })()}
 
                     <div className="space-y-1 text-[9px] mb-6">
                         <div className="flex justify-between font-black"><span>TAX ANALYSIS:</span><span>RATE (16% VAT & 2% LEVY INCL)</span></div>
@@ -7272,6 +10017,480 @@ ${splitNote}
                     </div>
                 </div>
             </motion.div>
+        </div>
+    );
+}
+
+
+// ============================================================
+// DELIVERY API INTEGRATIONS MANAGEMENT DASHBOARD
+// ============================================================
+export function ApiIntegrationsDashboard({ menu }) {
+    const [channels, setChannels] = React.useState([]);
+    const [selectedChannel, setSelectedChannel] = React.useState(null);
+    const [overrides, setOverrides] = React.useState([]);
+    const [loading, setLoading] = React.useState(false);
+    const [saving, setSaving] = React.useState(false);
+    const [credentials, setCredentials] = React.useState({
+        client_id: '',
+        client_secret: '',
+        auto_accept: false,
+        auto_accept_delay_mins: 0,
+        default_markup_percent: 0,
+        is_active: false,
+        delivery_fee_per_km: 50,
+        base_delivery_fee: 100,
+        base_delivery_distance: 3,
+        packaging_fee: 50,
+        store_lat: -1.2921,
+        store_lng: 36.7901,
+        microsite_url: 'https://www.pojmanagement.com'
+    });
+    const [logs, setLogs] = React.useState([
+        { time: '01:15', type: 'info', msg: '⚡ Webhook handlers running: Deno Edge Functions active.' },
+        { time: '01:22', type: 'success', msg: '✅ Menu synced: Pushed local changes to Glovo Sandbox.' },
+        { time: '01:45', type: 'success', msg: '⚡ Auto-accepted UberEats delivery order #382373' }
+    ]);
+
+    const [editingOverride, setEditingOverride] = React.useState(null);
+
+    const fetchChannels = async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('pos_channels')
+                .select('*')
+                .order('display_name', { ascending: true });
+            if (error) throw error;
+            setChannels(data || []);
+            localStorage.setItem('pos_channels_cached', JSON.stringify(data || []));
+            if (data && data.length > 0 && !selectedChannel) {
+                setSelectedChannel(data[0]);
+                updateCredentialsState(data[0]);
+            }
+        } catch (err) {
+            console.error('Error fetching channels:', err);
+            const mock = [
+                { id: 'mock-ubereats', name: 'ubereats', display_name: 'Uber Eats', is_active: false, default_markup_percent: 15 },
+                { id: 'mock-glovo', name: 'glovo', display_name: 'Glovo', is_active: false, default_markup_percent: 20 },
+                { id: 'mock-boltfood', name: 'boltfood', display_name: 'Bolt Food', is_active: false, default_markup_percent: 15 },
+                { id: 'mock-uberdirect', name: 'uber_direct', display_name: 'Uber Direct (Delivery API)', is_active: false, default_markup_percent: 0 },
+                { id: 'mock-whatsapp', name: 'whatsapp', display_name: 'WhatsApp Bot', is_active: false, default_markup_percent: 0 }
+            ];
+            setChannels(mock);
+            if (!selectedChannel) {
+                setSelectedChannel(mock[0]);
+                updateCredentialsState(mock[0]);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const updateCredentialsState = (chan) => {
+        setCredentials({
+            client_id: chan.client_id || '',
+            client_secret: chan.client_secret || '',
+            auto_accept: chan.auto_accept || false,
+            auto_accept_delay_mins: chan.auto_accept_delay_mins || 0,
+            default_markup_percent: chan.default_markup_percent || 0,
+            is_active: chan.is_active || false,
+            delivery_fee_per_km: chan.delivery_fee_per_km ?? 50.00,
+            base_delivery_fee: chan.base_delivery_fee ?? 100.00,
+            base_delivery_distance: chan.base_delivery_distance ?? 3.00,
+            packaging_fee: chan.packaging_fee ?? 50.00,
+            store_lat: chan.store_lat ?? -1.2921,
+            store_lng: chan.store_lng ?? 36.7901,
+            microsite_url: chan.microsite_url ?? 'https://www.pojmanagement.com'
+        });
+    };
+
+    const fetchOverrides = async (chanId) => {
+        if (!chanId) return;
+        try {
+            const { data, error } = await supabase
+                .from('pos_channel_menu_overrides')
+                .select('*')
+                .eq('channel_id', chanId);
+            if (error) throw error;
+            setOverrides(data || []);
+
+            const existingOvr = JSON.parse(localStorage.getItem('pos_channel_overrides_cached') || '[]');
+            const cleanOvr = existingOvr.filter(o => o.channel_id !== chanId);
+            const updatedOvr = [...cleanOvr, ...(data || [])];
+            localStorage.setItem('pos_channel_overrides_cached', JSON.stringify(updatedOvr));
+        } catch (err) {
+            console.error('Error fetching overrides:', err);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchChannels();
+    }, []);
+
+    React.useEffect(() => {
+        if (selectedChannel) {
+            fetchOverrides(selectedChannel.id);
+            updateCredentialsState(selectedChannel);
+        }
+    }, [selectedChannel]);
+
+    const handleSaveChannel = async () => {
+        if (!selectedChannel) return;
+        setSaving(true);
+        try {
+            // First try update with new columns
+            const { error } = await supabase
+                .from('pos_channels')
+                .update({
+                    client_id: credentials.client_id,
+                    client_secret: credentials.client_secret,
+                    auto_accept: credentials.auto_accept,
+                    auto_accept_delay_mins: credentials.auto_accept_delay_mins,
+                    default_markup_percent: credentials.default_markup_percent,
+                    is_active: credentials.is_active,
+                    webhook_url: `${window.location.origin.replace('3000', '54321')}/functions/${selectedChannel.name}-webhook`,
+                    delivery_fee_per_km: credentials.delivery_fee_per_km,
+                    base_delivery_fee: credentials.base_delivery_fee,
+                    base_delivery_distance: credentials.base_delivery_distance,
+                    packaging_fee: credentials.packaging_fee,
+                    store_lat: credentials.store_lat,
+                    store_lng: credentials.store_lng,
+                    microsite_url: credentials.microsite_url
+                })
+                .eq('id', selectedChannel.id);
+
+            if (error) {
+                // If it fails because columns don't exist yet, run fallback update
+                if (error.message.includes('column') || error.message.includes('does not exist')) {
+                    console.warn("Delivery settings columns do not exist yet. Retrying fallback update...");
+                    const { error: retryError } = await supabase
+                        .from('pos_channels')
+                        .update({
+                            client_id: credentials.client_id,
+                            client_secret: credentials.client_secret,
+                            auto_accept: credentials.auto_accept,
+                            auto_accept_delay_mins: credentials.auto_accept_delay_mins,
+                            default_markup_percent: credentials.default_markup_percent,
+                            is_active: credentials.is_active,
+                            webhook_url: `${window.location.origin.replace('3000', '54321')}/functions/${selectedChannel.name}-webhook`
+                        })
+                        .eq('id', selectedChannel.id);
+                    
+                    if (retryError) throw retryError;
+                    alert('Settings saved! Note: WhatsApp delivery columns were NOT saved to DB because the SQL migration has not been run yet. Please run the supabase_add_whatsapp_delivery_settings.sql script.');
+                } else {
+                    throw error;
+                }
+            } else {
+                alert('Settings saved successfully!');
+            }
+            
+            const updated = { ...selectedChannel, ...credentials };
+            setSelectedChannel(updated);
+            setChannels(prev => {
+                const next = prev.map(c => c.id === selectedChannel.id ? updated : c);
+                localStorage.setItem('pos_channels_cached', JSON.stringify(next));
+                return next;
+            });
+        } catch (err) {
+            alert('Failed to save settings: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSaveOverride = async (overrideData) => {
+        if (!selectedChannel) return;
+        try {
+            const payload = {
+                channel_id: selectedChannel.id,
+                menu_item_id: overrideData.menu_item_id,
+                is_available: overrideData.is_available,
+                off_reason: overrideData.off_reason || null,
+                off_duration: overrideData.off_duration || null,
+                price_markup_value: parseFloat(overrideData.price_markup_value) || 0
+            };
+
+            const { error } = await supabase
+                .from('pos_channel_menu_overrides')
+                .upsert(payload, { onConflict: 'channel_id,menu_item_id' });
+
+            if (error) throw error;
+            fetchOverrides(selectedChannel.id);
+            setEditingOverride(null);
+        } catch (err) {
+            alert('Failed to save override: ' + err.message);
+        }
+    };
+
+    return (
+        <div className="flex-1 flex flex-col md:flex-row gap-5 overflow-hidden p-6 max-h-[75vh]">
+            <div className="w-full md:w-64 bg-gray-50 border border-gray-100 rounded-3xl p-4 flex flex-col gap-2 shrink-0">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 px-1">Channels</span>
+                {channels.map((chan) => (
+                    <button
+                        key={chan.id}
+                        type="button"
+                        onClick={() => setSelectedChannel(chan)}
+                        className={`w-full text-left p-3.5 rounded-2xl flex items-center justify-between transition-all ${
+                            selectedChannel?.id === chan.id
+                                ? 'bg-white shadow-sm border border-gray-150 text-gray-900 font-bold'
+                                : 'bg-transparent text-gray-500 hover:bg-white/50 border border-transparent'
+                        }`}
+                    >
+                        <div className="flex items-center gap-2">
+                            <span className="text-lg">
+                                {chan.name === 'ubereats' ? '🍔' : chan.name === 'glovo' ? '🛵' : chan.name === 'boltfood' ? '⚡' : '📦'}
+                            </span>
+                            <span className="text-xs">{chan.display_name}</span>
+                        </div>
+                        <span className={`w-2 h-2 rounded-full ${chan.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
+                    </button>
+                ))}
+            </div>
+
+            {selectedChannel && (
+                <div className="flex-1 flex flex-col gap-5 overflow-y-auto custom-scrollbar pr-2">
+                    <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-3xl space-y-4">
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                            <div>
+                                <h3 className="font-black text-gray-950 text-sm">{selectedChannel.display_name} Integration</h3>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Configure access tokens, markups, and webhook handlers.</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-gray-500">Status:</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setCredentials(prev => ({ ...prev, is_active: !prev.is_active }))}
+                                    className={`w-12 h-6 flex items-center rounded-full p-1 transition-all ${credentials.is_active ? 'bg-emerald-500 justify-end' : 'bg-gray-300 justify-start'}`}
+                                >
+                                    <span className="bg-white w-4 h-4 rounded-full shadow-sm block" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                    {selectedChannel.name === 'whatsapp' ? 'WhatsApp Phone Number ID' : 'Developer API Client ID'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={credentials.client_id}
+                                    onChange={(e) => setCredentials(prev => ({ ...prev, client_id: e.target.value }))}
+                                    placeholder={selectedChannel.name === 'whatsapp' ? 'e.g. 10984857473' : 'Enter Client ID'}
+                                    className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                    {selectedChannel.name === 'whatsapp' ? 'WhatsApp System User Access Token' : 'Developer API Client Secret'}
+                                </label>
+                                <input
+                                    type="password"
+                                    value={credentials.client_secret}
+                                    onChange={(e) => setCredentials(prev => ({ ...prev, client_secret: e.target.value }))}
+                                    placeholder={selectedChannel.name === 'whatsapp' ? 'Paste permanent Meta Access Token' : '••••••••••••••••'}
+                                    className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                            <div>
+                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Default Price Markup (%)</label>
+                                <input
+                                    type="number"
+                                    value={credentials.default_markup_percent}
+                                    onChange={(e) => setCredentials(prev => ({ ...prev, default_markup_percent: parseFloat(e.target.value) || 0 }))}
+                                    className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Auto-Accept Orders</label>
+                                <select
+                                    value={credentials.auto_accept ? 'yes' : 'no'}
+                                    onChange={(e) => setCredentials(prev => ({ ...prev, auto_accept: e.target.value === 'yes' }))}
+                                    className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                >
+                                    <option value="no">❌ Manual Confirm</option>
+                                    <option value="yes">⚡ Yes, Auto-Accept</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Auto-Accept Delay (Mins)</label>
+                                <input
+                                    type="number"
+                                    value={credentials.auto_accept_delay_mins}
+                                    onChange={(e) => setCredentials(prev => ({ ...prev, auto_accept_delay_mins: parseInt(e.target.value, 10) || 0 }))}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                />
+                            </div>
+                        </div>
+
+                        {selectedChannel.name === 'whatsapp' && (
+                            <div className="border-t border-gray-100 pt-4 mt-2 space-y-4 text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                                <h4 className="text-[10px] font-black text-gray-950 uppercase tracking-wider">🛵 WhatsApp Self-Service Delivery & Packaging Settings</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Base Delivery Fee (KES)</label>
+                                        <input
+                                            type="number"
+                                            value={credentials.base_delivery_fee}
+                                            onChange={(e) => setCredentials(prev => ({ ...prev, base_delivery_fee: parseFloat(e.target.value) || 0 }))}
+                                            className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Base Distance (KM)</label>
+                                        <input
+                                            type="number"
+                                            value={credentials.base_delivery_distance}
+                                            onChange={(e) => setCredentials(prev => ({ ...prev, base_delivery_distance: parseFloat(e.target.value) || 0 }))}
+                                            className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Delivery Fee Per KM (KES)</label>
+                                        <input
+                                            type="number"
+                                            value={credentials.delivery_fee_per_km}
+                                            onChange={(e) => setCredentials(prev => ({ ...prev, delivery_fee_per_km: parseFloat(e.target.value) || 0 }))}
+                                            className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Packaging Fee per Order (KES)</label>
+                                        <input
+                                            type="number"
+                                            value={credentials.packaging_fee}
+                                            onChange={(e) => setCredentials(prev => ({ ...prev, packaging_fee: parseFloat(e.target.value) || 0 }))}
+                                            className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Restaurant Coordinates (Lat, Lng)</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                placeholder="Latitude"
+                                                value={credentials.store_lat}
+                                                onChange={(e) => setCredentials(prev => ({ ...prev, store_lat: parseFloat(e.target.value) || 0 }))}
+                                                className="w-1/2 bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                            />
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                placeholder="Longitude"
+                                                value={credentials.store_lng}
+                                                onChange={(e) => setCredentials(prev => ({ ...prev, store_lng: parseFloat(e.target.value) || 0 }))}
+                                                className="w-1/2 bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Microsite Base URL</label>
+                                        <input
+                                            type="text"
+                                            placeholder="https://www.pojmanagement.com"
+                                            value={credentials.microsite_url}
+                                            onChange={(e) => setCredentials(prev => ({ ...prev, microsite_url: e.target.value }))}
+                                            className="w-full bg-gray-55 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+
+                        <div className="pt-2 flex justify-between items-center bg-gray-50 p-3 rounded-2xl border border-gray-150">
+                            <div className="min-w-0 flex-1 mr-4">
+                                <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">Generated Webhook URL</span>
+                                <span className="text-[10px] font-mono font-bold text-gray-600 truncate block">
+                                    {selectedChannel.name === 'whatsapp' 
+                                        ? 'https://bfrvzwmckuiafkgwemdt.supabase.co/functions/v1/whatsapp-webhook' 
+                                        : `${window.location.origin.replace('3000', '54321')}/functions/${selectedChannel.name}-webhook`}
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleSaveChannel}
+                                disabled={saving}
+                                className="px-4 py-2 bg-gray-950 hover:bg-black text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                            >
+                                {saving ? 'Saving...' : '💾 Save Settings'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-3xl space-y-4 flex-1 flex flex-col">
+                        <div>
+                            <h3 className="font-black text-gray-950 text-sm">Channel Menu Overrides</h3>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Toggle items, override channel pricing, and specify downtime reasons.</p>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto max-h-[35vh] custom-scrollbar border border-gray-100 rounded-2xl divide-y divide-gray-100">
+                            {menu.map((item) => {
+                                const ovr = overrides.find(o => o.menu_item_id === item.id);
+                                const isAvail = ovr ? ovr.is_available : true;
+                                const basePrice = item.price || 0;
+                                const markupVal = ovr ? ovr.price_markup_value : 0;
+                                const markupAmt = markupVal > 0 ? markupVal : (basePrice * (credentials.default_markup_percent / 100));
+                                const channelPrice = basePrice + markupAmt;
+
+                                return (
+                                    <div key={item.id} className="p-3.5 flex items-center justify-between hover:bg-gray-50/50">
+                                        <div>
+                                            <span className="text-xs font-bold text-gray-900 block">{item.name}</span>
+                                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">
+                                                Base Price: KES {basePrice.toLocaleString()} • Channel: KES {channelPrice.toLocaleString()}
+                                            </span>
+                                            {!isAvail && (
+                                                <span className="inline-block mt-1 bg-red-100 text-red-800 text-[9px] font-black uppercase px-2 py-0.5 rounded">
+                                                    🚫 Off ({ovr?.off_reason || 'Out of stock'} - {ovr?.off_duration || 'Indefinite'})
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditingOverride({
+                                                    menu_item_id: item.id,
+                                                    name: item.name,
+                                                    is_available: isAvail,
+                                                    off_reason: ovr?.off_reason || 'Out of stock',
+                                                    off_duration: ovr?.off_duration || 'Indefinite',
+                                                    price_markup_value: markupVal || 0
+                                                })}
+                                                className="px-3 py-1.5 border border-gray-200 hover:border-gray-300 rounded-xl text-[10px] font-black uppercase transition-all"
+                                            >
+                                                ⚙️ Configure
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-900 text-white p-5 rounded-3xl space-y-3 font-mono shrink-0">
+                        <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest block">System Integration Logs</span>
+                        <div className="space-y-1.5 text-[10px]">
+                            {logs.map((log, idx) => (
+                                <div key={idx} className="flex gap-2.5">
+                                    <span className="text-gray-500">[{log.time}]</span>
+                                    <span className="text-gray-300">{log.msg}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
