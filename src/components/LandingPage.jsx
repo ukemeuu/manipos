@@ -134,7 +134,7 @@ export function LandingPage({ onProceedToLogin }) {
             </h1>
 
             <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-medium">
-              Built for single restaurants, multi-location dining groups, and quick-service outlets. Effortlessly manage billing, kitchen displays, digital guest menus, and multi-brand operations in real time.
+              Built for single outlets, multi-brand cloud kitchens, and multi-location dining groups. Effortlessly manage billing, kitchen displays, digital guest menus, and multi-brand operations in real time.
             </p>
 
             {/* Request Demo Form Card */}
