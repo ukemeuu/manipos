@@ -234,9 +234,9 @@ export function LandingPage({ onProceedToLogin }) {
           <div className="flex-1 w-full flex justify-center lg:justify-end">
             <div className="bg-white p-3 rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full">
               <img 
-                src="/posbytz_hero.png" 
-                alt="ManiPOS Software & Hardware" 
-                className="w-full h-auto rounded-2xl object-cover" 
+                src="/manipos_african_hero.png" 
+                alt="ManiPOS Kenyan Restaurant Staff & Terminal" 
+                className="w-full h-auto rounded-2xl object-cover shadow-md" 
               />
             </div>
           </div>
