@@ -821,13 +821,42 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
     // Split bill states
     const [splitBillModalOpen, setSplitBillModalOpen] = useState(false);
-    const [splitBillMode, setSplitBillMode] = useState('guests'); // 'guests' | 'payment'
+    const [splitBillMode, setSplitBillMode] = useState('even'); // 'even' | 'items' | 'payment'
     const [splitBillCount, setSplitBillCount] = useState(2);
     const [splitReceiptsData, setSplitReceiptsData] = useState(null); // data for printing splits
     const [splitBillOrderTotal, setSplitBillOrderTotal] = useState(null); // when opened from Order Details (not cart)
+    const [splitBillTargetOrder, setSplitBillTargetOrder] = useState(null); // target order object when splitting from Order Details
+    const [splitBillTargetItems, setSplitBillTargetItems] = useState([]); // items list with guestNo for target order
     const [splitImPaybill, setSplitImPaybill] = useState(''); // I&M Paybill portion for split payment
     const [partialPaymentMethod, setPartialPaymentMethod] = useState('Cash');
     const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
+
+    const openSplitBillForOrder = (targetOrder, calculatedTotal) => {
+        setSplitBillTargetOrder(targetOrder);
+        setSplitBillOrderTotal(calculatedTotal);
+        const rawItems = (targetOrder?.items || targetOrder?.pos_order_items || []).map(i => ({
+            ...i,
+            name: i.item_name || i.name,
+            price: parseFloat(i.price) || 0,
+            quantity: parseFloat(i.quantity) || 1,
+            guestNo: i.guestNo || 1
+        }));
+        setSplitBillTargetItems(rawItems);
+        setSplitBillCount(2);
+        setSplitBillMode('even');
+        setSplitReceiptsData(null);
+        setSplitBillModalOpen(true);
+    };
+
+    const openSplitBillForCart = () => {
+        setSplitBillTargetOrder(null);
+        setSplitBillOrderTotal(null);
+        setSplitBillCount(2);
+        setSplitBillMode('even');
+        setSplitReceiptsData(null);
+        setSplitBillModalOpen(true);
+    };
+
 
     // Audio sound alert settings
     const [alertSound, setAlertSound] = useState(() => localStorage.getItem('pos_alert_sound') || 'chime');
@@ -7231,7 +7260,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                             {cart.length > 0 && (
                                 <>
                                     <button
-                                        onClick={() => setSplitBillModalOpen(true)}
+                                        onClick={() => openSplitBillForCart()}
                                         className="text-[9px] text-primary hover:text-primary-dark font-black uppercase tracking-wider px-2 py-1 hover:bg-orange-50 rounded-lg transition-all"
                                     >
                                         Split Bill
@@ -8309,10 +8338,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         return (
                                             <button
                                                 onClick={() => {
-                                                    setSplitBillOrderTotal(orderTotal);
-                                                    setSplitBillCount(2);
-                                                    setSplitReceiptsData(null);
-                                                    setSplitBillModalOpen(true);
+                                                    openSplitBillForOrder(viewingOrderDetails, orderTotal);
                                                 }}
                                                 className="flex-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all flex items-center justify-center gap-1"
                                             >
@@ -8701,13 +8727,24 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             </AnimatePresence>
 
             {/* Split Bill Modal — Two Modes: Split by Guests / Split by Payment */}
+            {/* Split Bill / Split Receipt Modal */}
             <AnimatePresence>
                 {splitBillModalOpen && (() => {
                     const billTotal = splitBillOrderTotal ?? total;
-                    // ── Guest-mode: group cart items by guestNo ──
+                    const activeOrderItems = splitBillTargetOrder
+                        ? (splitBillTargetItems.length > 0 ? splitBillTargetItems : (splitBillTargetOrder.items || []).map(i => ({
+                            ...i,
+                            name: i.item_name || i.name,
+                            price: parseFloat(i.price) || 0,
+                            quantity: parseFloat(i.quantity) || 1,
+                            guestNo: i.guestNo || 1
+                        })))
+                        : cart;
+
+                    // ── Group items by guestNo for Itemized Split ──
                     const guestGroups = {};
                     for (let g = 1; g <= splitBillCount; g++) guestGroups[g] = [];
-                    cart.forEach(item => {
+                    activeOrderItems.forEach(item => {
                         const g = item.guestNo || 1;
                         if (!guestGroups[g]) guestGroups[g] = [];
                         guestGroups[g].push(item);
@@ -8715,13 +8752,133 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                     const guestTotals = Object.fromEntries(
                         Object.entries(guestGroups).map(([g, items]) => [
                             g,
-                            items.reduce((s, i) => s + i.price * i.quantity, 0)
+                            items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseFloat(i.quantity) || 1), 0)
                         ])
                     );
+
                     // ── Payment-mode: running split total ──
                     const splitPayTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitMpesa) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitImPaybill) || 0);
                     const splitPayDiff = billTotal - splitPayTotal;
                     const splitPayBalanced = Math.abs(splitPayDiff) < 0.5;
+
+                    const handleExecuteSplitPrint = (modeType) => {
+                        let shares = [];
+                        if (modeType === 'even') {
+                            const evenAmount = Math.round(billTotal / splitBillCount);
+                            shares = Array.from({ length: splitBillCount }, (_, gi) => ({
+                                guestNo: gi + 1,
+                                totalGuests: splitBillCount,
+                                amount: evenAmount,
+                                items: activeOrderItems,
+                                isEvenSplit: true
+                            }));
+                        } else {
+                            shares = Array.from({ length: splitBillCount }, (_, gi) => {
+                                const gNo = gi + 1;
+                                const items = guestGroups[gNo] || [];
+                                return {
+                                    guestNo: gNo,
+                                    totalGuests: splitBillCount,
+                                    amount: guestTotals[gNo] || Math.round(billTotal / splitBillCount),
+                                    items: items
+                                };
+                            });
+                        }
+                        
+                        setSplitReceiptsData(shares);
+                        
+                        // Dual-printer routing / QZ Tray thermal printing
+                        const targetBrand = splitBillTargetOrder?.brand || selectedBrand || 'POT OF JOLLOF';
+                        const targetTicket = splitBillTargetOrder?.ticket_number || 'SPLIT';
+                        const targetCustomer = splitBillTargetOrder?.customer_name || customerName || 'Guest';
+
+                        let splitHtml = `
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta charset="utf-8">
+                                <style>
+                                    * { margin:0; padding:0; box-sizing:border-box; }
+                                    body {
+                                        font-family: Arial, Helvetica, sans-serif;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        color: #000;
+                                        width: 80mm;
+                                        padding: 4mm;
+                                        background: #fff;
+                                        -webkit-print-color-adjust: exact;
+                                        print-color-adjust: exact;
+                                    }
+                                    .page { page-break-after: always; padding-bottom: 8mm; }
+                                    .page:last-child { page-break-after: avoid; }
+                                    .center { text-align: center; }
+                                    .divider { border-top: 1px dashed #000; margin: 4px 0; }
+                                    .divider-solid { border-top: 2px solid #000; margin: 4px 0; }
+                                    .meta { display: flex; justify-content: space-between; margin: 2px 0; font-size: 10px; font-weight: 700; }
+                                    .big { font-size: 14px; font-weight: 900; }
+                                    .footer { text-align: center; margin-top: 6px; font-size: 10px; font-weight: 800; }
+                                </style>
+                            </head>
+                            <body>
+                        `;
+
+                        shares.forEach((share) => {
+                            const displayItems = (share.items && share.items.length > 0) ? share.items : activeOrderItems;
+                            const itemsHtml = displayItems.map(item => `
+                                <div style="display:flex;justify-content:space-between;margin:2px 0;font-size:10px;">
+                                    <span style="max-width:70%;word-break:break-word;">${item.quantity || 1}x ${item.name || item.item_name}</span>
+                                    <span>KES ${((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 1)).toLocaleString()}</span>
+                                </div>
+                            `).join('');
+
+                            splitHtml += `
+                                <div class="page">
+                                    <div class="center">
+                                        <h2 style="font-size:15px;font-weight:900;letter-spacing:0.5px;">MUTE KITCHENS</h2>
+                                        <div style="font-size:10px;font-weight:900;margin:3px 0;text-transform:uppercase;background:#000;color:#fff;padding:2px 4px;display:inline-block;border-radius:3px;">
+                                            SPLIT RECEIPT: GUEST ${share.guestNo} OF ${share.totalGuests}
+                                        </div>
+                                        <div class="divider"></div>
+                                    </div>
+                                    <div class="meta"><span>BRAND:</span><span>${targetBrand.toUpperCase()}</span></div>
+                                    <div class="meta"><span>TICKET #:</span><span>#${obfuscateTicket(targetTicket)}</span></div>
+                                    <div class="meta"><span>PATRON:</span><span>${formatCustomerName(targetCustomer)}</span></div>
+                                    <div class="meta"><span>DATE:</span><span>${new Date().toLocaleString('en-GB', { timeZone: 'Africa/Nairobi' })}</span></div>
+                                    <div class="meta"><span>CASHIER:</span><span>${(staffName || 'Cashier').toUpperCase()}</span></div>
+                                    <div class="divider-solid"></div>
+                                    
+                                    <div style="font-weight:900;margin:4px 0;font-size:10px;text-transform:uppercase;">${share.isEvenSplit ? 'FULL ORDER ITEMS SUMMARY:' : `GUEST ${share.guestNo} ITEMS:`}</div>
+                                    ${itemsHtml}
+                                    
+                                    <div class="divider-solid"></div>
+                                    <div class="meta big" style="padding:4px 0;">
+                                        <span>GUEST ${share.guestNo} SHARE:</span>
+                                        <span>KES ${Math.round(share.amount).toLocaleString()}</span>
+                                    </div>
+                                    <div class="divider"></div>
+
+                                    <div class="footer">
+                                        <p style="font-weight:900;text-transform:uppercase;">THANK YOU FOR DINING WITH US!</p>
+                                        <p style="font-size:9px;margin-top:4px;">HOW WAS YOUR EXPERIENCE TODAY?</p>
+                                        <p style="font-size:8px;color:#444;margin-bottom:4px;">Please scan this QR code to share feedback</p>
+                                        <div style="text-align:center;margin:4px 0;">
+                                            <img src="${FEEDBACK_QR_CODE}" style="width:100px;height:100px;display:inline-block;" />
+                                        </div>
+                                        <span style="font-size:8px;">Powered by ManiPOS</span>
+                                    </div>
+                                </div>
+                            `;
+                        });
+
+                        splitHtml += `</body></html>`;
+
+                        printOrFallback(
+                            frontDeskPrinter,
+                            splitHtml,
+                            () => {}
+                        ).catch(console.warn);
+                    };
 
                     return (
                     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 text-secondary">
@@ -8735,8 +8892,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                             <div className="p-5 border-b border-gray-100 bg-gray-50/60 shrink-0">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <h3 className="font-black text-lg text-gray-900">Split Bill</h3>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Choose how you'd like to split this bill</p>
+                                        <h3 className="font-black text-lg text-gray-900">Split Receipt / Bill</h3>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
+                                            {splitBillTargetOrder ? `Splitting Order #${obfuscateTicket(splitBillTargetOrder.ticket_number)}` : 'Splitting Active Checkout Cart'}
+                                        </p>
                                     </div>
                                     <div className="text-right shrink-0 ml-4">
                                         <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider block">Grand Total</span>
@@ -8747,40 +8906,106 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 {/* Mode tabs */}
                                 <div className="flex gap-2 mt-4">
                                     <button
-                                        onClick={() => setSplitBillMode('guests')}
-                                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all border ${
-                                            splitBillMode === 'guests'
+                                        onClick={() => setSplitBillMode('even')}
+                                        className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                                            splitBillMode === 'even'
                                                 ? 'bg-gray-900 text-white border-gray-900 shadow-md'
                                                 : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                                         }`}
                                     >
-                                        ✂️ Split by Guests
+                                        ✂️ Split Evenly
+                                    </button>
+                                    <button
+                                        onClick={() => setSplitBillMode('items')}
+                                        className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                                            splitBillMode === 'items'
+                                                ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        🍽️ Split by Items
                                     </button>
                                     <button
                                         onClick={() => setSplitBillMode('payment')}
-                                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all border ${
+                                        className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
                                             splitBillMode === 'payment'
                                                 ? 'bg-gray-900 text-white border-gray-900 shadow-md'
                                                 : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                                         }`}
                                     >
-                                        💳 Split Payment Methods
+                                        💳 Split Payment
                                     </button>
                                 </div>
                             </div>
 
-                            {/* ─── TAB: Split by Guests ─── */}
-                            {splitBillMode === 'guests' && (
+                            {/* ─── TAB 1: Split Evenly (Equal Shares) ─── */}
+                            {splitBillMode === 'even' && (
+                                <>
+                                    <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+                                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                                            <span className="text-xs font-black text-gray-700">Number of Guests:</span>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => setSplitBillCount(prev => Math.max(2, prev - 1))}
+                                                    className="w-9 h-9 rounded-xl border border-gray-300 flex items-center justify-center font-black text-gray-800 hover:bg-gray-200 active:scale-95 text-base"
+                                                >-</button>
+                                                <span className="font-mono font-black text-lg text-gray-950 w-6 text-center">{splitBillCount}</span>
+                                                <button
+                                                    onClick={() => setSplitBillCount(prev => Math.min(8, prev + 1))}
+                                                    className="w-9 h-9 rounded-xl border border-gray-300 flex items-center justify-center font-black text-gray-800 hover:bg-gray-200 active:scale-95 text-base"
+                                                >+</button>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 text-center space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 block">Equal Share Amount</span>
+                                            <span className="text-3xl font-mono font-black text-emerald-950">
+                                                KES {Math.round(billTotal / splitBillCount).toLocaleString()}
+                                            </span>
+                                            <span className="text-[11px] text-emerald-700 font-bold block pt-1">
+                                                divided equally across {splitBillCount} guest slips
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="p-4 border-t border-gray-100 space-y-2 shrink-0 bg-gray-50/50">
+                                        <button
+                                            onClick={() => handleExecuteSplitPrint('even')}
+                                            className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                                        >
+                                            <Printer size={15} /> Generate & Print {splitBillCount} Equal Share Receipts
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setSplitBillModalOpen(false);
+                                                setSplitBillOrderTotal(null);
+                                                setSplitBillTargetOrder(null);
+                                            }}
+                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center cursor-pointer"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* ─── TAB 2: Split by Items ─── */}
+                            {splitBillMode === 'items' && (
                                 <>
                                     {/* Guest count picker */}
-                                    <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-4 shrink-0 bg-white">
+                                    <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
                                         <span className="text-xs font-black text-gray-700">Number of Guests:</span>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => {
                                                     const next = Math.max(2, splitBillCount - 1);
                                                     setSplitBillCount(next);
-                                                    setCart(prev => prev.map(c => (c.guestNo || 1) > next ? { ...c, guestNo: 1 } : c));
+                                                    if (splitBillTargetOrder) {
+                                                        setSplitBillTargetItems(prev => prev.map(c => (c.guestNo || 1) > next ? { ...c, guestNo: 1 } : c));
+                                                    } else {
+                                                        setCart(prev => prev.map(c => (c.guestNo || 1) > next ? { ...c, guestNo: 1 } : c));
+                                                    }
                                                 }}
                                                 className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100"
                                             >-</button>
@@ -8790,11 +9015,39 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                 className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100"
                                             >+</button>
                                         </div>
-                                        <span className="text-[10px] text-gray-400 font-semibold">Tap the G# chip on each cart item to assign it</span>
                                     </div>
 
-                                    {/* Per-guest item breakdown */}
-                                    <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                                    {/* Item Assignment List */}
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                                        <div className="space-y-1.5 border-b border-gray-100 pb-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Tap G# chip to assign item to a guest:</span>
+                                            {activeOrderItems.map((item, idx) => (
+                                                <div key={idx} className="flex justify-between items-center p-2.5 bg-gray-50 rounded-xl border border-gray-150 text-xs">
+                                                    <span className="font-bold text-gray-900 leading-tight">
+                                                        {item.name || item.item_name} <span className="text-gray-500 font-mono">x{item.quantity}</span>
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono font-bold text-gray-900">KES {((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 1)).toLocaleString()}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const nextG = ((item.guestNo || 1) % splitBillCount) + 1;
+                                                                if (splitBillTargetOrder) {
+                                                                    setSplitBillTargetItems(prev => prev.map((it, i) => i === idx ? { ...it, guestNo: nextG } : it));
+                                                                } else {
+                                                                    setCart(prev => prev.map((it, i) => i === idx ? { ...it, guestNo: nextG } : it));
+                                                                }
+                                                            }}
+                                                            className="px-2.5 py-1 bg-black text-white font-black text-[10px] rounded-lg hover:bg-neutral-800 transition-all shadow-xs cursor-pointer"
+                                                        >
+                                                            G{item.guestNo || 1}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Per-guest item breakdown cards */}
                                         {Array.from({ length: splitBillCount }, (_, gi) => {
                                             const gNo = gi + 1;
                                             const items = guestGroups[gNo] || [];
@@ -8808,13 +9061,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                         <span className={`font-mono text-sm font-black text-${c}-900`}>KES {gTotal.toLocaleString()}</span>
                                                     </div>
                                                     {items.length === 0 ? (
-                                                        <p className="text-[10px] text-gray-400 italic text-center py-3">No items assigned</p>
+                                                        <p className="text-[10px] text-gray-400 italic text-center py-3">No items assigned yet</p>
                                                     ) : (
                                                         <div className="px-3.5 py-2 space-y-1.5">
                                                             {items.map((item, idx) => (
                                                                 <div key={idx} className="flex justify-between items-center text-[11px] font-medium text-gray-800">
-                                                                    <span>{item.name} <span className="text-gray-400">x{item.quantity}</span></span>
-                                                                    <span className="font-mono font-bold">KES {(item.price * item.quantity).toLocaleString()}</span>
+                                                                    <span>{item.name || item.item_name} <span className="text-gray-400">x{item.quantity}</span></span>
+                                                                    <span className="font-mono font-bold">KES {((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 1)).toLocaleString()}</span>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -8827,29 +9080,18 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                     {/* Actions */}
                                     <div className="p-4 border-t border-gray-100 space-y-2 shrink-0 bg-gray-50/50">
                                         <button
-                                            onClick={() => {
-                                                const shares = Array.from({ length: splitBillCount }, (_, gi) => {
-                                                    const gNo = gi + 1;
-                                                    const items = guestGroups[gNo] || [];
-                                                    return {
-                                                        guestNo: gNo,
-                                                        totalGuests: splitBillCount,
-                                                        amount: guestTotals[gNo] || 0,
-                                                        items: items
-                                                    };
-                                                });
-                                                setSplitReceiptsData(shares);
-                                            }}
-                                            className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-1.5 shadow-md"
+                                            onClick={() => handleExecuteSplitPrint('items')}
+                                            className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
                                         >
-                                            <Printer size={14} /> Generate {splitBillCount} Separate Receipts
+                                            <Printer size={15} /> Generate & Print {splitBillCount} Itemized Receipts
                                         </button>
                                         <button
                                             onClick={() => {
                                                 setSplitBillModalOpen(false);
                                                 setSplitBillOrderTotal(null);
+                                                setSplitBillTargetOrder(null);
                                             }}
-                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center"
+                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center cursor-pointer"
                                         >
                                             Close
                                         </button>
@@ -8857,7 +9099,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 </>
                             )}
 
-                            {/* ─── TAB: Split by Payment Method ─── */}
+                            {/* ─── TAB 3: Split by Payment Method ─── */}
                             {splitBillMode === 'payment' && (
                                 <>
                                     <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
@@ -8949,17 +9191,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         <button
                                             disabled={!splitPayBalanced}
                                             onClick={() => {
-                                                // Map I&M Paybill amount into the notes when card is used or add directly
                                                 const imAmount = parseFloat(splitImPaybill) || 0;
                                                 const cardAmount = parseFloat(splitCard) || 0;
-                                                // Store I&M amount as part of the card bucket for now, record separately in notes
                                                 setSplitCard(String(cardAmount + imAmount) || splitCard);
                                                 setSplitImPaybill('');
                                                 setPaymentMethod('Split');
                                                 setSplitBillModalOpen(false);
                                                 setSplitBillOrderTotal(null);
+                                                setSplitBillTargetOrder(null);
                                             }}
-                                            className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md"
+                                            className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
                                         >
                                             ✓ Confirm Split Payment — KES {billTotal.toLocaleString()}
                                         </button>
@@ -8967,8 +9208,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                             onClick={() => {
                                                 setSplitBillModalOpen(false);
                                                 setSplitBillOrderTotal(null);
+                                                setSplitBillTargetOrder(null);
                                             }}
-                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center"
+                                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center cursor-pointer"
                                         >
                                             Close
                                         </button>
@@ -8980,6 +9222,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                     );
                 })()}
             </AnimatePresence>
+
 
             {/* Split Receipts Print Dialog */}
             <AnimatePresence>
@@ -9021,11 +9264,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         <div className="space-y-1 text-[10px] mb-3">
                                             <div className="flex justify-between">
                                                 <span>BRAND:</span>
-                                                <span className="font-bold">{(selectedBrand || 'ManiPOS').toUpperCase()}</span>
+                                                <span className="font-bold">{(splitBillTargetOrder?.brand || selectedBrand || 'Pot of Jollof').toUpperCase()}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span>TABLE/PATRON:</span>
-                                                <span className="font-bold">{formatCustomerName(customerName)}</span>
+                                                <span className="font-bold">{formatCustomerName(splitBillTargetOrder?.customer_name || customerName)}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span>DATE / TIME:</span>
@@ -9039,41 +9282,35 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                                         <div className="space-y-2 mb-3 text-[10px]">
                                             <div className="grid grid-cols-[1fr_40px_60px] font-bold">
-                                                <span>GUEST {share.guestNo} ITEMS</span>
+                                                <span>{share.isEvenSplit ? 'ORDER ITEMS' : `GUEST ${share.guestNo} ITEMS`}</span>
                                                 <span className="text-center">QTY</span>
                                                 <span className="text-right">PRICE</span>
                                             </div>
                                             <div className="border-b border-dashed border-black"></div>
-                                            {(share.items && share.items.length > 0) ? (
-                                                share.items.map((item, idx) => (
-                                                    <div key={idx} className="grid grid-cols-[1fr_40px_60px]">
-                                                        <span>{item.name}</span>
-                                                        <span className="text-center">{item.quantity}</span>
-                                                        <span className="text-right">{(item.price * item.quantity).toLocaleString()}</span>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                cart.map((item, idx) => (
-                                                    <div key={idx} className="grid grid-cols-[1fr_40px_60px]">
-                                                        <span>{item.name}</span>
-                                                        <span className="text-center">{item.quantity}</span>
-                                                        <span className="text-right">{item.price.toLocaleString()}</span>
-                                                    </div>
-                                                ))
-                                            )}
+                                            {((share.items && share.items.length > 0) ? share.items : cart).map((item, idx) => (
+                                                <div key={idx} className="grid grid-cols-[1fr_40px_60px]">
+                                                    <span>{item.name || item.item_name}</span>
+                                                    <span className="text-center">{item.quantity || 1}</span>
+                                                    <span className="text-right">{((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 1)).toLocaleString()}</span>
+                                                </div>
+                                            ))}
                                             <div className="border-b border-dashed border-black pt-1"></div>
                                         </div>
 
                                         <div className="space-y-1 text-[10px] mb-4">
                                             <div className="flex justify-between font-black text-sm pt-1">
-                                                <span>GUEST {share.guestNo} TOTAL:</span>
-                                                <span>KES {share.amount.toLocaleString()}</span>
+                                                <span>GUEST {share.guestNo} SHARE:</span>
+                                                <span>KES {Math.round(share.amount).toLocaleString()}</span>
                                             </div>
                                             <div className="border-b border-dashed border-black pt-2"></div>
                                         </div>
 
-                                        <div className="text-center pt-1 text-[9px]">
+                                        <div className="text-center pt-1 text-[9px] space-y-1">
                                             <p className="font-bold uppercase">THANK YOU FOR DINING WITH US!</p>
+                                            <p className="text-[8px] text-gray-500">Scan to share feedback:</p>
+                                            <div className="flex justify-center my-1">
+                                                <img src={FEEDBACK_QR_CODE} alt="Feedback QR" className="w-20 h-20" />
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
