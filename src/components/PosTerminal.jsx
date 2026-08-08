@@ -821,8 +821,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
     // Split bill states
     const [splitBillModalOpen, setSplitBillModalOpen] = useState(false);
-    const [splitBillMode, setSplitBillMode] = useState('even'); // 'even' | 'items' | 'payment'
+    const [splitBillMode, setSplitBillMode] = useState('custom'); // 'custom' | 'even' | 'items' | 'payment'
     const [splitBillCount, setSplitBillCount] = useState(2);
+    const [splitCustomAmounts, setSplitCustomAmounts] = useState({}); // { 1: '2000', 2: '3200' }
     const [splitReceiptsData, setSplitReceiptsData] = useState(null); // data for printing splits
     const [splitBillOrderTotal, setSplitBillOrderTotal] = useState(null); // when opened from Order Details (not cart)
     const [splitBillTargetOrder, setSplitBillTargetOrder] = useState(null); // target order object when splitting from Order Details
@@ -843,7 +844,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
         }));
         setSplitBillTargetItems(rawItems);
         setSplitBillCount(2);
-        setSplitBillMode('even');
+        setSplitCustomAmounts({});
+        setSplitBillMode('custom');
         setSplitReceiptsData(null);
         setSplitBillModalOpen(true);
     };
@@ -852,7 +854,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
         setSplitBillTargetOrder(null);
         setSplitBillOrderTotal(null);
         setSplitBillCount(2);
-        setSplitBillMode('even');
+        setSplitCustomAmounts({});
+        setSplitBillMode('custom');
         setSplitReceiptsData(null);
         setSplitBillModalOpen(true);
     };
@@ -8763,7 +8766,19 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                     const handleExecuteSplitPrint = (modeType) => {
                         let shares = [];
-                        if (modeType === 'even') {
+                        if (modeType === 'custom') {
+                            shares = Array.from({ length: splitBillCount }, (_, gi) => {
+                                const gNo = gi + 1;
+                                const enteredVal = parseFloat(splitCustomAmounts[gNo]) || 0;
+                                return {
+                                    guestNo: gNo,
+                                    totalGuests: splitBillCount,
+                                    amount: enteredVal,
+                                    items: activeOrderItems,
+                                    isCustomSplit: true
+                                };
+                            });
+                        } else if (modeType === 'even') {
                             const evenAmount = Math.round(billTotal / splitBillCount);
                             shares = Array.from({ length: splitBillCount }, (_, gi) => ({
                                 guestNo: gi + 1,
@@ -8848,7 +8863,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                     <div class="meta"><span>CASHIER:</span><span>${(staffName || 'Cashier').toUpperCase()}</span></div>
                                     <div class="divider-solid"></div>
                                     
-                                    <div style="font-weight:900;margin:4px 0;font-size:10px;text-transform:uppercase;">${share.isEvenSplit ? 'FULL ORDER ITEMS SUMMARY:' : `GUEST ${share.guestNo} ITEMS:`}</div>
+                                    <div style="font-weight:900;margin:4px 0;font-size:10px;text-transform:uppercase;">${share.isEvenSplit || share.isCustomSplit ? 'FULL ORDER ITEMS SUMMARY:' : `GUEST ${share.guestNo} ITEMS:`}</div>
                                     ${itemsHtml}
                                     
                                     <div class="divider-solid"></div>
@@ -8904,39 +8919,178 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 </div>
 
                                 {/* Mode tabs */}
-                                <div className="flex gap-2 mt-4">
+                                <div className="grid grid-cols-4 gap-1 mt-4 bg-gray-100 p-1 rounded-2xl">
                                     <button
-                                        onClick={() => setSplitBillMode('even')}
-                                        className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
-                                            splitBillMode === 'even'
+                                        onClick={() => setSplitBillMode('custom')}
+                                        className={`py-2 px-1.5 rounded-xl text-[11px] font-black transition-all border cursor-pointer ${
+                                            splitBillMode === 'custom'
                                                 ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                                : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900'
                                         }`}
                                     >
-                                        ✂️ Split Evenly
+                                        ✏️ Custom
+                                    </button>
+                                    <button
+                                        onClick={() => setSplitBillMode('even')}
+                                        className={`py-2 px-1.5 rounded-xl text-[11px] font-black transition-all border cursor-pointer ${
+                                            splitBillMode === 'even'
+                                                ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                                                : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900'
+                                        }`}
+                                    >
+                                        ✂️ Even
                                     </button>
                                     <button
                                         onClick={() => setSplitBillMode('items')}
-                                        className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                                        className={`py-2 px-1.5 rounded-xl text-[11px] font-black transition-all border cursor-pointer ${
                                             splitBillMode === 'items'
                                                 ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                                : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900'
                                         }`}
                                     >
-                                        🍽️ Split by Items
+                                        🍽️ Items
                                     </button>
                                     <button
                                         onClick={() => setSplitBillMode('payment')}
-                                        className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                                        className={`py-2 px-1.5 rounded-xl text-[11px] font-black transition-all border cursor-pointer ${
                                             splitBillMode === 'payment'
                                                 ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                                : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900'
                                         }`}
                                     >
-                                        💳 Split Payment
+                                        💳 Payment
                                     </button>
                                 </div>
                             </div>
+
+                            {/* ─── TAB 1: Split by Custom Amounts ─── */}
+                            {splitBillMode === 'custom' && (() => {
+                                const customSum = Array.from({ length: splitBillCount }, (_, gi) => parseFloat(splitCustomAmounts[gi + 1]) || 0).reduce((a, b) => a + b, 0);
+                                const customDiff = billTotal - customSum;
+                                const customBalanced = Math.abs(customDiff) < 0.5;
+
+                                return (
+                                    <>
+                                        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+                                            <span className="text-xs font-black text-gray-700">Number of Guests:</span>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        const next = Math.max(2, splitBillCount - 1);
+                                                        setSplitBillCount(next);
+                                                    }}
+                                                    className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100 cursor-pointer"
+                                                >-</button>
+                                                <span className="font-black text-sm text-gray-900 w-6 text-center">{splitBillCount}</span>
+                                                <button
+                                                    onClick={() => setSplitBillCount(prev => Math.min(8, prev + 1))}
+                                                    className="w-8 h-8 rounded-lg border border-gray-250 flex items-center justify-center font-black text-gray-650 hover:bg-gray-100 cursor-pointer"
+                                                >+</button>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                                            <p className="text-[11px] text-gray-500 font-semibold">
+                                                Input exact split amounts for each guest. They must add up to KES {billTotal.toLocaleString()}.
+                                            </p>
+
+                                            <div className="space-y-3">
+                                                {Array.from({ length: splitBillCount }, (_, gi) => {
+                                                    const gNo = gi + 1;
+                                                    const val = splitCustomAmounts[gNo] || '';
+                                                    const gColors = ['indigo', 'emerald', 'amber', 'rose', 'violet', 'sky', 'orange', 'teal'];
+                                                    const c = gColors[gi % gColors.length];
+
+                                                    return (
+                                                        <div key={gNo} className={`p-3.5 bg-${c}-50/40 border border-${c}-200 rounded-2xl space-y-2`}>
+                                                            <div className="flex justify-between items-center">
+                                                                <label className={`text-xs font-black text-${c}-900 flex items-center gap-1.5`}>
+                                                                    👤 Guest {gNo} Amount
+                                                                </label>
+                                                                {val && <span className={`text-xs font-mono font-bold text-${c}-700`}>KES {parseFloat(val).toLocaleString()}</span>}
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <div className="relative flex-1">
+                                                                    <span className="absolute left-3 top-2.5 text-xs font-mono text-gray-400 font-bold">KES</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        placeholder="Enter amount..."
+                                                                        value={val}
+                                                                        onChange={e => {
+                                                                            const inputVal = e.target.value;
+                                                                            setSplitCustomAmounts(prev => ({
+                                                                                ...prev,
+                                                                                [gNo]: inputVal
+                                                                            }));
+                                                                        }}
+                                                                        className="w-full pl-11 pr-4 py-2 bg-white border border-gray-250 rounded-xl text-sm font-mono font-bold text-gray-900 outline-none focus:border-gray-900 transition-colors"
+                                                                    />
+                                                                </div>
+                                                                {customDiff > 0 && !val && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setSplitCustomAmounts(prev => ({
+                                                                                ...prev,
+                                                                                [gNo]: String(Math.max(0, customDiff))
+                                                                            }));
+                                                                        }}
+                                                                        className="px-3 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-xl font-bold text-[11px] shrink-0 transition-all cursor-pointer shadow-2xs"
+                                                                    >
+                                                                        Auto-Fill KES {customDiff.toLocaleString()}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Running balance */}
+                                            <div className={`p-4 rounded-2xl border flex justify-between items-center ${
+                                                customBalanced ? 'bg-emerald-50 border-emerald-200' : 'bg-orange-50 border-orange-200'
+                                            }`}>
+                                                <div>
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Total Entered</span>
+                                                    <span className="font-mono font-black text-gray-900 text-lg">KES {customSum.toLocaleString()}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">
+                                                        {customBalanced ? 'Status' : 'Remaining'}
+                                                    </span>
+                                                    <span className={`font-mono font-black text-sm ${
+                                                        customBalanced ? 'text-emerald-600' : 'text-orange-600'
+                                                    }`}>
+                                                        {customBalanced ? '✓ Balanced' : `KES ${Math.abs(customDiff).toLocaleString()} ${customDiff > 0 ? 'short' : 'over'}`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="p-4 border-t border-gray-100 space-y-2 shrink-0 bg-gray-50/50">
+                                            <button
+                                                disabled={!customBalanced}
+                                                onClick={() => handleExecuteSplitPrint('custom')}
+                                                className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                                            >
+                                                <Printer size={15} /> Generate & Print {splitBillCount} Custom Share Receipts
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setSplitBillModalOpen(false);
+                                                    setSplitBillOrderTotal(null);
+                                                    setSplitBillTargetOrder(null);
+                                                }}
+                                                className="w-full py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-xl font-bold text-xs border border-gray-200 transition-all text-center cursor-pointer"
+                                            >
+                                                Close
+                                            </button>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+
 
                             {/* ─── TAB 1: Split Evenly (Equal Shares) ─── */}
                             {splitBillMode === 'even' && (
@@ -9282,7 +9436,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                                         <div className="space-y-2 mb-3 text-[10px]">
                                             <div className="grid grid-cols-[1fr_40px_60px] font-bold">
-                                                <span>{share.isEvenSplit ? 'ORDER ITEMS' : `GUEST ${share.guestNo} ITEMS`}</span>
+                                                <span>{share.isEvenSplit || share.isCustomSplit ? 'ORDER ITEMS SUMMARY' : `GUEST ${share.guestNo} ITEMS`}</span>
                                                 <span className="text-center">QTY</span>
                                                 <span className="text-right">PRICE</span>
                                             </div>
