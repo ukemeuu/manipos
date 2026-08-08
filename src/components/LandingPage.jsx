@@ -71,11 +71,11 @@ export function LandingPage({ onProceedToLogin }) {
   const faqData = [
     {
       q: "What is ManiPOS software?",
-      a: "ManiPOS is a modern cloud-based restaurant POS and management software system that helps physical restaurants, cafes, QSRs, and multi-location brands grow sales, improve order prep speed, reduce costs, and manage operations seamlessly."
+      a: "ManiPOS is a modern cloud-based restaurant POS and management system that helps restaurants, cloud kitchens, cafes, and multi-location brands boost sales, speed up kitchen prep, reduce costs, and manage operations seamlessly."
     },
     {
       q: "Does the system work offline if internet drops?",
-      a: "Yes. The POS terminal includes a local-first offline fallback. Orders and thermal kitchen tickets continue printing locally during internet outages, syncing automatically back to the cloud when internet restores."
+      a: "Yes. The POS terminal includes a local-first offline fallback. Billing and thermal kitchen tickets print uninterrupted during internet outages, syncing automatically back to the cloud once connectivity restores."
     },
     {
       q: "Can I manage multiple outlets and restaurant brands?",
@@ -134,7 +134,7 @@ export function LandingPage({ onProceedToLogin }) {
             </h1>
 
             <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-medium">
-              Built for physical restaurants, multi-location dining groups, and quick-service outlets. Manage billing, kitchen displays, guest menus, and multi-brand operations seamlessly.
+              Built for single restaurants, multi-location dining groups, and quick-service outlets. Effortlessly manage billing, kitchen displays, digital guest menus, and multi-brand operations in real time.
             </p>
 
             {/* Request Demo Form Card */}
