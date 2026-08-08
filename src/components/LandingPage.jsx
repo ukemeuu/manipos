@@ -124,9 +124,9 @@ export function LandingPage({ onProceedToLogin }) {
         <div className="flex flex-col lg:flex-row items-center gap-12 text-left">
           {/* Hero Left Content */}
           <div className="flex-1 space-y-6">
-            <div className="inline-flex items-center gap-2 text-xs font-black text-slate-700 bg-amber-100 border border-amber-300 px-4 py-1.5 rounded-full">
+            <div className="inline-flex items-center gap-2 text-xs font-black text-slate-700 bg-amber-100 border border-amber-300 px-4 py-1.5 rounded-full uppercase">
               <Sparkles size={14} className="text-amber-600" />
-              <span>CLOUD-BASED RESTAURANT POS SYSTEM</span>
+              <span>Cloud-Based POS & Restaurant Management</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.12] tracking-tight">
@@ -134,7 +134,7 @@ export function LandingPage({ onProceedToLogin }) {
             </h1>
 
             <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-medium">
-              Built for single outlets, multi-brand cloud kitchens, and multi-location dining groups. Effortlessly manage billing, kitchen displays, digital guest menus, and multi-brand operations in real time.
+              A cloud-based POS and restaurant management software system that helps you grow your sales. Built for single outlets, multi-brand cloud kitchens, and multi-location dining groups to manage billing, kitchen displays, and guest menus in real time.
             </p>
 
             {/* Request Demo Form Card */}
