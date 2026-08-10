@@ -162,12 +162,6 @@ export function LandingPage({ onProceedToLogin }) {
           </nav>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={onProceedToLogin}
-              className="hidden lg:flex text-sm font-bold text-white/60 hover:text-white transition-colors cursor-pointer"
-            >
-              Sign In
-            </button>
             <a
               href="#signup"
               className="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
@@ -197,7 +191,6 @@ export function LandingPage({ onProceedToLogin }) {
                 <a href="#outlets" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Whom We Serve</a>
                 <a href="#why" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Why ManiPOS</a>
                 <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">FAQ</a>
-                <button onClick={onProceedToLogin} className="text-left hover:text-white transition-colors cursor-pointer">Sign In</button>
               </div>
             </motion.div>
           )}
@@ -241,12 +234,6 @@ export function LandingPage({ onProceedToLogin }) {
                 >
                   Request a Live Demo <ArrowRight size={16} />
                 </a>
-                <button
-                  onClick={onProceedToLogin}
-                  className="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-sm px-7 py-4 rounded-xl transition-all cursor-pointer"
-                >
-                  Sign In to Your Account
-                </button>
               </motion.div>
 
               {/* Trust badges */}
@@ -651,12 +638,6 @@ export function LandingPage({ onProceedToLogin }) {
                 >
                   Request Demo <ArrowRight size={16} />
                 </a>
-                <button
-                  onClick={onProceedToLogin}
-                  className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 text-black font-black text-sm px-8 py-4 rounded-xl transition-all cursor-pointer"
-                >
-                  Sign In
-                </button>
               </div>
             </div>
           </motion.div>
