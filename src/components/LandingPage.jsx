@@ -1,30 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  CheckCircle2, 
-  Loader2, 
+import {
+  CheckCircle2,
+  Loader2,
   ArrowRight,
   Monitor,
   Globe,
   Layers,
   MapPin,
-  LayoutDashboard,
   Utensils,
   Coffee,
-  Store,
   ChevronDown,
   Sparkles,
   Zap,
-  ShieldCheck,
   Building2,
   Receipt,
   PieChart,
-  Award,
   Users,
-  Smartphone,
-  Menu
+  Star,
+  Play,
+  ChevronRight,
+  Wifi,
+  WifiOff,
+  Tablet,
+  BarChart3,
+  Menu as MenuIcon,
+  X,
 } from 'lucide-react';
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 32 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } },
+};
+
+const stagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.12 } },
+};
 
 export function LandingPage({ onProceedToLogin }) {
   const [formData, setFormData] = useState({
@@ -37,6 +50,8 @@ export function LandingPage({ onProceedToLogin }) {
   const [leadSuccess, setLeadSuccess] = useState(false);
   const [leadError, setLeadError] = useState('');
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeFeatureTab, setActiveFeatureTab] = useState(0);
 
   const handleLeadSubmit = async (e) => {
     e.preventDefault();
@@ -44,10 +59,8 @@ export function LandingPage({ onProceedToLogin }) {
       setLeadError('Please fill in your restaurant name and email address.');
       return;
     }
-
     setLeadLoading(true);
     setLeadError('');
-
     try {
       const { error: insertError } = await supabase
         .from('leads')
@@ -57,7 +70,6 @@ export function LandingPage({ onProceedToLogin }) {
           phone: formData.phone || 'N/A',
           locations: formData.location || 'N/A'
         }]);
-
       if (insertError) throw insertError;
       setLeadSuccess(true);
     } catch (err) {
@@ -87,353 +99,712 @@ export function LandingPage({ onProceedToLogin }) {
     }
   ];
 
+  const featureTabs = [
+    {
+      label: 'Point of Sale',
+      icon: <Receipt size={18} />,
+      image: '/mockups/tablet-pos.png',
+      title: 'Superfast Cloud POS Billing',
+      desc: 'Touch-optimised POS screen with quick cashier billing, table management, floor maps, split-bill payments, and instant thermal receipt printing.',
+      points: ['Touchscreen & keyboard billing', 'Table & floor map management', 'Split bills & multiple payments', 'Offline fallback with auto-sync']
+    },
+    {
+      label: 'Kitchen Display',
+      icon: <Monitor size={18} />,
+      image: '/mockups/kds-screen.png',
+      title: 'Real-Time Kitchen Display (KDS)',
+      desc: 'Orders flow instantly from the POS to wall-mounted kitchen screens. Chefs see every ticket in real time, eliminating paper dockets and reducing errors.',
+      points: ['Live order ticket streaming', 'Status: New → Cooking → Ready', 'Bump & recall tickets', 'Multi-station routing']
+    },
+    {
+      label: 'Dashboard',
+      icon: <BarChart3 size={18} />,
+      image: '/mockups/laptop-dashboard.png',
+      title: 'Owner & Manager Dashboard',
+      desc: "Access real-time sales reports, daily Z-reports, top-performing items, and cashier audit logs from any browser — even your phone from home.",
+      points: ['Live revenue & order metrics', 'Daily Z-report & cashier logs', 'Top items & hourly trends', 'Multi-branch comparison']
+    },
+    {
+      label: 'Waiter App',
+      icon: <Tablet size={18} />,
+      image: '/mockups/waiter-tablet.png',
+      title: 'Mobile Waiter Ordering',
+      desc: 'Waiters take orders tableside on a phone or tablet. Orders go straight to the kitchen — no shouting, no paper, no delays.',
+      points: ['Tableside order entry', 'Floor map with table status', 'Send to kitchen instantly', 'Works on any Android/iOS device']
+    },
+  ];
+
+  const stats = [
+    { value: '4', label: 'Core Modules', suffix: '' },
+    { value: '99.9', label: 'Uptime SLA', suffix: '%' },
+    { value: '0', label: 'Hardware Lock-In', prefix: '$' },
+    { value: '24/7', label: 'Support Access', suffix: '' },
+  ];
+
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-sans antialiased selection:bg-amber-400 selection:text-slate-950 flex flex-col justify-between">
-      {/* Navigation Bar */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-4 flex items-center justify-between bg-white border-b border-slate-200/70 sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-amber-400 rounded-xl flex items-center justify-center font-black text-slate-950 text-xl shadow-sm">
-            M
+    <div className="min-h-screen bg-[#0d0d0d] text-white font-sans antialiased selection:bg-amber-400 selection:text-black overflow-x-hidden">
+
+      {/* ── NAVBAR ── */}
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.06] bg-[#0d0d0d]/90 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-amber-400 rounded-lg flex items-center justify-center font-black text-black text-lg">M</div>
+            <span className="text-xl font-black tracking-tight">Mani<span className="text-amber-400">POS</span></span>
           </div>
-          <div>
-            <span className="text-2xl font-black tracking-tight text-slate-900">Mani<span className="text-amber-500">POS</span></span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block -mt-1">Cloud POS Engine</span>
+
+          {/* Desktop Nav */}
+          <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold text-white/60">
+            <a href="#features" className="hover:text-amber-400 transition-colors">Features</a>
+            <a href="#outlets" className="hover:text-amber-400 transition-colors">Whom We Serve</a>
+            <a href="#why" className="hover:text-amber-400 transition-colors">Why ManiPOS</a>
+            <a href="#faq" className="hover:text-amber-400 transition-colors">FAQ</a>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onProceedToLogin}
+              className="hidden lg:flex text-sm font-bold text-white/60 hover:text-white transition-colors cursor-pointer"
+            >
+              Sign In
+            </button>
+            <a
+              href="#signup"
+              className="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+            >
+              Request Demo <ArrowRight size={14} />
+            </a>
+            <button
+              className="lg:hidden text-white/60 hover:text-white cursor-pointer"
+              onClick={() => setMobileMenuOpen(v => !v)}
+            >
+              {mobileMenuOpen ? <X size={22} /> : <MenuIcon size={22} />}
+            </button>
           </div>
         </div>
 
-        <nav className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-700">
-          <a href="#features" className="hover:text-amber-500 transition-colors">Features</a>
-          <a href="#outlets" className="hover:text-amber-500 transition-colors">Whom We Serve</a>
-          <a href="#metrics" className="hover:text-amber-500 transition-colors">Why ManiPOS</a>
-          <a href="#faq" className="hover:text-amber-500 transition-colors">FAQ</a>
-        </nav>
-
-        <div className="flex items-center gap-3">
-          <a
-            href="#signup"
-            className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-5 py-3 rounded-xl transition-all shadow-md shadow-amber-400/20 flex items-center gap-1.5"
-          >
-            <span>Request Demo</span>
-            <ArrowRight size={14} />
-          </a>
-        </div>
+        {/* Mobile Nav */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="lg:hidden border-t border-white/[0.06] bg-[#0d0d0d] overflow-hidden"
+            >
+              <div className="px-6 py-4 flex flex-col gap-4 text-sm font-semibold text-white/60">
+                <a href="#features" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Features</a>
+                <a href="#outlets" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Whom We Serve</a>
+                <a href="#why" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Why ManiPOS</a>
+                <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">FAQ</a>
+                <button onClick={onProceedToLogin} className="text-left hover:text-white transition-colors cursor-pointer">Sign In</button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
-      {/* Hero Section */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 pt-10 pb-20 space-y-20">
-        <div className="flex flex-col lg:flex-row items-center gap-12 text-left">
-          {/* Hero Left Content */}
-          <div className="flex-1 space-y-6">
-            <div className="inline-flex items-center gap-2 text-xs font-black text-slate-700 bg-amber-100 border border-amber-300 px-4 py-1.5 rounded-full uppercase">
-              <Sparkles size={14} className="text-amber-600" />
-              <span>Cloud-Based POS & Restaurant Management</span>
-            </div>
+      {/* ── HERO ── */}
+      <section className="relative pt-32 pb-24 px-6 overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-amber-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-40 left-0 w-[400px] h-[400px] bg-amber-600/5 rounded-full blur-[100px] pointer-events-none" />
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.12] tracking-tight">
-              Supercharge Your Restaurant Operations & Sales.
-            </h1>
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            variants={stagger}
+            initial="hidden"
+            animate="visible"
+            className="flex flex-col lg:flex-row items-center gap-16"
+          >
+            {/* Left copy */}
+            <div className="flex-1 space-y-7 text-left">
+              <motion.div variants={fadeUp} className="inline-flex items-center gap-2 text-xs font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-4 py-2 rounded-full uppercase tracking-wider">
+                <Sparkles size={13} />
+                Cloud-Based POS & Restaurant Management
+              </motion.div>
 
-            <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-xl font-medium">
-              A cloud-based POS and restaurant management software system that helps you grow your sales. Built for single outlets, multi-brand cloud kitchens, and multi-location dining groups to manage billing, kitchen displays, and guest menus in real time.
-            </p>
+              <motion.h1 variants={fadeUp} className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[1.05] tracking-tight">
+                Supercharge Your<br />
+                <span className="text-amber-400">Restaurant Operations</span><br />
+                & Sales.
+              </motion.h1>
 
-            {/* Request Demo Form Card */}
-            <div id="signup" className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 max-w-xl">
-              <div className="mb-4">
-                <h3 className="text-lg font-black text-slate-900">Request a Live Demo</h3>
-              </div>
+              <motion.p variants={fadeUp} className="text-white/60 text-lg leading-relaxed max-w-xl font-medium">
+                A cloud-based POS and restaurant management software system that helps you grow your sales. Built for single outlets, multi-brand cloud kitchens, and multi-location dining groups to manage billing, kitchen displays, and guest menus in real time.
+              </motion.p>
 
-              {!leadSuccess ? (
-                <form onSubmit={handleLeadSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                        Restaurant Name <span className="text-amber-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.restaurantName}
-                        onChange={(e) => setFormData({ ...formData, restaurantName: e.target.value })}
-                        placeholder="e.g. Savory Bistro"
-                        className="w-full bg-[#F8F9FA] border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                        Owner Email <span className="text-amber-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="owner@restaurant.com"
-                        className="w-full bg-[#F8F9FA] border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-400"
-                      />
-                    </div>
-                  </div>
+              <motion.div variants={fadeUp} className="flex flex-wrap gap-4">
+                <a
+                  href="#signup"
+                  className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-black font-black text-sm px-7 py-4 rounded-xl transition-all shadow-2xl shadow-amber-400/20"
+                >
+                  Request a Live Demo <ArrowRight size={16} />
+                </a>
+                <button
+                  onClick={onProceedToLogin}
+                  className="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-sm px-7 py-4 rounded-xl transition-all cursor-pointer"
+                >
+                  Sign In to Your Account
+                </button>
+              </motion.div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                        Mobile Phone Number
-                      </label>
-                      <input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        placeholder="+254 700 000 000"
-                        className="w-full bg-[#F8F9FA] border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                        City / Location
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        placeholder="e.g. Nairobi"
-                        className="w-full bg-[#F8F9FA] border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-semibold focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-400"
-                      />
-                    </div>
-                  </div>
-
-                  {leadError && <p className="text-red-500 text-xs font-bold">{leadError}</p>}
-
-                  <button
-                    type="submit"
-                    disabled={leadLoading}
-                    className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-sm py-4 px-6 rounded-xl transition-all shadow-lg shadow-amber-400/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {leadLoading ? <Loader2 className="animate-spin text-slate-950" size={18} /> : (
-                      <>
-                        <span>Request Demo</span>
-                        <ArrowRight size={18} />
-                      </>
-                    )}
-                  </button>
-                </form>
-              ) : (
-                <div className="py-6 text-center space-y-3 bg-emerald-50 rounded-2xl border border-emerald-200">
-                  <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
-                    <CheckCircle2 size={26} />
-                  </div>
-                  <h4 className="text-base font-black text-slate-900">Demo Request Received!</h4>
-                  <p className="text-slate-600 text-xs font-semibold max-w-xs mx-auto">
-                    Our team will contact you shortly to schedule your live demo.
-                  </p>
+              {/* Trust badges */}
+              <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-6 pt-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-white/40">
+                  <WifiOff size={13} className="text-amber-400" />
+                  Works Offline
                 </div>
-              )}
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-white/40">
+                  <Globe size={13} className="text-amber-400" />
+                  Any Browser / Device
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-white/40">
+                  <Layers size={13} className="text-amber-400" />
+                  Multi-Brand & Multi-Location
+                </div>
+              </motion.div>
             </div>
-          </div>
 
-          {/* Hero Hardware Image */}
-          <div className="flex-1 w-full flex justify-center lg:justify-end">
-            <div className="bg-white p-3 rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full">
-              <img 
-                src="/manipos_african_hero.png" 
-                alt="ManiPOS Kenyan Restaurant Staff & Terminal" 
-                className="w-full h-auto rounded-2xl object-cover shadow-md" 
-              />
-            </div>
-          </div>
+            {/* Right hero image */}
+            <motion.div
+              variants={fadeUp}
+              className="flex-1 w-full max-w-2xl"
+            >
+              <div className="relative">
+                <div className="absolute inset-0 bg-amber-500/20 rounded-3xl blur-3xl scale-95" />
+                <img
+                  src="/mockups/tablet-pos.png"
+                  alt="ManiPOS POS system on a tablet"
+                  className="relative w-full rounded-2xl shadow-2xl shadow-black/60"
+                />
+              </div>
+            </motion.div>
+          </motion.div>
         </div>
+      </section>
 
-        {/* Statistics Metric Bar */}
-        <div id="metrics" className="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xl grid grid-cols-2 md:grid-cols-4 gap-8 text-center divide-x divide-slate-100">
-          <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-black text-slate-900">&lt; 1s</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Order Entry Speed</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-black text-amber-500">99.9%</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uptime Reliability</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-black text-slate-900">30%</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Faster Kitchen Prep</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-black text-emerald-600">$0</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Hardware Lock-In</p>
-          </div>
+      {/* ── STATS STRIP ── */}
+      <section id="why" className="border-y border-white/[0.06] bg-white/[0.02]">
+        <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-2 lg:grid-cols-4 gap-8">
+          {stats.map((s, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.5 }}
+              className="text-center"
+            >
+              <p className="text-4xl sm:text-5xl font-black text-amber-400 leading-none">
+                {s.prefix || ''}{s.value}{s.suffix || ''}
+              </p>
+              <p className="text-sm font-semibold text-white/40 mt-2 uppercase tracking-wider">{s.label}</p>
+            </motion.div>
+          ))}
         </div>
+      </section>
 
-        {/* Main Features Grid */}
-        <div id="features" className="space-y-10">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <div className="inline-block bg-amber-100 text-slate-900 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
+      {/* ── FEATURES TABS ── */}
+      <section id="features" className="py-28 px-6">
+        <div className="max-w-7xl mx-auto space-y-14">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
               System Features
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              Powerful Tools Built for Every Restaurant Need
+            <h2 className="text-4xl sm:text-5xl font-black tracking-tight">
+              Powerful Tools Built for<br />Every Restaurant Need
             </h2>
+            <p className="text-white/50 text-lg max-w-xl mx-auto font-medium">
+              From the cashier counter to the kitchen wall — every screen is designed to keep your service fast, accurate, and profitable.
+            </p>
+          </motion.div>
+
+          {/* Tab selector */}
+          <div className="flex flex-wrap justify-center gap-3">
+            {featureTabs.map((tab, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveFeatureTab(i)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer border ${
+                  activeFeatureTab === i
+                    ? 'bg-amber-400 text-black border-amber-400 shadow-lg shadow-amber-400/20'
+                    : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-            {/* Feature 1: Point of Sale */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
-                <Receipt size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">Point of Sale (POS)</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Superfast cloud POS software with quick cashier billing, table management, floor maps, and split-bill payments.
-              </p>
-            </div>
-
-            {/* Feature 2: KDS */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
-                <Monitor size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">Kitchen Display (KDS)</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Send orders directly to digital kitchen screens and thermal printers to reduce ticket prep time and eliminate mistakes.
-              </p>
-            </div>
-
-            {/* Feature 3: Inventory */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
-                <Layers size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">Inventory & Recipe Control</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Track ingredient stock levels automatically as orders are billed. Get low stock alerts and variance tracking.
-              </p>
-            </div>
-
-            {/* Feature 4: QR Code Menu */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
-                <Globe size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">QR Code Digital Menu</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Allow guests to scan QR codes at tables to view your digital menu, order, and pay directly from their smartphones.
-              </p>
-            </div>
-
-            {/* Feature 5: Multi-Location */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
-                <MapPin size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">Multi-Location & Subdomains</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Manage all your restaurant outlets under subdomains (e.g. branch.manipos.com) with central reporting and control.
-              </p>
-            </div>
-
-            {/* Feature 6: Owner Reports */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
-                <PieChart size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">Report & Sales Analytics</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                Access real-time sales reports, daily Z-reports, top-performing items, and cashier audit logs from any browser.
-              </p>
-            </div>
-          </div>
+          {/* Tab content */}
+          <AnimatePresence mode="wait">
+            {featureTabs.map((tab, i) =>
+              activeFeatureTab === i ? (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  transition={{ duration: 0.4 }}
+                  className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center"
+                >
+                  {/* Image */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-amber-500/15 rounded-3xl blur-3xl scale-90" />
+                    <img
+                      src={tab.image}
+                      alt={tab.title}
+                      className="relative w-full rounded-2xl shadow-2xl shadow-black/60 border border-white/[0.06]"
+                    />
+                  </div>
+                  {/* Text */}
+                  <div className="space-y-6">
+                    <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 text-amber-400 text-xs font-bold px-4 py-1.5 rounded-full uppercase">
+                      {tab.icon} {tab.label}
+                    </div>
+                    <h3 className="text-3xl sm:text-4xl font-black leading-tight">{tab.title}</h3>
+                    <p className="text-white/55 text-base leading-relaxed font-medium">{tab.desc}</p>
+                    <ul className="space-y-3">
+                      {tab.points.map((point, j) => (
+                        <li key={j} className="flex items-center gap-3 text-sm font-semibold text-white/80">
+                          <span className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center flex-shrink-0">
+                            <ChevronRight size={11} className="text-amber-400" />
+                          </span>
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                    <a
+                      href="#signup"
+                      className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-black font-black text-sm px-6 py-3 rounded-xl transition-all"
+                    >
+                      See It in Action <ArrowRight size={15} />
+                    </a>
+                  </div>
+                </motion.div>
+              ) : null
+            )}
+          </AnimatePresence>
         </div>
+      </section>
 
-        {/* Outlet Types Section */}
-        <div id="outlets" className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-xl space-y-10">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <div className="inline-block bg-slate-100 text-slate-800 font-extrabold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
+      {/* ── MORE FEATURES GRID ── */}
+      <section className="py-10 pb-28 px-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[
+            {
+              icon: <Globe size={22} />,
+              title: 'QR Code Digital Menu',
+              desc: 'Allow guests to scan QR codes at tables to view your digital menu, order, and pay directly from their smartphones.',
+            },
+            {
+              icon: <MapPin size={22} />,
+              title: 'Multi-Location & Subdomains',
+              desc: 'Manage all your restaurant outlets under subdomains (e.g. branch.manipos.com) with central reporting and control.',
+            },
+            {
+              icon: <PieChart size={22} />,
+              title: 'Report & Sales Analytics',
+              desc: 'Access real-time sales reports, daily Z-reports, top-performing items, and cashier audit logs from any browser.',
+            },
+            {
+              icon: <Layers size={22} />,
+              title: 'Inventory & Recipe Control',
+              desc: 'Track ingredient stock levels automatically as orders are billed. Get low stock alerts and variance tracking.',
+            },
+            {
+              icon: <Users size={22} />,
+              title: 'Staff & Role Management',
+              desc: 'Create role-based accounts for cashiers, waiters, kitchen staff, and managers with controlled access per outlet.',
+            },
+            {
+              icon: <WifiOff size={22} />,
+              title: 'Offline-First Architecture',
+              desc: 'POS keeps running during internet outages. Receipts and kitchen tickets print locally, then auto-sync to the cloud.',
+            },
+          ].map((feat, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.08, duration: 0.5 }}
+              className="bg-white/[0.03] border border-white/[0.07] hover:border-amber-400/30 hover:bg-white/[0.05] rounded-2xl p-7 space-y-4 transition-all group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-amber-400/15 border border-amber-400/25 text-amber-400 flex items-center justify-center group-hover:bg-amber-400/25 transition-all">
+                {feat.icon}
+              </div>
+              <h3 className="text-lg font-black text-white">{feat.title}</h3>
+              <p className="text-white/50 text-sm leading-relaxed font-medium">{feat.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── KDS SHOWCASE ── */}
+      <section className="py-24 px-6 bg-white/[0.015] border-y border-white/[0.05]">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="space-y-6"
+          >
+            <div className="inline-block bg-amber-400/10 border border-amber-400/20 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
+              01 — Kitchen Operations
+            </div>
+            <h2 className="text-4xl sm:text-5xl font-black leading-tight">
+              Convenient control of orders and services in your hands
+            </h2>
+            <p className="text-white/55 text-base leading-relaxed font-medium">
+              ManiPOS simplifies the work of waiters, makes serving customers faster and more efficient, and gives restaurant managers a convenient tool to control all aspects of service.
+            </p>
+            <p className="text-white/45 text-sm leading-relaxed font-medium">
+              The system's main functions include taking orders, integrating with the kitchen to transmit tickets, managing tables, and accounting for inventory balances in real time.
+            </p>
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              {[
+                { n: '10+', l: 'System Screens' },
+                { n: '4', l: 'Core Modules' },
+                { n: '100%', l: 'Cloud-Based' },
+                { n: '24/7', l: 'Live Support' },
+              ].map((s, i) => (
+                <div key={i} className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-5 text-center">
+                  <p className="text-3xl font-black text-amber-400">{s.n}</p>
+                  <p className="text-xs font-semibold text-white/40 mt-1 uppercase tracking-wider">{s.l}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="relative"
+          >
+            <div className="absolute inset-0 bg-amber-500/15 rounded-3xl blur-3xl scale-90" />
+            <img
+              src="/mockups/kds-screen.png"
+              alt="Kitchen Display System in a live restaurant kitchen"
+              className="relative w-full rounded-2xl shadow-2xl shadow-black/60 border border-white/[0.06]"
+            />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── WAITER APP SHOWCASE ── */}
+      <section className="py-24 px-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="relative order-2 lg:order-1"
+          >
+            <div className="absolute inset-0 bg-amber-500/15 rounded-3xl blur-3xl scale-90" />
+            <img
+              src="/mockups/waiter-tablet.png"
+              alt="Waiter using ManiPOS tablet app in restaurant"
+              className="relative w-full rounded-2xl shadow-2xl shadow-black/60 border border-white/[0.06]"
+            />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="space-y-6 order-1 lg:order-2"
+          >
+            <div className="inline-block bg-amber-400/10 border border-amber-400/20 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider">
+              02 — Tableside Service
+            </div>
+            <h2 className="text-4xl sm:text-5xl font-black leading-tight">
+              Waiters order from their own device — instantly
+            </h2>
+            <p className="text-white/55 text-base leading-relaxed font-medium">
+              Your waiters carry a smartphone or tablet and take orders directly at the table. No running back to a counter. No repeating orders. Every item goes straight to the kitchen display in seconds.
+            </p>
+            <ul className="space-y-3">
+              {['Interactive floor map with table status', 'One-tap item selection and modifiers', 'Instant kitchen routing with zero delays', 'Works on Android phones, iPhones, and tablets'].map((p, i) => (
+                <li key={i} className="flex items-center gap-3 text-sm font-semibold text-white/75">
+                  <span className="w-5 h-5 rounded-full bg-amber-400/15 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
+                    <ChevronRight size={11} className="text-amber-400" />
+                  </span>
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── DASHBOARD SHOWCASE ── */}
+      <section className="py-24 px-6 bg-white/[0.015] border-y border-white/[0.05]">
+        <div className="max-w-7xl mx-auto space-y-14">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
+              03 — Owner Insights
+            </div>
+            <h2 className="text-4xl sm:text-5xl font-black tracking-tight">
+              Run your restaurant from anywhere
+            </h2>
+            <p className="text-white/50 text-lg max-w-xl mx-auto font-medium">
+              The owner dashboard gives you a real-time view of every sale, every cashier, and every outlet — all from your laptop or phone.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="relative"
+          >
+            <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-3xl" />
+            <img
+              src="/mockups/laptop-dashboard.png"
+              alt="ManiPOS owner dashboard on a laptop"
+              className="relative w-full max-w-4xl mx-auto rounded-2xl shadow-2xl shadow-black/60 border border-white/[0.06]"
+            />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── WHOM WE SERVE ── */}
+      <section id="outlets" className="py-24 px-6">
+        <div className="max-w-7xl mx-auto space-y-14">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
               Whom We Serve
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-4xl sm:text-5xl font-black tracking-tight">
               Tailored Solutions for Every Outlet Concept
             </h2>
-          </div>
+          </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-            <div className="p-6 bg-[#F8F9FA] rounded-2xl border border-slate-200/80 space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold">
-                <Utensils size={20} />
-              </div>
-              <h4 className="text-base font-extrabold text-slate-900">Fine Dine & Full Service</h4>
-              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-                Table layouts, bill splitting, order courses, and mobile waiter ordering.
-              </p>
-            </div>
-
-            <div className="p-6 bg-[#F8F9FA] rounded-2xl border border-slate-200/80 space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold">
-                <Zap size={20} />
-              </div>
-              <h4 className="text-base font-extrabold text-slate-900">QSR & Take Away</h4>
-              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-                Rapid billing, order queue screens, customer takeaway printing, and fast checkout.
-              </p>
-            </div>
-
-            <div className="p-6 bg-[#F8F9FA] rounded-2xl border border-slate-200/80 space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold">
-                <Building2 size={20} />
-              </div>
-              <h4 className="text-base font-extrabold text-slate-900">Multi-Brand Outlets</h4>
-              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-                Multi-brand dispatch, automated ticket routing, and central inventory.
-              </p>
-            </div>
-
-            <div className="p-6 bg-[#F8F9FA] rounded-2xl border border-slate-200/80 space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold">
-                <Coffee size={20} />
-              </div>
-              <h4 className="text-base font-extrabold text-slate-900">Cafes & Bakeries</h4>
-              <p className="text-xs font-semibold text-slate-500 leading-relaxed">
-                Item modifiers, combo deals, loyalty rewards, and rapid order workflows.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA Banner */}
-        <div className="bg-slate-900 text-white p-10 sm:p-14 rounded-3xl shadow-2xl text-center space-y-6 relative overflow-hidden">
-          <div className="max-w-2xl mx-auto space-y-4 relative z-10">
-            <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
-              Ready to Upgrade Your Restaurant Management?
-            </h2>
-            <p className="text-slate-300 text-sm font-medium">
-              Join fast-growing restaurants leveraging ManiPOS to boost revenue and streamline kitchen operations.
-            </p>
-            <div className="pt-2">
-              <a
-                href="#signup"
-                className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-sm px-8 py-4 rounded-xl transition-all shadow-xl shadow-amber-400/20"
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { icon: <Utensils size={22} />, title: 'Fine Dine & Full Service', desc: 'Table layouts, bill splitting, order courses, and mobile waiter ordering.' },
+              { icon: <Zap size={22} />, title: 'QSR & Take Away', desc: 'Rapid billing, order queue screens, customer takeaway printing, and fast checkout.' },
+              { icon: <Building2 size={22} />, title: 'Multi-Brand Outlets', desc: 'Multi-brand dispatch, automated ticket routing, and central inventory.' },
+              { icon: <Coffee size={22} />, title: 'Cafes & Bakeries', desc: 'Item modifiers, combo deals, loyalty rewards, and rapid order workflows.' },
+            ].map((o, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="bg-white/[0.03] border border-white/[0.07] hover:border-amber-400/30 hover:bg-white/[0.05] rounded-2xl p-7 space-y-4 transition-all group"
               >
-                <span>Request Demo</span>
-                <ArrowRight size={18} />
-              </a>
-            </div>
+                <div className="w-11 h-11 rounded-xl bg-amber-400 text-black flex items-center justify-center group-hover:scale-110 transition-transform">
+                  {o.icon}
+                </div>
+                <h4 className="text-base font-black text-white">{o.title}</h4>
+                <p className="text-sm font-medium text-white/45 leading-relaxed">{o.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
+      </section>
 
-        {/* FAQ Accordion Section */}
-        <div id="faq" className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-xl space-y-8 text-left">
-          <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Frequently Asked Questions</h2>
-          </div>
+      {/* ── CTA BANNER ── */}
+      <section className="py-12 px-6">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="relative overflow-hidden bg-amber-400 rounded-3xl px-10 py-16 text-center shadow-2xl shadow-amber-400/20"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-300 to-amber-500" />
+            <div className="absolute -top-20 -right-20 w-80 h-80 bg-amber-300/40 rounded-full blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-amber-600/30 rounded-full blur-3xl" />
+            <div className="relative z-10 max-w-2xl mx-auto space-y-5">
+              <h2 className="text-4xl sm:text-5xl font-black text-black tracking-tight">
+                Ready to Upgrade Your Restaurant Management?
+              </h2>
+              <p className="text-black/65 font-semibold text-lg">
+                Join fast-growing restaurants leveraging ManiPOS to boost revenue and streamline kitchen operations.
+              </p>
+              <div className="flex flex-wrap justify-center gap-4 pt-2">
+                <a
+                  href="#signup"
+                  className="inline-flex items-center gap-2 bg-black hover:bg-zinc-900 text-white font-black text-sm px-8 py-4 rounded-xl transition-all shadow-xl"
+                >
+                  Request Demo <ArrowRight size={16} />
+                </a>
+                <button
+                  onClick={onProceedToLogin}
+                  className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 text-black font-black text-sm px-8 py-4 rounded-xl transition-all cursor-pointer"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
 
-          <div className="space-y-4">
+      {/* ── REQUEST DEMO FORM ── */}
+      <section id="signup" className="py-24 px-6">
+        <div className="max-w-3xl mx-auto space-y-10">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
+              Get Started
+            </div>
+            <h2 className="text-4xl font-black">Request a Live Demo</h2>
+            <p className="text-white/50 font-medium">Fill in your details and our team will set up a personalised walkthrough for your restaurant.</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 sm:p-10"
+          >
+            {!leadSuccess ? (
+              <form onSubmit={handleLeadSubmit} className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
+                      Restaurant Name <span className="text-amber-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.restaurantName}
+                      onChange={(e) => setFormData({ ...formData, restaurantName: e.target.value })}
+                      placeholder="e.g. Savory Bistro"
+                      className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-amber-400/60 rounded-xl px-4 py-3 text-sm text-white font-semibold placeholder:text-white/25 focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
+                      Owner Email <span className="text-amber-400">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="owner@restaurant.com"
+                      className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-amber-400/60 rounded-xl px-4 py-3 text-sm text-white font-semibold placeholder:text-white/25 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
+                      Mobile Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      placeholder="+254 700 000 000"
+                      className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-amber-400/60 rounded-xl px-4 py-3 text-sm text-white font-semibold placeholder:text-white/25 focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
+                      City / Location
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.location}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                      placeholder="e.g. Nairobi"
+                      className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-amber-400/60 rounded-xl px-4 py-3 text-sm text-white font-semibold placeholder:text-white/25 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {leadError && <p className="text-red-400 text-xs font-bold">{leadError}</p>}
+
+                <button
+                  type="submit"
+                  disabled={leadLoading}
+                  className="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-sm py-4 px-6 rounded-xl transition-all shadow-lg shadow-amber-400/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {leadLoading ? <Loader2 className="animate-spin" size={18} /> : (
+                    <>
+                      <span>Request Demo</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <div className="py-10 text-center space-y-4">
+                <div className="w-16 h-16 bg-emerald-400/10 border border-emerald-400/30 rounded-2xl flex items-center justify-center mx-auto">
+                  <CheckCircle2 size={32} className="text-emerald-400" />
+                </div>
+                <h3 className="text-xl font-black text-white">Request Received!</h3>
+                <p className="text-white/50 text-sm font-medium max-w-sm mx-auto">
+                  Thank you! Our team will reach out within 24 hours to schedule your personalised live demo.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section id="faq" className="py-24 px-6 border-t border-white/[0.05]">
+        <div className="max-w-3xl mx-auto space-y-10">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
+              FAQ
+            </div>
+            <h2 className="text-4xl font-black">Frequently Asked Questions</h2>
+          </motion.div>
+
+          <div className="space-y-3">
             {faqData.map((faq, idx) => {
               const isOpen = openFaqIndex === idx;
               return (
-                <div key={idx} className="border-b border-slate-200 pb-4">
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.08 }}
+                  className={`border rounded-2xl overflow-hidden transition-all ${isOpen ? 'border-amber-400/40 bg-white/[0.04]' : 'border-white/[0.07] bg-white/[0.02]'}`}
+                >
                   <button
                     onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                    className="w-full py-3 text-left flex justify-between items-center text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer"
+                    className="w-full px-6 py-5 text-left flex justify-between items-center gap-4 cursor-pointer"
                   >
-                    <span>{faq.q}</span>
-                    <ChevronDown size={18} className={`text-amber-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    <span className={`text-base font-bold transition-colors ${isOpen ? 'text-amber-400' : 'text-white/80'}`}>{faq.q}</span>
+                    <ChevronDown size={18} className={`text-amber-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
                   <AnimatePresence>
                     {isOpen && (
@@ -441,32 +812,28 @@ export function LandingPage({ onProceedToLogin }) {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
+                        transition={{ duration: 0.25 }}
                       >
-                        <p className="text-slate-600 text-sm leading-relaxed pt-2 font-medium">
-                          {faq.a}
-                        </p>
+                        <p className="px-6 pb-5 text-white/50 text-sm leading-relaxed font-medium">{faq.a}</p>
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
+                </motion.div>
               );
             })}
           </div>
         </div>
-      </main>
+      </section>
 
-      {/* Dark Footer */}
-      <footer className="w-full bg-slate-950 text-slate-400 py-12 border-t border-slate-800 text-xs font-semibold">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+      {/* ── FOOTER ── */}
+      <footer className="border-t border-white/[0.06] py-10 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5 text-sm">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center font-black text-slate-950 text-sm">
-              M
-            </div>
-            <span className="text-white font-extrabold text-sm">ManiPOS</span>
-            <span>&bull; Cloud Restaurant POS & Management System</span>
+            <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center font-black text-black text-sm">M</div>
+            <span className="font-extrabold text-white">ManiPOS</span>
+            <span className="text-white/30">• Cloud Restaurant POS & Management System</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
+          <p className="text-white/30 font-semibold">© {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
         </div>
       </footer>
     </div>
