@@ -806,6 +806,44 @@ export function LandingPage({ onProceedToLogin }) {
         </div>
       </section>
 
+      {/* ── DESKTOP DOWNLOAD SECTION ── */}
+      <section id="download" className="py-24 px-6 border-t border-white/[0.05] bg-gradient-to-b from-transparent to-slate-950">
+        <div className="max-w-5xl mx-auto bg-gradient-to-r from-orange-950/40 via-amber-950/20 to-slate-900 border border-orange-500/30 rounded-3xl p-10 sm:p-14 text-center space-y-6 shadow-2xl relative overflow-hidden">
+          <div className="inline-block bg-orange-500/20 text-orange-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-orange-500/30">
+            Offline-First Desktop App
+          </div>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
+            Download ManiPOS for Windows
+          </h2>
+          <p className="text-slate-300 text-base sm:text-lg max-w-2xl mx-auto font-medium">
+            Never stop selling when Wi-Fi goes down. Run your register offline with local storage, local ESC/POS thermal printing, and automatic background cloud sync.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
+            <a
+              href="/release/ManiPOS-Setup-1.0.0.exe"
+              download
+              className="w-full sm:w-auto bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-base px-8 py-4 rounded-2xl shadow-xl shadow-orange-500/20 hover:from-orange-600 hover:to-amber-600 transition-all flex items-center justify-center gap-3 group cursor-pointer"
+            >
+              <span>Download Desktop App (.exe)</span>
+              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md uppercase font-extrabold">v1.0.0</span>
+            </a>
+            <button
+              onClick={() => onProceedToLogin()}
+              className="w-full sm:w-auto bg-slate-900 border border-slate-700 text-slate-200 font-bold text-base px-8 py-4 rounded-2xl hover:bg-slate-800 transition-all cursor-pointer"
+            >
+              Launch Web POS Terminal
+            </button>
+          </div>
+          <div className="pt-4 text-xs font-bold text-slate-500 tracking-wide flex items-center justify-center gap-4">
+            <span>✓ Windows 10 & 11 Compatible</span>
+            <span>•</span>
+            <span>✓ QZ Tray Printing Included</span>
+            <span>•</span>
+            <span>✓ Local-First Database</span>
+          </div>
+        </div>
+      </section>
+
       {/* ── FOOTER ── */}
       <footer className="border-t border-white/[0.06] py-10 px-6">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5 text-sm">

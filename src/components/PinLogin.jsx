@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
 import { KeyRound, ArrowRight, Loader2, Store, Lock } from 'lucide-react';
+import { authenticateStaffPin } from '../services/data/staffService';
 
 export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
     const [restaurantSlug, setRestaurantSlug] = useState(initialTenantSlug || 'littlelagos');
@@ -52,14 +53,10 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
         try {
             const cleanSlug = restaurantSlug.toLowerCase().trim();
 
-            // 1. Primary: Verify staff PIN via secure Postgres RPC function
-            const { data: rpcRes, error: rpcError } = await supabase.rpc('verify_staff_pin', {
-                p_restaurant_slug: cleanSlug,
-                p_pin: enteredPin
-            });
+            const result = await authenticateStaffPin(cleanSlug, enteredPin);
 
-            if (rpcRes && rpcRes.success) {
-                const staffPayload = rpcRes.staff_user;
+            if (result.success) {
+                const staffPayload = result.staffUser;
                 localStorage.setItem('pin_staff_user', JSON.stringify(staffPayload));
 
                 onLoginSuccess({
@@ -67,39 +64,9 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                     staffUser: staffPayload
                 }, cleanSlug);
                 return;
+            } else {
+                throw new Error(result.error || 'Authentication error. Check security PIN.');
             }
-
-            if (rpcRes && !rpcRes.success && rpcRes.error) {
-                throw new Error(rpcRes.error);
-            }
-
-            if (rpcError) {
-                console.warn('Supabase RPC verify_staff_pin not reachable, using local verified session format:', rpcError.message);
-            }
-
-            // Fallback for offline/local dev preview when RPC is not applied to remote database instance
-            let fallbackRole = 'cashier';
-            if (enteredPin === '1234' || enteredPin === '0000') {
-                fallbackRole = 'admin';
-            } else if (enteredPin === '9999') {
-                fallbackRole = 'manager';
-            }
-
-            const staffPayload = {
-                id: 'staff-' + Date.now(),
-                name: fallbackRole === 'admin' ? 'Terminal Admin' : (fallbackRole === 'manager' ? 'Shift Supervisor' : 'POS Cashier'),
-                role: fallbackRole,
-                restaurantId: cleanSlug,
-                restaurantName: `${cleanSlug.toUpperCase()} Terminal`,
-                tenantSlug: cleanSlug
-            };
-
-            localStorage.setItem('pin_staff_user', JSON.stringify(staffPayload));
-
-            onLoginSuccess({
-                access_token: 'terminal_session_' + Date.now(),
-                staffUser: staffPayload
-            }, cleanSlug);
         } catch (err) {
             console.error(err);
             setError(err.message || 'Authentication error. Check security PIN.');
