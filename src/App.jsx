@@ -21,7 +21,34 @@ function App() {
     }
   });
   const [loading, setLoading] = useState(true);
-  const [tenantInfo, setTenantInfo] = useState(() => getTenantInfo());
+  const [storeStatus, setStoreStatus] = useState('approved');
+
+  useEffect(() => {
+    const fetchStoreStatus = async () => {
+      try {
+        const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+        const storeSlug = tenantInfo.tenantSlug || pinUser.tenantSlug;
+        const storeId = pinUser.restaurantId || pinUser.restaurant_id;
+
+        if (!storeSlug && !storeId) return;
+
+        let query = supabase.from('restaurants').select('status, is_active');
+        if (storeId) {
+          query = query.eq('id', storeId);
+        } else {
+          query = query.eq('slug', storeSlug);
+        }
+        const { data } = await query.maybeSingle();
+        if (data && data.status) {
+          setStoreStatus(data.status);
+        }
+      } catch (e) {
+        console.warn('Store status check notice:', e);
+      }
+    };
+
+    fetchStoreStatus();
+  }, [tenantInfo.tenantSlug, currentRoute]);
 
   // Clean router supporting subdomain detection, subpaths, hashes, and search queries
   const [currentRoute, setCurrentRoute] = useState(() => {
@@ -195,6 +222,54 @@ function App() {
 
     // Operational Live POS Register
     if (currentRoute === 'terminal') {
+      if (storeStatus === 'pending') {
+        const storeName = staffUser.restaurantName || 'Your Restaurant';
+        return (
+          <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center font-sans">
+            <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
+              <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-2xl font-black">
+                🔒
+              </div>
+              <div className="space-y-2">
+                <span className="px-3 py-1 bg-amber-400/10 text-amber-400 text-xs font-bold rounded-full uppercase tracking-wider inline-block">
+                  Super Admin Approval Required
+                </span>
+                <h2 className="text-2xl font-black text-white">{storeName} POS Locked</h2>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  Your restaurant registration is complete! As a multi-tenant SaaS safety policy, POS operational access requires approval by a ManiPOS Super Admin.
+                </p>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-left text-xs space-y-2 font-mono">
+                <div className="flex justify-between text-slate-400">
+                  <span>Store Name:</span>
+                  <span className="text-white font-bold">{storeName}</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Approval Status:</span>
+                  <span className="text-amber-400 font-bold uppercase">Pending Super Admin Review</span>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => setCurrentRoute('dashboard')}
+                  className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs py-3.5 rounded-xl transition-all shadow-lg shadow-amber-400/10 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Management Dashboard (Configure Store) &rarr;</span>
+                </button>
+                <button
+                  onClick={() => window.location.href = `mailto:support@manipos.com?subject=Approval Request for ${storeName}`}
+                  className="w-full bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs py-3 rounded-xl transition-all border border-slate-800 cursor-pointer"
+                >
+                  Contact ManiPOS Onboarding Team
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-screen bg-slate-50 relative">
           <PosTerminal 

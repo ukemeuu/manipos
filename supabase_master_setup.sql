@@ -375,9 +375,9 @@ BEGIN
         );
     END IF;
 
-    -- 1. Create Restaurant Record
-    INSERT INTO public.restaurants (name, slug)
-    VALUES (p_name, v_clean_slug)
+    -- 1. Create Restaurant Record (Requires Super Admin approval before POS terminal access)
+    INSERT INTO public.restaurants (name, slug, status, is_active)
+    VALUES (p_name, v_clean_slug, 'pending', true)
     RETURNING id INTO v_restaurant_id;
 
     -- 2. Create Initial Manager Account with Hashed PIN
