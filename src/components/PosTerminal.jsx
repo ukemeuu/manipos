@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { connectQZ, disconnectQZ, isQZConnected, onQZStatusChange, listPrinters, printOrFallback } from '../lib/qzPrint';
 import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus, Wifi, WifiOff } from 'lucide-react';
