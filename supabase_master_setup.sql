@@ -286,23 +286,52 @@ ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Allow Public Select/Read Access for operational components & guest portals
+DROP POLICY IF EXISTS "Public read restaurants" ON public.restaurants;
 CREATE POLICY "Public read restaurants" ON public.restaurants FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public read staff_access" ON public.staff_access;
 CREATE POLICY "Public read staff_access" ON public.staff_access FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public read pos_menu" ON public.pos_menu;
 CREATE POLICY "Public read pos_menu" ON public.pos_menu FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public read pos_categories" ON public.pos_categories;
 CREATE POLICY "Public read pos_categories" ON public.pos_categories FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public read pos_discounts" ON public.pos_discounts;
 CREATE POLICY "Public read pos_discounts" ON public.pos_discounts FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public read modifier_groups" ON public.menu_modifier_groups;
 CREATE POLICY "Public read modifier_groups" ON public.menu_modifier_groups FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public read tenant_links" ON public.tenant_links;
 CREATE POLICY "Public read tenant_links" ON public.tenant_links FOR SELECT TO public USING (true);
 
 -- Allow Public/Operational Access for POS Terminal Orders, Shifts & Audit Logs
+DROP POLICY IF EXISTS "Public operational pos_orders" ON public.pos_orders;
 CREATE POLICY "Public operational pos_orders" ON public.pos_orders FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public operational pos_shifts" ON public.pos_shifts;
 CREATE POLICY "Public operational pos_shifts" ON public.pos_shifts FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public operational suppliers" ON public.suppliers;
 CREATE POLICY "Public operational suppliers" ON public.suppliers FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public operational settings" ON public.restaurant_settings;
 CREATE POLICY "Public operational settings" ON public.restaurant_settings FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public operational audit_logs" ON public.audit_logs;
 CREATE POLICY "Public operational audit_logs" ON public.audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- Guest Insert Policies for Feedback & Marketing Leads
+DROP POLICY IF EXISTS "Allow public insert pos_feedback" ON public.pos_feedback;
 CREATE POLICY "Allow public insert pos_feedback" ON public.pos_feedback FOR INSERT TO public WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public select pos_feedback" ON public.pos_feedback;
 CREATE POLICY "Allow public select pos_feedback" ON public.pos_feedback FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow public insert leads" ON public.leads;
 CREATE POLICY "Allow public insert leads" ON public.leads FOR INSERT TO public WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow authenticated select leads" ON public.leads;
 CREATE POLICY "Allow authenticated select leads" ON public.leads FOR SELECT TO authenticated USING (true);
