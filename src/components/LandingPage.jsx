@@ -27,6 +27,7 @@ import {
   BarChart3,
   Menu as MenuIcon,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 
 const fadeUp = {

@@ -19,13 +19,14 @@ function App() {
   // Clean router supporting subdomain detection, subpaths, hashes, and search queries
   const [currentRoute, setCurrentRoute] = useState(() => {
     const info = getTenantInfo();
-    if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback') {
+    const queryPage = new URLSearchParams(window.location.search).get('page');
+    if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
       return 'feedback';
     }
-    if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
+    if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
       return 'terminal';
     }
-    if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu') {
+    if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu' || queryPage === 'menu') {
       return 'microsite';
     }
     return 'home';
@@ -50,12 +51,13 @@ function App() {
   useEffect(() => {
     const handleLocationChange = () => {
       const info = getTenantInfo();
+      const queryPage = new URLSearchParams(window.location.search).get('page');
       setTenantInfo(info);
-      if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback') {
+      if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
         setCurrentRoute('feedback');
-      } else if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal') {
+      } else if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
         setCurrentRoute('terminal');
-      } else if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu') {
+      } else if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu' || queryPage === 'menu') {
         setCurrentRoute('microsite');
       } else {
         setCurrentRoute('home');
