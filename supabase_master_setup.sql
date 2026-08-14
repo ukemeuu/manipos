@@ -387,14 +387,11 @@ BEGIN
     RETURNING id INTO v_staff_id;
 
     -- 3. Create Default Restaurant Settings
-    INSERT INTO public.restaurant_settings (restaurant_id, receipt_header, tax_rate, currency, phone_number)
+    INSERT INTO public.restaurant_settings (restaurant_id, phone)
     VALUES (
         v_restaurant_id,
-        p_name,
-        16.0,
-        'KSh',
         p_phone
-    );
+    ) ON CONFLICT (restaurant_id) DO NOTHING;
 
     -- 4. Create Starter Menu Categories
     INSERT INTO public.pos_categories (restaurant_id, name, icon, display_order)
