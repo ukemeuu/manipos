@@ -110,7 +110,7 @@ export function getTenantInfo() {
 
   return {
     hostname,
-    tenantSlug: tenantSlug || (isGuestMicrosite || isFeedbackDomain || isLinkHubDomain ? 'potofjollof' : null),
+    tenantSlug: tenantSlug || (isGuestMicrosite || isFeedbackDomain || isLinkHubDomain ? 'demo' : null),
     isPosDomain,
     isGuestMicrosite,
     isFeedbackDomain,
@@ -119,7 +119,7 @@ export function getTenantInfo() {
   };
 }
 
-export function getFeedbackUrl(tenantSlug = 'potofjollof') {
+export function getFeedbackUrl(tenantSlug = 'demo') {
   const isLocal = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
 
   if (isLocal) {

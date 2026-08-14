@@ -11,6 +11,7 @@ import { createPosOrder } from '../services/data/orderService';
 import { getMenuItems, getCategories, getModifierGroups } from '../services/data/menuService';
 import { openLocalShift, closeLocalShift, getActiveLocalShift } from '../services/data/shiftService';
 import { onConnectivityChange, isOnline } from '../services/data/connectivityService';
+import { getFeedbackUrl } from '../lib/tenant';
 
 const MUTE_LOGO_URL = '/logo.png';
 
@@ -9652,7 +9653,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     );
 }
 
-const FEEDBACK_URL = "https://potofjollof.manipos.com/feedback";
+const FEEDBACK_URL = getFeedbackUrl(typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('tenant') || 'demo') : 'demo');
 const FEEDBACK_QR_CODE = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(FEEDBACK_URL)}`;
 
 

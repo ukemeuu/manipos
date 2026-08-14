@@ -53,6 +53,44 @@ export function LandingPage({ onProceedToLogin }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeFeatureTab, setActiveFeatureTab] = useState(0);
 
+  // Self-Service Store Onboarding State
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const [onboardData, setOnboardData] = useState({ name: '', slug: '', managerName: '', pin: '1234', phone: '' });
+  const [onboardLoading, setOnboardLoading] = useState(false);
+  const [onboardError, setOnboardError] = useState('');
+  const [onboardSuccess, setOnboardSuccess] = useState(null);
+
+  const handleSelfServiceOnboard = async (e) => {
+    e.preventDefault();
+    if (!onboardData.name || !onboardData.slug || !onboardData.pin) {
+      setOnboardError('Please enter Store Name, Subdomain Code, and 4-Digit Manager PIN.');
+      return;
+    }
+    setOnboardLoading(true);
+    setOnboardError('');
+    try {
+      const { data, error } = await supabase.rpc('create_new_restaurant_tenant', {
+        p_name: onboardData.name,
+        p_slug: onboardData.slug.toLowerCase().trim(),
+        p_manager_name: onboardData.managerName || 'Store Manager',
+        p_pin: onboardData.pin,
+        p_phone: onboardData.phone || null
+      });
+
+      if (error) throw error;
+      if (data && !data.success) throw new Error(data.error || 'Registration failed.');
+
+      setOnboardSuccess(data);
+      setTimeout(() => {
+        window.location.href = `/?tenant=${data.restaurant_slug}&page=pos`;
+      }, 1800);
+    } catch (err) {
+      setOnboardError(err.message || 'Error creating store account.');
+    } finally {
+      setOnboardLoading(false);
+    }
+  };
+
   const handleLeadSubmit = async (e) => {
     e.preventDefault();
     if (!formData.restaurantName || !formData.email) {
@@ -162,9 +200,15 @@ export function LandingPage({ onProceedToLogin }) {
           </nav>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowOnboardModal(true)}
+              className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-orange-500/20 cursor-pointer flex items-center gap-1.5"
+            >
+              <span>+ Create Restaurant</span>
+            </button>
             <a
               href="#signup"
-              className="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+              className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
             >
               Request Demo <ArrowRight size={14} />
             </a>
@@ -855,6 +899,139 @@ export function LandingPage({ onProceedToLogin }) {
           <p className="text-white/30 font-semibold">© {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
         </div>
       </footer>
+
+      {/* ── SELF-SERVICE STORE ONBOARDING MODAL ── */}
+      <AnimatePresence>
+        {showOnboardModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative overflow-hidden"
+            >
+              <button
+                onClick={() => setShowOnboardModal(false)}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="space-y-2 mb-6">
+                <div className="inline-block bg-orange-500/20 text-orange-400 font-bold text-xs px-3 py-1 rounded-full uppercase border border-orange-500/30">
+                  Instant Self-Service Onboarding
+                </div>
+                <h3 className="text-2xl font-black text-white">Create Your Restaurant Store</h3>
+                <p className="text-slate-400 text-xs font-medium">
+                  Launch your dedicated restaurant POS, digital menu, and cashier terminal in seconds.
+                </p>
+              </div>
+
+              {onboardSuccess ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-3">
+                  <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-xl font-black">✓</div>
+                  <h4 className="text-lg font-black text-white">Store Successfully Created!</h4>
+                  <p className="text-slate-300 text-xs">
+                    Welcome <span className="font-bold text-emerald-400">{onboardSuccess.restaurant_name}</span>. Redirecting to your live register terminal...
+                  </p>
+                  <div className="text-xs font-bold text-slate-500 animate-pulse">Opening POS Terminal...</div>
+                </div>
+              ) : (
+                <form onSubmit={handleSelfServiceOnboard} className="space-y-4">
+                  {onboardError && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-xs font-bold flex items-center gap-2">
+                      <AlertTriangle size={16} />
+                      <span>{onboardError}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Restaurant / Store Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mama Oliech Kitchen"
+                      value={onboardData.name}
+                      onChange={(e) => {
+                        const nameVal = e.target.value;
+                        const autoSlug = nameVal.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        setOnboardData(prev => ({ ...prev, name: nameVal, slug: autoSlug }));
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 font-medium"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Subdomain Code (URL Slug)</label>
+                    <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-400">
+                      <input
+                        type="text"
+                        placeholder="mamaoliech"
+                        value={onboardData.slug}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') }))}
+                        className="bg-transparent border-none text-white focus:outline-none w-full font-mono text-xs"
+                        required
+                      />
+                      <span className="text-xs text-slate-500 font-bold flex-shrink-0">.pos.manipos.com</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">Manager Name</label>
+                      <input
+                        type="text"
+                        placeholder="John Doe"
+                        value={onboardData.managerName}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, managerName: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">4-Digit Security PIN</label>
+                      <input
+                        type="password"
+                        maxLength={4}
+                        placeholder="1234"
+                        value={onboardData.pin}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, pin: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 font-mono text-center font-bold tracking-widest"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Contact Phone (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="+254 700 000 000"
+                      value={onboardData.phone}
+                      onChange={(e) => setOnboardData(prev => ({ ...prev, phone: e.target.value }))}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 font-medium"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={onboardLoading}
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                  >
+                    {onboardLoading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Provisioning Store & Menu...</span>
+                      </>
+                    ) : (
+                      <span>Launch Restaurant POS Store</span>
+                    )}
+                  </button>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

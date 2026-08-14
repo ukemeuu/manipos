@@ -344,3 +344,86 @@ CREATE POLICY "Allow public insert leads" ON public.leads FOR INSERT TO public W
 
 DROP POLICY IF EXISTS "Allow authenticated select leads" ON public.leads;
 CREATE POLICY "Allow authenticated select leads" ON public.leads FOR SELECT TO authenticated USING (true);
+
+-- 8. Automated Self-Service Restaurant Onboarding RPC Function
+CREATE OR REPLACE FUNCTION public.create_new_restaurant_tenant(
+    p_name TEXT,
+    p_slug TEXT,
+    p_manager_name TEXT,
+    p_pin TEXT,
+    p_phone TEXT DEFAULT NULL
+) RETURNS JSONB AS $$
+DECLARE
+    v_clean_slug TEXT;
+    v_restaurant_id UUID;
+    v_staff_id UUID;
+    v_cat_main_id UUID;
+    v_cat_drinks_id UUID;
+BEGIN
+    v_clean_slug := lower(trim(p_slug));
+
+    -- Check if slug already exists
+    IF EXISTS (SELECT 1 FROM public.restaurants WHERE slug = v_clean_slug) THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Restaurant subdomain slug is already taken. Please choose another name.'
+        );
+    END IF;
+
+    -- 1. Create Restaurant Record
+    INSERT INTO public.restaurants (name, slug)
+    VALUES (p_name, v_clean_slug)
+    RETURNING id INTO v_restaurant_id;
+
+    -- 2. Create Initial Manager Account with Hashed PIN
+    INSERT INTO public.staff_access (restaurant_id, name, role, pin_code, pin_hash)
+    VALUES (
+        v_restaurant_id,
+        p_manager_name,
+        'admin',
+        p_pin,
+        crypt(p_pin, gen_salt('bf'))
+    )
+    RETURNING id INTO v_staff_id;
+
+    -- 3. Create Default Restaurant Settings
+    INSERT INTO public.restaurant_settings (restaurant_id, receipt_header, tax_rate, currency, phone_number)
+    VALUES (
+        v_restaurant_id,
+        p_name,
+        16.0,
+        'KSh',
+        p_phone
+    );
+
+    -- 4. Create Starter Menu Categories
+    INSERT INTO public.pos_categories (restaurant_id, name, icon, display_order)
+    VALUES 
+        (v_restaurant_id, 'Main Dishes', 'Utensils', 1)
+        RETURNING id INTO v_cat_main_id;
+
+    INSERT INTO public.pos_categories (restaurant_id, name, icon, display_order)
+    VALUES 
+        (v_restaurant_id, 'Beverages & Drinks', 'Coffee', 2)
+        RETURNING id INTO v_cat_drinks_id;
+
+    -- 5. Seed Starter Menu Items
+    INSERT INTO public.pos_menu (restaurant_id, category_id, name, price, description, is_available)
+    VALUES
+        (v_restaurant_id, v_cat_main_id, 'Chef Signature Dish', 850.00, 'Freshly prepared specialty dish', true),
+        (v_restaurant_id, v_cat_drinks_id, 'Fresh Tropical Juice', 250.00, 'Cold pressed seasonal fruit juice', true);
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'restaurant_id', v_restaurant_id,
+        'restaurant_slug', v_clean_slug,
+        'restaurant_name', p_name,
+        'manager_name', p_manager_name
+    );
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'error', SQLERRM
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
