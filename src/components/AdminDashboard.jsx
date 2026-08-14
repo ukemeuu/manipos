@@ -42,7 +42,8 @@ import {
   Link2,
   Video,
   Image as ImageIcon,
-  ShieldCheck
+  ShieldCheck,
+  ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
@@ -647,6 +648,18 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
 
         {/* Workspace Panels */}
         <main className="flex-1 p-8 overflow-y-auto">
+          {!setupCompleted && activeTab !== 'onboarding' && (
+            <div className="mb-6">
+              <button
+                onClick={() => setActiveTab('onboarding')}
+                className="text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-300 px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+              >
+                <ArrowLeft size={16} />
+                <span>Back to Store Setup Checklist</span>
+              </button>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             
             {/* STORE ONBOARDING CHECKLIST */}
