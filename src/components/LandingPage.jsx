@@ -56,6 +56,8 @@ export function LandingPage({ onProceedToLogin }) {
 
   // Self-Service Store Onboarding State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const [showSignInModal, setShowSignInModal] = useState(false);
+  const [signInSlug, setSignInSlug] = useState('');
   const [onboardData, setOnboardData] = useState({ name: '', slug: '', managerName: '', pin: '1234', phone: '' });
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardError, setOnboardError] = useState('');
@@ -202,16 +204,22 @@ export function LandingPage({ onProceedToLogin }) {
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setShowSignInModal(true)}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Sign In</span>
+            </button>
+            <button
               onClick={() => setShowOnboardModal(true)}
-              className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-orange-500/20 cursor-pointer flex items-center gap-1.5"
+              className="bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-white/10"
             >
               <span>+ Create Restaurant</span>
             </button>
             <a
               href="#signup"
-              className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+              className="hidden sm:flex bg-white/10 hover:bg-white/20 text-white/80 hover:text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all items-center gap-1.5"
             >
-              Request Demo <ArrowRight size={14} />
+              Demo <ArrowRight size={14} />
             </a>
             <button
               className="lg:hidden text-white/60 hover:text-white cursor-pointer"
@@ -1026,6 +1034,102 @@ export function LandingPage({ onProceedToLogin }) {
                   </button>
                 </form>
               )}
+            </motion.div>
+          </div>
+        )}
+
+        {/* SIGN IN TO EXISTING RESTAURANT MODAL */}
+        {showSignInModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-md w-full relative shadow-2xl space-y-6 text-left"
+            >
+              <button
+                onClick={() => setShowSignInModal(false)}
+                className="absolute top-6 right-6 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="space-y-2">
+                <span className="px-3 py-1 bg-amber-400/10 text-amber-400 border border-amber-400/20 text-xs font-bold rounded-full uppercase tracking-wider inline-block">
+                  Existing Restaurant Sign In
+                </span>
+                <h3 className="text-2xl font-black text-white tracking-tight">Sign In to ManiPOS</h3>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  Enter your restaurant subdomain code or store slug to access your POS terminal & management workspace.
+                </p>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const slug = (signInSlug || '').toLowerCase().trim();
+                  if (!slug) return;
+                  setShowSignInModal(false);
+                  if (onProceedToLogin) {
+                    onProceedToLogin(slug);
+                  } else {
+                    window.location.href = `/?tenant=${slug}&page=pos`;
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Store Subdomain / Slug</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. potofjollof, littlelagos, myrestaurant"
+                      value={signInSlug}
+                      onChange={(e) => setSignInSlug(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-mono font-bold"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono pt-0.5">e.g. https://[store-slug].pos.manipos.com</p>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Quick Select Existing Outlets:</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'Pot of Jollof', slug: 'potofjollof' },
+                      { name: 'Little Lagos', slug: 'littlelagos' },
+                      { name: 'Café Swahili', slug: 'cafeswahili' },
+                      { name: 'Samaki Street', slug: 'samakistreet' }
+                    ].map(outlet => (
+                      <button
+                        key={outlet.slug}
+                        type="button"
+                        onClick={() => {
+                          setShowSignInModal(false);
+                          if (onProceedToLogin) {
+                            onProceedToLogin(outlet.slug);
+                          } else {
+                            window.location.href = `/?tenant=${outlet.slug}&page=pos`;
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 text-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Building2 size={12} className="text-amber-400" />
+                        <span>{outlet.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm py-3.5 rounded-xl transition-all shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2 cursor-pointer mt-4"
+                >
+                  <span>Continue to Store Login</span>
+                  <ArrowRight size={16} />
+                </button>
+              </form>
             </motion.div>
           </div>
         )}
