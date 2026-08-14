@@ -209,7 +209,7 @@ export const deobfuscateTicket = (scrambledStr) => {
     return original;
 };
 
-export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onOpenDashboard }) {
+export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onOpenDashboard, onOpenAppHome }) {
     const isSystemAdmin = React.useMemo(() => {
         try {
             const stored = localStorage.getItem('pin_staff_user');
@@ -3454,16 +3454,20 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             <header className="bg-white border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4 flex flex-col lg:flex-row gap-3 lg:justify-between lg:items-center shrink-0 shadow-sm relative z-10">
                 <div className="flex items-center justify-between lg:justify-start gap-3 w-full lg:w-auto">
                     <div className="flex items-center gap-3">
-                        {onOpenDashboard ? (
+                        {onOpenDashboard && (
                             <button
                                 onClick={onOpenDashboard}
                                 className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
                             >
-                                <span>&larr; Management Dashboard</span>
+                                <span>Management Dashboard</span>
                             </button>
-                        ) : (
-                            <button onClick={onSignOut} title="Sign Out" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                                <ArrowLeft size={20} />
+                        )}
+                        {onOpenAppHome && (
+                            <button
+                                onClick={onOpenAppHome}
+                                className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                                <span>ManiPOS Home</span>
                             </button>
                         )}
                         <div>

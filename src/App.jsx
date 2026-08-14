@@ -202,6 +202,7 @@ function App() {
             staffRole={staffUser.role} 
             onSignOut={handleGlobalSignOut}
             onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
+            onOpenAppHome={isAdmin ? () => setCurrentRoute('app') : null}
             tenantSlug={tenantInfo.tenantSlug}
           />
         </div>

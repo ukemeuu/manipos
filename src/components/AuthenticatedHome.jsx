@@ -5,9 +5,9 @@ import {
   LogOut, 
   ChevronRight, 
   Store, 
-  TrendingUp, 
-  CreditCard, 
-  Sparkles 
+  Sparkles,
+  MapPin,
+  UserCheck
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -15,6 +15,8 @@ export function AuthenticatedHome({
   restaurantName, 
   tenantSlug, 
   staffName, 
+  staffRole,
+  branchName = 'Main Branch',
   onOpenDashboard, 
   onOpenPOS, 
   onSignOut 
@@ -32,10 +34,10 @@ export function AuthenticatedHome({
             M
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-tight text-white uppercase">{restaurantName || 'ManiPOS Store'}</h1>
+            <h1 className="text-lg font-black tracking-tight text-white uppercase">MANIPOS</h1>
             <p className="text-slate-400 text-xs font-semibold flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Store Workspace · {tenantSlug || 'active-tenant'}
+              Authenticated Platform · {tenantSlug || 'active-tenant'}
             </p>
           </div>
         </div>
@@ -49,25 +51,38 @@ export function AuthenticatedHome({
         </button>
       </header>
 
-      {/* Main Workspace Selection Body */}
+      {/* Main Workspace Selection Launcher */}
       <main className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 z-10 my-auto">
         <div className="max-w-4xl w-full space-y-10 text-center">
           
-          {/* Welcome Banner */}
-          <div className="space-y-3">
-            <span className="px-4 py-1.5 bg-orange-500/10 text-orange-400 border border-orange-500/20 text-xs font-bold rounded-full uppercase tracking-wider inline-flex items-center gap-2">
-              <Sparkles size={14} />
-              Authenticated Workspace
-            </span>
+          {/* Welcome Greeting & Store Details */}
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-slate-900 border border-slate-800 rounded-full text-xs font-bold text-amber-400">
+              <UserCheck size={14} />
+              <span>{staffName || 'Owner'} ({staffRole || 'Admin'})</span>
+            </div>
+
             <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">
-              Welcome back, {restaurantName || 'Partner'} 👋
+              Welcome back, {staffName || 'Owner'}
             </h2>
-            <p className="text-slate-400 text-sm md:text-base max-w-lg mx-auto leading-relaxed">
-              Choose where you want to work today. You can freely switch between your dashboard and POS register at any time.
+
+            <div className="flex items-center justify-center gap-3 text-xs md:text-sm text-slate-400 font-semibold">
+              <span className="px-3 py-1 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold flex items-center gap-1.5">
+                <Store size={14} className="text-orange-400" />
+                {restaurantName || 'ManiPOS Restaurant'}
+              </span>
+              <span className="px-3 py-1 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 font-bold flex items-center gap-1.5">
+                <MapPin size={14} className="text-emerald-400" />
+                {branchName}
+              </span>
+            </div>
+
+            <p className="text-slate-400 text-sm max-w-md mx-auto pt-2 font-medium">
+              Choose where you want to work today.
             </p>
           </div>
 
-          {/* Equal Importance 2-Card Grid */}
+          {/* Equal Importance 2-Card Workspace Launcher */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
             
             {/* CARD 1: MANAGEMENT DASHBOARD */}
@@ -84,10 +99,10 @@ export function AuthenticatedHome({
 
                 <div className="space-y-2">
                   <h3 className="font-black text-2xl text-white group-hover:text-emerald-400 transition-colors">
-                    Management Dashboard
+                    MANAGEMENT DASHBOARD
                   </h3>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Manage your restaurant, menu, staff, sales reports, inventory suppliers, and payment settings.
+                    Manage your restaurant, menu, staff, reports and settings.
                   </p>
                 </div>
               </div>
@@ -112,29 +127,29 @@ export function AuthenticatedHome({
 
                 <div className="space-y-2">
                   <h3 className="font-black text-2xl text-white group-hover:text-orange-400 transition-colors">
-                    Live POS Register
+                    LIVE POS REGISTER
                   </h3>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Take orders, process customer payments, manage dining tables, and run active cashier shifts.
+                    Take orders, process payments and manage your active shift.
                   </p>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-orange-400 font-bold text-sm">
-                <span>Open POS Register</span>
+                <span>Open POS</span>
                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
 
           </div>
 
-          {/* Bottom Logout Action */}
+          {/* Bottom Sign Out Link */}
           <div className="pt-4">
             <button
               onClick={onSignOut}
-              className="text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors"
+              className="text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
             >
-              Signed in as <strong className="text-slate-300">{staffName || 'Owner/Admin'}</strong> · Click to <span className="underline">Sign Out</span>
+              [ Sign Out ]
             </button>
           </div>
 

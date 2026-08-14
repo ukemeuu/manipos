@@ -460,7 +460,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
               onClick={onOpenAppHome}
               className="text-xs font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              Workspace Selector
+              ManiPOS Home
             </button>
           )}
 
