@@ -45,7 +45,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 
-export function AdminDashboard({ onBackToTerminal }) {
+export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, tenantSlug }) {
   const [setupCompleted, setSetupCompleted] = useState(() => {
     try {
       return localStorage.getItem('manipos_setup_completed') === 'true';
@@ -450,15 +450,37 @@ export function AdminDashboard({ onBackToTerminal }) {
           </div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-white uppercase">{restaurantName}</h1>
-            <p className="text-slate-400 text-xs font-semibold">ManiPOS Partner Console</p>
+            <p className="text-slate-400 text-xs font-semibold">Management Dashboard</p>
           </div>
         </div>
-        <button
-          onClick={onBackToTerminal}
-          className="text-sm font-bold text-slate-300 hover:text-emerald-400 hover:border-emerald-500/20 bg-slate-950 border border-slate-800 px-5 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-        >
-          Go to Register <ChevronRight size={16} />
-        </button>
+
+        <div className="flex items-center gap-3">
+          {onOpenAppHome && (
+            <button
+              onClick={onOpenAppHome}
+              className="text-xs font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              Workspace Selector
+            </button>
+          )}
+
+          <button
+            onClick={onBackToTerminal}
+            className="text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 px-5 py-2.5 rounded-xl transition-all shadow-md shadow-amber-400/10 flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>Open POS Register</span>
+            <ChevronRight size={16} />
+          </button>
+
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              className="text-xs font-bold text-slate-400 hover:text-red-400 bg-slate-950 border border-slate-800 hover:border-red-500/30 px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ml-2"
+            >
+              Sign Out
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="flex flex-1 z-10">

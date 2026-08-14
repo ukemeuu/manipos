@@ -209,7 +209,7 @@ export const deobfuscateTicket = (scrambledStr) => {
     return original;
 };
 
-export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }) {
+export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onOpenDashboard }) {
     const isSystemAdmin = React.useMemo(() => {
         try {
             const stored = localStorage.getItem('pin_staff_user');
@@ -3454,11 +3454,20 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             <header className="bg-white border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4 flex flex-col lg:flex-row gap-3 lg:justify-between lg:items-center shrink-0 shadow-sm relative z-10">
                 <div className="flex items-center justify-between lg:justify-start gap-3 w-full lg:w-auto">
                     <div className="flex items-center gap-3">
-                        <button onClick={onSignOut} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                            <ArrowLeft size={20} />
-                        </button>
+                        {onOpenDashboard ? (
+                            <button
+                                onClick={onOpenDashboard}
+                                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                                <span>&larr; Management Dashboard</span>
+                            </button>
+                        ) : (
+                            <button onClick={onSignOut} title="Sign Out" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                                <ArrowLeft size={20} />
+                            </button>
+                        )}
                         <div>
-                            <h1 className="text-base sm:text-lg font-black text-gray-900 leading-tight">POS Terminal</h1>
+                            <h1 className="text-base sm:text-lg font-black text-gray-900 leading-tight">POS Register</h1>
                             <p className="text-[9px] sm:text-[10px] font-bold text-primary uppercase tracking-wider">Operator: {staffName || 'Cashier'}</p>
                         </div>
                     </div>
@@ -3578,9 +3587,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                     <button
                         type="button"
                         onClick={onSignOut}
-                        className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-gray-200 shadow-sm"
+                        className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-gray-200 shadow-sm cursor-pointer"
                     >
-                        Exit (Keep Shift)
+                        Sign Out
                     </button>
 
                     {/* QZ Tray connection status indicator */}
