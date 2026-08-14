@@ -33,6 +33,8 @@ import {
   Save,
   Menu,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Truck,
   MessageSquare,
   Star,
@@ -54,6 +56,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
     }
   });
   const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'analytics' : 'onboarding');
+  const [showSettingsMenu, setShowSettingsMenu] = useState(() => {
+    return ['onboarding', 'suppliers', 'feedback', 'linkhub', 'audit', 'settings'].includes(activeTab);
+  });
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [staffList, setStaffList] = useState([]);
@@ -141,7 +146,16 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
       const { data: fetchedSettings } = await settingsQuery.limit(1);
 
       if (fetchedSettings && fetchedSettings.length > 0) {
-        setSettings(fetchedSettings[0]);
+        const currentSetting = fetchedSettings[0];
+        setSettings(currentSetting);
+        if (currentSetting.setup_completed) {
+          setSetupCompleted(true);
+          localStorage.setItem('manipos_setup_completed', 'true');
+        } else {
+          setSetupCompleted(false);
+          localStorage.removeItem('manipos_setup_completed');
+          setActiveTab('onboarding');
+        }
       } else if (currentRestaurantId) {
         const { data: newSettings } = await supabase
           .from('restaurant_settings')
@@ -150,11 +164,15 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
             address: '123 Main Street',
             phone: '+254700000000',
             mpesa_paybill: '400200',
-            mpesa_account: '123456'
+            mpesa_account: '123456',
+            setup_completed: false
           }])
           .select()
           .single();
         if (newSettings) setSettings(newSettings);
+        setSetupCompleted(false);
+        localStorage.removeItem('manipos_setup_completed');
+        setActiveTab('onboarding');
       }
 
       // 7. Fetch Suppliers
@@ -493,18 +511,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
             </div>
           ) : (
             <>
-              <button
-                onClick={() => setActiveTab('onboarding')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === 'onboarding' 
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                }`}
-              >
-                <ShieldCheck size={18} />
-                Store Setup Checklist
-              </button>
-
+              {/* PRIMARY WORKSPACE MODULES */}
               <button
                 onClick={() => setActiveTab('analytics')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
@@ -517,89 +524,123 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                 Analytics & Sales
               </button>
           
-          <button
-            onClick={() => setActiveTab('menu')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'menu' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <Package size={18} />
-            Menu Management
-          </button>
+              <button
+                onClick={() => setActiveTab('menu')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+                  activeTab === 'menu' 
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
+              >
+                <Package size={18} />
+                Menu Management
+              </button>
 
-          <button
-            onClick={() => setActiveTab('staff')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'staff' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <Users size={18} />
-            Staff & Access
-          </button>
+              <button
+                onClick={() => setActiveTab('staff')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+                  activeTab === 'staff' 
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
+              >
+                <Users size={18} />
+                Staff & Access
+              </button>
 
-          <button
-            onClick={() => setActiveTab('suppliers')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'suppliers' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <Truck size={18} />
-            Supplier Management
-          </button>
+              {/* COLLAPSIBLE SETTINGS & TOOLS GROUP */}
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowSettingsMenu(v => !v)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-all border ${
+                    ['onboarding', 'suppliers', 'feedback', 'linkhub', 'audit', 'settings'].includes(activeTab)
+                      ? 'text-amber-400 font-bold bg-slate-900/80 border-amber-400/30'
+                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Settings size={18} />
+                    <span>Settings & Tools</span>
+                  </div>
+                  {showSettingsMenu ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
 
-          <button
-            onClick={() => setActiveTab('feedback')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'feedback' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <MessageSquare size={18} />
-            Customer Feedback
-          </button>
+                {showSettingsMenu && (
+                  <div className="mt-1 space-y-1 pl-3 border-l-2 border-slate-800 ml-4 py-1">
+                    <button
+                      onClick={() => setActiveTab('onboarding')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
+                        activeTab === 'onboarding' 
+                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
+                    >
+                      <ShieldCheck size={14} />
+                      Store Setup Checklist
+                    </button>
 
-          <button
-            onClick={() => setActiveTab('linkhub')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'linkhub' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <Link2 size={18} />
-            Link Hub & Socials
-          </button>
+                    <button
+                      onClick={() => setActiveTab('suppliers')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
+                        activeTab === 'suppliers' 
+                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
+                    >
+                      <Truck size={14} />
+                      Supplier Management
+                    </button>
 
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'audit' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <ShieldCheck size={18} />
-            Security & Audit Logs
-          </button>
+                    <button
+                      onClick={() => setActiveTab('feedback')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
+                        activeTab === 'feedback' 
+                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
+                    >
+                      <MessageSquare size={14} />
+                      Customer Feedback
+                    </button>
 
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'settings' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <Settings size={18} />
-            Receipt Configuration
-          </button>
+                    <button
+                      onClick={() => setActiveTab('linkhub')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
+                        activeTab === 'linkhub' 
+                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
+                    >
+                      <Link2 size={14} />
+                      Link Hub & Socials
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('audit')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
+                        activeTab === 'audit' 
+                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
+                    >
+                      <ShieldCheck size={14} />
+                      Security & Audit Logs
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('settings')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
+                        activeTab === 'settings' 
+                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
+                    >
+                      <Settings size={14} />
+                      Receipt Configuration
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </aside>
