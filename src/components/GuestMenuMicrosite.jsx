@@ -22,9 +22,9 @@ export function GuestMenuMicrosite({ tenantSlug = 'potofjollof' }) {
 
   // Map tenant slug to Brand name if multi-brand field used
   const brandDisplayName = useMemo(() => {
-    if (!tenantSlug) return 'POT OF JOLLOF';
+    if (!tenantSlug) return 'RESTAURANT MENU';
     const slugLower = tenantSlug.toLowerCase();
-    if (slugLower.includes('jollof') || slugLower.includes('poj') || slugLower.includes('potofjollof')) return 'POT OF JOLLOF';
+    if (slugLower.includes('jollof') || slugLower.includes('poj') || slugLower.includes('potofjollof')) return 'Pot of Jollof';
     return tenantSlug.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }, [tenantSlug]);
 

@@ -15,44 +15,7 @@ import { getFeedbackUrl } from '../lib/tenant';
 
 const MUTE_LOGO_URL = '/logo.png';
 
-export const BRAND_OPTIONS = [
-    {
-        id: 'POT OF JOLLOF',
-        name: 'Pot of Jollof',
-        tagline: 'Authentic West African Rice & Combos',
-        icon: '🫕',
-        logo: '/jollof_logo.png',
-        color: 'from-amber-500 to-emerald-600',
-        borderColor: 'border-emerald-500/30'
-    },
-    {
-        id: 'LITTLE LAGOS',
-        name: 'Little Lagos',
-        tagline: 'Lagos Street Food, Suya & Grills',
-        icon: '🌶️',
-        logo: '/lagos_logo.png',
-        color: 'from-orange-500 to-red-600',
-        borderColor: 'border-orange-500/30'
-    },
-    {
-        id: 'CAFE SWAHILI',
-        name: 'Cafe Swahili',
-        tagline: 'Coastal Swahili Delights & Coffees',
-        icon: '☕',
-        logo: '/swahili_logo.png',
-        color: 'from-blue-500 to-indigo-600',
-        borderColor: 'border-blue-500/30'
-    },
-    {
-        id: 'SAMAKI STREET',
-        name: 'Samaki Street',
-        tagline: 'Fresh Seafood, Fish & Grilled Platters',
-        icon: '🐟',
-        logo: '/samaki_logo.jpg',
-        color: 'from-cyan-500 to-teal-600',
-        borderColor: 'border-cyan-500/30'
-    }
-];
+export const BRAND_OPTIONS = [];
 
 const DEFAULT_CATEGORIES = [
     { name: 'Starters & Bites', icon: '🍢' },
@@ -387,7 +350,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     const [customerName, setCustomerName] = useState('');
     const [customerNameText, setCustomerNameText] = useState('');
     const [selectedTable, setSelectedTable] = useState('');
-    const [selectedBrand, setSelectedBrand] = useState('POT OF JOLLOF');
+    const [selectedBrand, setSelectedBrand] = useState('All');
     const [orderChannel, setOrderChannel] = useState('Walk-in');
     const [diningOption, setDiningOption] = useState('Dine-in'); // 'Dine-in', 'Takeaway', 'Delivery'
     const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH', 'MPESA', 'CARD', etc.
@@ -404,7 +367,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     // Clear Sales overlay states
     const [clearSalesModalOpen, setClearSalesModalOpen] = useState(false);
     const [clearAction, setClearAction] = useState('Cancelled'); // 'Cancelled' or 'Declined'
-    const [clearBrand, setClearBrand] = useState('POT OF JOLLOF');
+    const [clearBrand, setClearBrand] = useState('All');
     const [clearChannel, setClearChannel] = useState('Walk-in');
     const [clearService, setClearService] = useState('Dine-in');
     const [clearPayment, setClearPayment] = useState('CASH');
@@ -455,7 +418,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     const [newGuestLn, setNewGuestLn] = useState('');
     const [newGuestPhone, setNewGuestPhone] = useState('');
     const [newGuestEmail, setNewGuestEmail] = useState('');
-    const [newGuestBrand, setNewGuestBrand] = useState('POT OF JOLLOF');
+    const [newGuestBrand, setNewGuestBrand] = useState('All');
     const [newGuestChannel, setNewGuestChannel] = useState('Walk-in');
     const [newGuestNotes, setNewGuestNotes] = useState('');
     const [savingGuest, setSavingGuest] = useState(false);
@@ -475,7 +438,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
         }
         setSavingGuest(true);
         try {
-            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : 'POT OF JOLLOF');
+            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : 'All');
             const channelVal = newGuestChannel || orderChannel || 'Walk-in';
             const userNotes = newGuestNotes.trim();
             const noteDetails = userNotes 
@@ -570,7 +533,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             const firstName = nameParts[0];
             const lastName = nameParts.slice(1).join(' ');
 
-            const brandVal = order.brand || selectedBrand || 'POT OF JOLLOF';
+            const brandVal = order.brand || selectedBrand || 'All';
             const channelVal = order.order_channel || orderChannel || 'Walk-in';
             const orderSpend = parseFloat(order.total_amount || 0);
 
@@ -3707,7 +3670,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             {/* Main Terminal Split Screen */}
             <div className="flex-1 flex overflow-hidden relative">
                 {/* Left Panel: Menu Item Selector / Order History View */}
-                {activeView === 'menu' && !activeBrand ? (
+                {activeView === 'menu' && (!activeBrand || activeBrand === 'All') && BRAND_OPTIONS.length > 0 ? (
                     <div className={`flex-1 flex flex-col items-center justify-center p-6 md:p-10 bg-slate-950 text-white overflow-y-auto ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200 relative`}>
                         {/* Background ambient lighting */}
                         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -9734,7 +9697,7 @@ function printCashierSlips(receipt) {
           <p class="sub">Tel: 0795384140 / 0799034617</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -9767,7 +9730,7 @@ function printCashierSlips(receipt) {
             <p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -9841,7 +9804,7 @@ function printCashierSlips(receipt) {
         <div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div>
         <div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -9942,7 +9905,7 @@ function printKitchenSlips(receipt) {
           <p class="sub">Tel: 0795384140 / 0799034617</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -10059,7 +10022,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
 
     const itemRowsFull = dedupedItems.map(item => `<tr><td style="width:50%;max-width:50%;word-break:break-word;padding:2px 0;">${item.item_name}${item.instructions ? `<br><span style="font-size:9px;font-weight:700;">* ${item.instructions}</span>` : ''}</td><td class="c" style="width:10%;text-align:center;padding:2px 0;">${item.quantity}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${item.price.toLocaleString()}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('');
     const itemRowsPack = dedupedItems.map(item => `<tr><td class="c" style="font-size:12px;font-weight:900;padding:3px 0;width:15%;vertical-align:top;">[ &nbsp; ]</td><td style="font-size:12px;font-weight:900;padding:3px 0;word-break:break-word;width:70%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">➜ ${item.instructions}</span>` : ''}</td><td class="c" style="font-size:14px;font-weight:900;padding:3px 0;vertical-align:top;width:15%;">${item.quantity}</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
     const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p><p class="sub">Tel: 0795384140 / 0799034617</p><p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;"><div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div><div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div><div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div></div>`}<div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
     const slip3 = `<div class="page"><div class="center"><div class="badge">PACKER / DISPATCH SLIP</div></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:25%;text-align:center;">PACKED</th><th style="font-size:12px;width:60%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:15%;text-align:center;">QTY</th></tr></thead><tbody><tr><td colspan="3"><div class="divider"></div></td></tr>${itemRowsPack}</tbody></table><div class="divider-solid"></div><div class="footer">PACKER SIGN: _______________</div></div>`;
     const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
@@ -10069,7 +10032,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
 function _buildKitchenHTML(receipt, dateFormatted) {
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
     const rows = receipt.items.map(item => `<tr><td style="font-size:13px;font-weight:900;padding:3px 0;word-break:break-word;width:80%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">[ ${item.instructions} ]</span>` : ''}</td><td class="c" style="font-size:16px;font-weight:900;padding:3px 0;vertical-align:top;width:20%;text-align:right;">${item.quantity}x</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
     const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">Tel: 0795384140 / 0799034617</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
 }
@@ -10207,7 +10170,7 @@ function ReceiptPrintModal({ receipt: rawReceipt, onClose, onCloseAndExit, front
 </div>
 <div class="divider"></div>
 
-<div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+<div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
 <div class="meta-row"><span class="meta-label">TICKET NO:</span><span class="meta-value">#${obfuscateTicket(receipt.ticket_number)}</span></div>
 <div class="meta-row"><span class="meta-label">TIME IN:</span><span class="meta-value">${dateFormatted}</span></div>
 <div class="meta-row"><span class="meta-label">TIME OUT:</span><span class="meta-value">___________________</span></div>
@@ -10321,7 +10284,7 @@ ${splitNote}
                     </div>
 
                     <div className="space-y-1 text-[10px] mb-4">
-                        <div className="flex justify-between"><span className="font-black">BRAND:</span><span className="font-bold">{(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
+                        <div className="flex justify-between"><span className="font-black">BRAND:</span><span className="font-bold">{(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
                         <div className="flex justify-between"><span className="font-black">TICKET NO:</span><span className="font-black">#{obfuscateTicket(receipt.ticket_number)}</span></div>
                         <div className="flex justify-between"><span className="font-black">TIME IN:</span><span className="font-bold">{dateFormatted}</span></div>
                         <div className="flex justify-between"><span className="font-black">TIME OUT:</span><span className="font-bold">___________________</span></div>

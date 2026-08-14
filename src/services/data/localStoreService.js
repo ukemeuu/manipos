@@ -1,13 +1,26 @@
+import { getTenantInfo } from '../../lib/tenant';
+
 /**
- * Local Data Storage Engine for ManiPOS Operational Tables
+ * Tenant-Isolated Local Data Storage Engine for ManiPOS Operational Tables
  * Operates on LocalStorage / IndexedDB to guarantee instant (<20ms) POS responses.
+ * Storage keys are scoped per tenantSlug (e.g. manipos_db_mamankechi_pos_orders).
  */
 
-const STORAGE_PREFIX = 'manipos_db_';
+function getStoragePrefix() {
+    try {
+        if (typeof window === 'undefined') return 'manipos_db_general_';
+        const info = getTenantInfo();
+        const slug = info.tenantSlug || 'general';
+        return `manipos_db_${slug}_`;
+    } catch (e) {
+        return 'manipos_db_general_';
+    }
+}
 
 export function getLocalCollection(tableName) {
     try {
-        const stored = localStorage.getItem(STORAGE_PREFIX + tableName);
+        const key = getStoragePrefix() + tableName;
+        const stored = localStorage.getItem(key);
         return stored ? JSON.parse(stored) : [];
     } catch (e) {
         console.error(`[LocalStoreService] Error reading collection ${tableName}:`, e);
@@ -17,7 +30,8 @@ export function getLocalCollection(tableName) {
 
 export function setLocalCollection(tableName, records) {
     try {
-        localStorage.setItem(STORAGE_PREFIX + tableName, JSON.stringify(records));
+        const key = getStoragePrefix() + tableName;
+        localStorage.setItem(key, JSON.stringify(records));
     } catch (e) {
         console.error(`[LocalStoreService] Error writing collection ${tableName}:`, e);
     }
@@ -58,5 +72,6 @@ export function deleteLocalRecord(tableName, id) {
 }
 
 export function clearLocalCollection(tableName) {
-    localStorage.removeItem(STORAGE_PREFIX + tableName);
+    const key = getStoragePrefix() + tableName;
+    localStorage.removeItem(key);
 }
