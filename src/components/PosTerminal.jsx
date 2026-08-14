@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { connectQZ, disconnectQZ, isQZConnected, onQZStatusChange, listPrinters, printOrFallback } from '../lib/qzPrint';
-import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus } from 'lucide-react';
+import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus, Wifi, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
 import { CampaignsView } from './CampaignsView';
 import { queueOfflineOrder, syncOfflineQueue } from '../lib/offlineQueue';
 import { logAuditEvent } from '../lib/auditLogger';
+import { createPosOrder } from '../services/data/orderService';
+import { getMenuItems, getCategories, getModifierGroups } from '../services/data/menuService';
+import { openLocalShift, closeLocalShift, getActiveLocalShift } from '../services/data/shiftService';
+import { onConnectivityChange, isOnline } from '../services/data/connectivityService';
 
 const MUTE_LOGO_URL = '/logo.png';
 
@@ -3205,26 +3209,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                     if (deleteError) throw deleteError;
                 } else {
-                    // ── NEW ORDER ────────────────────────────────────────────────────────
+                    // ── NEW LOCAL-FIRST ORDER ────────────────────────────────────────────────
                     try {
-                        const { data, error } = await supabase
-                            .from('pos_orders')
-                            .insert([orderPayload])
-                            .select()
-                            .single();
-
-                        if (error) throw error;
-                        orderData = data;
-
-                        if (discountAmount > 0) {
-                            logAuditEvent({
-                                action: 'discount_applied',
-                                details: { order_number: data.order_number || data.id, discount: discountAmount, total },
-                                staff: { name: staffName, role: staffRole }
-                            });
-                        }
+                        orderData = await createPosOrder(orderPayload);
                     } catch (netErr) {
-                        console.warn('Supabase insert failed, reverting to offline order queueing:', netErr);
+                        console.warn('[PosTerminal] Order service fallback:', netErr);
                         orderData = queueOfflineOrder(orderPayload);
                     }
                 }

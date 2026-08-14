@@ -320,8 +320,17 @@ CREATE POLICY "Public operational suppliers" ON public.suppliers FOR ALL TO publ
 DROP POLICY IF EXISTS "Public operational settings" ON public.restaurant_settings;
 CREATE POLICY "Public operational settings" ON public.restaurant_settings FOR ALL TO public USING (true) WITH CHECK (true);
 
+-- Immutable Audit Logs Policies (INSERT and SELECT allowed, UPDATE and DELETE strictly blocked)
 DROP POLICY IF EXISTS "Public operational audit_logs" ON public.audit_logs;
-CREATE POLICY "Public operational audit_logs" ON public.audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow select audit_logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Allow insert audit_logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Prevent update audit_logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Prevent delete audit_logs" ON public.audit_logs;
+
+CREATE POLICY "Allow select audit_logs" ON public.audit_logs FOR SELECT TO public USING (true);
+CREATE POLICY "Allow insert audit_logs" ON public.audit_logs FOR INSERT TO public WITH CHECK (true);
+CREATE POLICY "Prevent update audit_logs" ON public.audit_logs FOR UPDATE TO public USING (false);
+CREATE POLICY "Prevent delete audit_logs" ON public.audit_logs FOR DELETE TO public USING (false);
 
 -- Guest Insert Policies for Feedback & Marketing Leads
 DROP POLICY IF EXISTS "Allow public insert pos_feedback" ON public.pos_feedback;
