@@ -46,7 +46,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 
 export function AdminDashboard({ onBackToTerminal }) {
-  const [activeTab, setActiveTab] = useState('onboarding'); // 'onboarding', 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads', 'linkhub'
+  const [setupCompleted, setSetupCompleted] = useState(() => {
+    try {
+      return localStorage.getItem('manipos_setup_completed') === 'true';
+    } catch(e) {
+      return false;
+    }
+  });
+  const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'analytics' : 'onboarding');
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [staffList, setStaffList] = useState([]);
@@ -393,18 +400,22 @@ export function AdminDashboard({ onBackToTerminal }) {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const methods = settings.enabled_payment_methods || ['CASH', 'MPESA', 'CARD', 'UBEREATS', 'GLOVO', 'BOLTFOOD', 'BANK_TRANSFER'];
+      const payload = {
+        id: settings.id,
+        address: settings.address,
+        phone: settings.phone,
+        mpesa_paybill: settings.mpesa_paybill,
+        mpesa_account: settings.mpesa_account,
+        enabled_payment_methods: methods
+      };
       const { error } = await supabase
         .from('restaurant_settings')
-        .upsert([{
-          id: settings.id,
-          address: settings.address,
-          phone: settings.phone,
-          mpesa_paybill: settings.mpesa_paybill,
-          mpesa_account: settings.mpesa_account
-        }]);
+        .upsert([payload]);
 
       if (error) throw error;
-      alert('Receipt & Payment Settings updated successfully!');
+      localStorage.setItem('manipos_payment_methods', JSON.stringify(methods));
+      alert('Payment Methods & Receipt Configuration updated successfully!');
     } catch (err) {
       alert('Error saving settings: ' + err.message);
     } finally {
@@ -454,29 +465,46 @@ export function AdminDashboard({ onBackToTerminal }) {
         
         {/* Navigation Sidebar */}
         <aside className="w-64 bg-slate-900/40 border-r border-slate-900/80 p-6 space-y-2 shrink-0">
-          <button
-            onClick={() => setActiveTab('onboarding')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'onboarding' 
-                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <ShieldCheck size={18} />
-            Store Setup Checklist
-          </button>
+          {(!setupCompleted && menuItems.length === 0) ? (
+            <div className="space-y-4">
+              <button
+                onClick={() => setActiveTab('onboarding')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/10`}
+              >
+                <ShieldCheck size={18} />
+                Store Setup Checklist
+              </button>
 
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'analytics' 
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/10' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <TrendingUp size={18} />
-            Analytics & Sales
-          </button>
+              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs">
+                <span className="px-2 py-0.5 bg-amber-400/10 text-amber-400 font-bold rounded text-[10px] uppercase">Setup In Progress</span>
+                <p className="text-slate-400 leading-relaxed">Complete your initial store setup checklist to unlock full partner management modules.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => setActiveTab('onboarding')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+                  activeTab === 'onboarding' 
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
+              >
+                <ShieldCheck size={18} />
+                Store Setup Checklist
+              </button>
+
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+                  activeTab === 'analytics' 
+                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/10' 
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
+              >
+                <TrendingUp size={18} />
+                Analytics & Sales
+              </button>
           
           <button
             onClick={() => setActiveTab('menu')}
@@ -573,6 +601,8 @@ export function AdminDashboard({ onBackToTerminal }) {
             <Settings size={18} />
             Receipt Configuration
           </button>
+            </>
+          )}
         </aside>
 
         {/* Workspace Panels */}
@@ -670,10 +700,20 @@ export function AdminDashboard({ onBackToTerminal }) {
                     </button>
 
                     <button 
-                      onClick={onBackToTerminal}
+                      onClick={async () => {
+                        setSetupCompleted(true);
+                        try {
+                          localStorage.setItem('manipos_setup_completed', 'true');
+                          const tenant = localStorage.getItem('pin_staff_user') ? JSON.parse(localStorage.getItem('pin_staff_user')).restaurantId : null;
+                          if (tenant) {
+                            await supabase.from('restaurant_settings').update({ setup_completed: true }).eq('restaurant_id', tenant);
+                          }
+                        } catch(e) {}
+                        onBackToTerminal();
+                      }}
                       className="px-6 py-3 bg-amber-400 text-slate-950 text-sm font-black rounded-xl hover:bg-amber-300 shadow-xl shadow-amber-400/10 flex items-center gap-2 transition-all cursor-pointer"
                     >
-                      <span>Enter POS Register</span>
+                      <span>Complete Setup & Enter POS Register</span>
                       <span>&rarr;</span>
                     </button>
                   </div>
@@ -1008,6 +1048,99 @@ export function AdminDashboard({ onBackToTerminal }) {
                         onChange={(e) => setSettings({ ...settings, mpesa_account: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
                       />
+                    </div>
+                  </div>
+
+                  {/* Payment Methods & Sales Clearing Configuration */}
+                  <div className="pt-4 border-t border-slate-800 space-y-4">
+                    <div>
+                      <h3 className="text-sm font-black text-white uppercase tracking-wider">Customer Payment Methods & Sales Clearing Channels</h3>
+                      <p className="text-xs text-slate-400">Select active payment modes for cashiers during checkout and sales clearing.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: 'CASH', label: '💵 Cash' },
+                        { id: 'MPESA', label: '📱 M-Pesa (Paybill / Till)' },
+                        { id: 'CARD', label: '💳 Credit / Debit Card' },
+                        { id: 'UBEREATS', label: '🚴 UberEats' },
+                        { id: 'GLOVO', label: '🛵 Glovo' },
+                        { id: 'BOLTFOOD', label: '🚖 Bolt Food' },
+                        { id: 'BANK_TRANSFER', label: '🏦 Bank Transfer / Invoice' }
+                      ].map(method => {
+                        const currentMethods = settings.enabled_payment_methods || ['CASH', 'MPESA', 'CARD', 'UBEREATS', 'GLOVO', 'BOLTFOOD', 'BANK_TRANSFER'];
+                        const isChecked = currentMethods.includes(method.id);
+                        return (
+                          <label key={method.id} className="flex items-center gap-2.5 bg-slate-950 border border-slate-800 p-3 rounded-xl cursor-pointer hover:border-slate-700 transition-all">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...currentMethods, method.id]
+                                  : currentMethods.filter(m => m !== method.id);
+                                setSettings({ ...settings, enabled_payment_methods: next });
+                              }}
+                              className="w-4 h-4 accent-emerald-500 rounded"
+                            />
+                            <span className="text-xs font-bold text-slate-200">{method.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {/* Custom Clearing Channels Manager */}
+                    <div className="space-y-2 pt-2">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Custom Clearing Channels (e.g. Jumia Food, Voucher, Credit Account)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Type custom channel name and click Add..."
+                          value={settings.custom_channel_input || ''}
+                          onChange={(e) => setSettings({ ...settings, custom_channel_input: e.target.value })}
+                          className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs focus:border-emerald-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = (settings.custom_channel_input || '').trim().toUpperCase();
+                            if (!val) return;
+                            const current = settings.enabled_payment_methods || ['CASH', 'MPESA', 'CARD', 'UBEREATS', 'GLOVO', 'BOLTFOOD', 'BANK_TRANSFER'];
+                            if (!current.includes(val)) {
+                              setSettings({
+                                ...settings,
+                                enabled_payment_methods: [...current, val],
+                                custom_channel_input: ''
+                              });
+                            }
+                          }}
+                          className="bg-slate-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-slate-700 transition-all"
+                        >
+                          + Add Channel
+                        </button>
+                      </div>
+
+                      {/* Display custom active channels */}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {(settings.enabled_payment_methods || []).filter(m => !['CASH', 'MPESA', 'CARD', 'UBEREATS', 'GLOVO', 'BOLTFOOD', 'BANK_TRANSFER'].includes(m)).map(customM => (
+                          <span key={customM} className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs rounded-full">
+                            {customM}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = settings.enabled_payment_methods || [];
+                                setSettings({
+                                  ...settings,
+                                  enabled_payment_methods: current.filter(m => m !== customM)
+                                });
+                              }}
+                              className="hover:text-red-400 font-black ml-1"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
 

@@ -7,6 +7,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { MenuMicrosite } from './components/MenuMicrosite';
 import { FeedbackForm } from './components/FeedbackForm';
 import { RestaurantLinkHub } from './components/RestaurantLinkHub';
+import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
 
 
@@ -20,6 +21,9 @@ function App() {
   const [currentRoute, setCurrentRoute] = useState(() => {
     const info = getTenantInfo();
     const queryPage = new URLSearchParams(window.location.search).get('page');
+    if (queryPage === 'superadmin' || window.location.pathname === '/superadmin' || window.location.hash === '#/superadmin') {
+      return 'superadmin';
+    }
     if (queryPage === 'onboarding' || queryPage === 'dashboard' || window.location.hash === '#/onboarding') {
       return 'onboarding';
     }
@@ -107,6 +111,11 @@ function App() {
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div>
       </div>
     );
+  }
+
+  // ROUTE -1: Platform Owner Super Admin Console (manipos.com?page=superadmin)
+  if (currentRoute === 'superadmin') {
+    return <SuperAdminDashboard />;
   }
 
   // ROUTE 0: Guest Feedback Form (e.g. potofjollof.manipos.com/feedback or manipos.com?page=feedback)

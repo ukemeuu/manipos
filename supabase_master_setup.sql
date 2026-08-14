@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS public.restaurants (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
+    status TEXT DEFAULT 'approved', -- 'pending', 'approved', 'deactivated'
+    is_active BOOLEAN DEFAULT true,
+    trial_ends_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now() + interval '14 days'),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -218,6 +221,8 @@ CREATE TABLE IF NOT EXISTS public.restaurant_settings (
     phone TEXT,
     mpesa_paybill TEXT,
     mpesa_account TEXT,
+    setup_completed BOOLEAN DEFAULT false,
+    enabled_payment_methods JSONB DEFAULT '["CASH", "MPESA", "CARD", "UBEREATS", "GLOVO", "BOLTFOOD", "BANK_TRANSFER"]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -402,6 +407,12 @@ BEGIN
     );
 EXCEPTION WHEN OTHERS THEN
     RETURN jsonb_build_object(
+        'success', false,
+        'error', SQLERRM
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+RETURN jsonb_build_object(
         'success', false,
         'error', SQLERRM
     );
