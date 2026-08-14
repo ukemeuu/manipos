@@ -94,98 +94,75 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+      const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+      const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
+
       // 1. Fetch Orders
-      const { data: fetchedOrders } = await supabase
-        .from('pos_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let ordersQuery = supabase.from('pos_orders').select('*').order('created_at', { ascending: false });
+      if (currentRestaurantId) ordersQuery = ordersQuery.eq('restaurant_id', currentRestaurantId);
+      const { data: fetchedOrders } = await ordersQuery;
       setOrders(fetchedOrders || []);
 
       // 2. Fetch Menu Items
-      const { data: fetchedMenu } = await supabase
-        .from('pos_menu')
-        .select('*')
-        .order('name');
+      let menuQuery = supabase.from('pos_menu').select('*').order('name');
+      if (currentRestaurantId) menuQuery = menuQuery.eq('restaurant_id', currentRestaurantId);
+      const { data: fetchedMenu } = await menuQuery;
       setMenuItems(fetchedMenu || []);
 
       // 3. Fetch Staff List
-      const { data: fetchedStaff } = await supabase
-        .from('staff_access')
-        .select('*')
-        .order('name');
+      let staffQuery = supabase.from('staff_access').select('*').order('name');
+      if (currentRestaurantId) staffQuery = staffQuery.eq('restaurant_id', currentRestaurantId);
+      const { data: fetchedStaff } = await staffQuery;
       setStaffList(fetchedStaff || []);
 
       // 4. Fetch Customer Feedback
       try {
-        const { data: fetchedFeedback } = await supabase
-          .from('pos_feedback')
-          .select('*')
-          .order('created_at', { ascending: false });
+        let feedbackQuery = supabase.from('pos_feedback').select('*').order('created_at', { ascending: false });
+        if (currentRestaurantId) feedbackQuery = feedbackQuery.eq('restaurant_id', currentRestaurantId);
+        const { data: fetchedFeedback } = await feedbackQuery;
         setFeedbackList(fetchedFeedback || []);
       } catch (e) {
-        console.warn('Feedback table not configured yet:', e);
+        console.warn('Feedback table notice:', e);
       }
 
-      // 5. Fetch Leads / Demo Signups
+      // 5. Fetch Restaurant Links for Link Hub
       try {
-        const { data: fetchedLeads } = await supabase
-          .from('leads')
-          .select('*')
-          .order('created_at', { ascending: false });
-        setLeadsList(fetchedLeads || []);
-      } catch (e) {
-        console.warn('Leads table notice:', e);
-      }
-
-      // 6. Fetch Restaurant Links for Link Hub
-      try {
-        const { data: fetchedLinks } = await supabase
-          .from('tenant_links')
-          .select('*')
-          .order('display_order', { ascending: true });
+        let linksQuery = supabase.from('tenant_links').select('*').order('display_order', { ascending: true });
+        if (currentRestaurantId) linksQuery = linksQuery.eq('restaurant_id', currentRestaurantId);
+        const { data: fetchedLinks } = await linksQuery;
         setTenantLinks(fetchedLinks || []);
       } catch (e) {
         console.warn('Tenant links fetch notice:', e);
       }
 
-      // 5. Fetch Restaurant Settings
-      const { data: fetchedSettings } = await supabase
-        .from('restaurant_settings')
-        .select('*')
-        .limit(1);
+      // 6. Fetch Restaurant Settings
+      let settingsQuery = supabase.from('restaurant_settings').select('*');
+      if (currentRestaurantId) settingsQuery = settingsQuery.eq('restaurant_id', currentRestaurantId);
+      const { data: fetchedSettings } = await settingsQuery.limit(1);
 
       if (fetchedSettings && fetchedSettings.length > 0) {
         setSettings(fetchedSettings[0]);
-      } else {
-        // Create initial default settings row if missing
-        const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-        if (pinUser.restaurantId) {
-          const { data: newSettings } = await supabase
-            .from('restaurant_settings')
-            .insert([{
-              restaurant_id: pinUser.restaurantId,
-              address: '123 Main Street',
-              phone: '+254700000000',
-              mpesa_paybill: '400200',
-              mpesa_account: '123456'
-            }])
-            .select()
-            .single();
-          if (newSettings) setSettings(newSettings);
-        }
+      } else if (currentRestaurantId) {
+        const { data: newSettings } = await supabase
+          .from('restaurant_settings')
+          .insert([{
+            restaurant_id: currentRestaurantId,
+            address: '123 Main Street',
+            phone: '+254700000000',
+            mpesa_paybill: '400200',
+            mpesa_account: '123456'
+          }])
+          .select()
+          .single();
+        if (newSettings) setSettings(newSettings);
       }
 
-      // 5. Fetch Suppliers (with graceful fallback if table does not exist)
+      // 7. Fetch Suppliers
       try {
-        const { data: fetchedSuppliers, error: supplierError } = await supabase
-          .from('suppliers')
-          .select('*')
-          .order('name');
-        if (supplierError) {
-          console.warn("Suppliers table may not exist in database yet:", supplierError.message);
-        } else {
-          setSuppliers(fetchedSuppliers || []);
-        }
+        let suppliersQuery = supabase.from('suppliers').select('*').order('name');
+        if (currentRestaurantId) suppliersQuery = suppliersQuery.eq('restaurant_id', currentRestaurantId);
+        const { data: fetchedSuppliers, error: supplierError } = await suppliersQuery;
+        if (!supplierError) setSuppliers(fetchedSuppliers || []);
       } catch (supplierErr) {
         console.warn("Error loading suppliers:", supplierErr);
       }
@@ -253,7 +230,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
     e.preventDefault();
     setSubmitting(true);
     const form = e.target;
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
+
     const payload = {
+      restaurant_id: currentRestaurantId,
       name: form.itemName.value,
       price: parseFloat(form.price.value),
       category: form.category.value,
@@ -290,10 +271,14 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
     e.preventDefault();
     setSubmitting(true);
     const form = e.target;
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
+
     const payload = {
+      restaurant_id: currentRestaurantId,
       name: form.staffName.value,
       role: form.role.value,
-      pin: form.pin.value
+      pin_code: form.pin.value
     };
 
     try {
@@ -351,7 +336,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
     e.preventDefault();
     setSubmitting(true);
     const form = e.target;
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
+
     const payload = {
+      restaurant_id: currentRestaurantId,
       name: form.supplierName.value,
       contact_name: form.contactName.value,
       phone: form.phone.value,
