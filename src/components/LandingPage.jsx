@@ -83,10 +83,22 @@ export function LandingPage({ onProceedToLogin }) {
       if (error) throw error;
       if (data && !data.success) throw new Error(data.error || 'Registration failed.');
 
+      // Establish authenticated store manager session
+      const staffUser = {
+        id: data.staff_id || data.restaurant_id,
+        name: data.manager_name || onboardData.managerName || 'Store Manager',
+        role: 'admin',
+        restaurantId: data.restaurant_id,
+        restaurantName: data.restaurant_name || onboardData.name,
+        tenantSlug: data.restaurant_slug || onboardData.slug.toLowerCase().trim()
+      };
+      localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+      localStorage.removeItem('manipos_setup_completed');
+
       setOnboardSuccess(data);
       setTimeout(() => {
         window.location.href = `/?tenant=${data.restaurant_slug}&page=onboarding`;
-      }, 1800);
+      }, 1500);
     } catch (err) {
       setOnboardError(err.message || 'Error creating store account.');
     } finally {

@@ -211,7 +211,7 @@ function App() {
   }
 
   // ROUTE 2: Standalone POS Terminal Login (pos.manipos.com or <tenant>.pos.manipos.com)
-  if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app') {
+  if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding') {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative font-sans">
         <button
