@@ -5,6 +5,8 @@ import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2,
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
 import { CampaignsView } from './CampaignsView';
+import { queueOfflineOrder, syncOfflineQueue } from '../lib/offlineQueue';
+import { logAuditEvent } from '../lib/auditLogger';
 
 const MUTE_LOGO_URL = '/logo.png';
 
@@ -3156,7 +3158,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                 finalCreatedAt = new Date(localISO).toISOString();
             }
 
+            const idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+                ? crypto.randomUUID() 
+                : 'idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+
             const orderPayload = {
+                idempotency_key: idempotencyKey,
                 customer_name: finalCustName,
                 dining_option: diningOption,
                 payment_method: paymentMethod,
@@ -3176,12 +3183,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             let isEditOfOnlineOrder = false;
 
             if (isOffline) {
-                orderData = createOfflineOrderData(orderPayload);
+                orderData = queueOfflineOrder(orderPayload);
             } else {
                 if (editingOrderId && !String(editingOrderId).startsWith('offline-')) {
                     // ── EDIT EXISTING ONLINE ORDER ──────────────────────────────────────
-                    // Keep edit and new-order paths strictly separate so a delete failure
-                    // never silently falls back to offline and double-inserts items.
                     isEditOfOnlineOrder = true;
                     const { data: updData, error: updErr } = await supabase
                         .from('pos_orders')
@@ -3193,10 +3198,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                     if (updErr) throw updErr;
                     orderData = updData;
 
-                    // Delete ALL old line items before inserting new ones.
-                    // If this fails we throw — never fall back to offline for an edit
-                    // because that would create a second order and leave the original
-                    // items untouched, causing doubled rows on the next fetch.
                     const { error: deleteError } = await supabase
                         .from('pos_order_items')
                         .delete()
@@ -3214,9 +3215,17 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                         if (error) throw error;
                         orderData = data;
+
+                        if (discountAmount > 0) {
+                            logAuditEvent({
+                                action: 'discount_applied',
+                                details: { order_number: data.order_number || data.id, discount: discountAmount, total },
+                                staff: { name: staffName, role: staffRole }
+                            });
+                        }
                     } catch (netErr) {
-                        console.warn('Supabase insert failed, reverting to offline order creation:', netErr);
-                        orderData = createOfflineOrderData(orderPayload);
+                        console.warn('Supabase insert failed, reverting to offline order queueing:', netErr);
+                        orderData = queueOfflineOrder(orderPayload);
                     }
                 }
             }

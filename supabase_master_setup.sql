@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS public.pos_orders (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     restaurant_id UUID REFERENCES public.restaurants(id) ON DELETE CASCADE,
     order_number TEXT NOT NULL,
+    idempotency_key UUID UNIQUE,
     brand_id TEXT DEFAULT 'POT OF JOLLOF',
     channel TEXT DEFAULT 'Walk-in',
     subtotal NUMERIC(10,2) NOT NULL,
@@ -162,6 +163,17 @@ CREATE TABLE IF NOT EXISTS public.pos_orders (
     table_number TEXT,
     staff_name TEXT,
     items JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Immutable Audit Log Table
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    restaurant_id UUID REFERENCES public.restaurants(id) ON DELETE CASCADE,
+    staff_id UUID,
+    staff_name TEXT NOT NULL,
+    action TEXT NOT NULL, -- 'price_override', 'order_void', 'order_refund', 'discount_applied', 'shift_opened', 'shift_closed'
+    details JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -271,6 +283,7 @@ ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Allow Public Select/Read Access for operational components & guest portals
 CREATE POLICY "Public read restaurants" ON public.restaurants FOR SELECT TO public USING (true);
@@ -281,11 +294,12 @@ CREATE POLICY "Public read pos_discounts" ON public.pos_discounts FOR SELECT TO 
 CREATE POLICY "Public read modifier_groups" ON public.menu_modifier_groups FOR SELECT TO public USING (true);
 CREATE POLICY "Public read tenant_links" ON public.tenant_links FOR SELECT TO public USING (true);
 
--- Allow Public/Operational Access for POS Terminal Orders & Shifts
+-- Allow Public/Operational Access for POS Terminal Orders, Shifts & Audit Logs
 CREATE POLICY "Public operational pos_orders" ON public.pos_orders FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY "Public operational pos_shifts" ON public.pos_shifts FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY "Public operational suppliers" ON public.suppliers FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY "Public operational settings" ON public.restaurant_settings FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Public operational audit_logs" ON public.audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- Guest Insert Policies for Feedback & Marketing Leads
 CREATE POLICY "Allow public insert pos_feedback" ON public.pos_feedback FOR INSERT TO public WITH CHECK (true);

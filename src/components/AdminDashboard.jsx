@@ -39,9 +39,11 @@ import {
   Inbox,
   Link2,
   Video,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getLocalAuditLogs } from '../lib/auditLogger';
 
 export function AdminDashboard({ onBackToTerminal }) {
   const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads', 'linkhub'
@@ -52,6 +54,7 @@ export function AdminDashboard({ onBackToTerminal }) {
   const [feedbackList, setFeedbackList] = useState([]);
   const [leadsList, setLeadsList] = useState([]);
   const [tenantLinks, setTenantLinks] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
   const [editingLink, setEditingLink] = useState(null);
   const [settings, setSettings] = useState({
     address: '',
@@ -533,6 +536,18 @@ export function AdminDashboard({ onBackToTerminal }) {
           >
             <Link2 size={18} />
             Link Hub & Socials
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'audit' 
+                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/10' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck size={18} />
+            Security & Audit Logs
           </button>
 
           <button
@@ -1247,6 +1262,65 @@ export function AdminDashboard({ onBackToTerminal }) {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </motion.div>
+            )}
+
+            {/* SECURITY & AUDIT LOGS PANEL */}
+            {activeTab === 'audit' && (
+              <motion.div
+                key="audit"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-black text-white tracking-tight">Security & Audit Trails</h2>
+                    <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Immutable record of cashier voids, refunds, discounts & shift closes</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+                  {auditLogs.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500 font-bold text-sm">
+                      No security audit events recorded yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm text-slate-300">
+                        <thead className="text-xs font-black uppercase text-slate-400 border-b border-slate-800 bg-slate-950/50">
+                          <tr>
+                            <th className="py-3.5 px-4">Timestamp</th>
+                            <th className="py-3.5 px-4">Action</th>
+                            <th className="py-3.5 px-4">Staff Member</th>
+                            <th className="py-3.5 px-4">Audit Details</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 font-medium">
+                          {auditLogs.map((log, idx) => (
+                            <tr key={log.id || idx} className="hover:bg-slate-800/40">
+                              <td className="py-3.5 px-4 text-xs font-bold text-slate-400">
+                                {new Date(log.created_at).toLocaleString()}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-bold text-white">
+                                {log.staff_name || 'Terminal Staff'}
+                              </td>
+                              <td className="py-3.5 px-4 text-xs font-mono text-slate-400">
+                                {JSON.stringify(log.details)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
