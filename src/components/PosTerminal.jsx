@@ -308,7 +308,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
     const [menu, setMenu] = useState([]);
     const [loadingMenu, setLoadingMenu] = useState(true);
-    const [activeBrand, setActiveBrand] = useState(null);
+    const [activeBrand, setActiveBrand] = useState('All');
     const [activeCategory, setActiveCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState([]);
