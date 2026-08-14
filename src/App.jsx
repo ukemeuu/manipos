@@ -20,6 +20,9 @@ function App() {
   const [currentRoute, setCurrentRoute] = useState(() => {
     const info = getTenantInfo();
     const queryPage = new URLSearchParams(window.location.search).get('page');
+    if (queryPage === 'onboarding' || queryPage === 'dashboard' || window.location.hash === '#/onboarding') {
+      return 'onboarding';
+    }
     if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
       return 'feedback';
     }
@@ -53,7 +56,9 @@ function App() {
       const info = getTenantInfo();
       const queryPage = new URLSearchParams(window.location.search).get('page');
       setTenantInfo(info);
-      if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
+      if (queryPage === 'onboarding' || queryPage === 'dashboard' || window.location.hash === '#/onboarding') {
+        setCurrentRoute('onboarding');
+      } else if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
         setCurrentRoute('feedback');
       } else if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
         setCurrentRoute('terminal');
@@ -120,6 +125,19 @@ function App() {
   }
 
 
+
+  // ROUTE 1.5: Owner Management & Onboarding Setup Dashboard (page=onboarding or page=dashboard)
+  if (currentRoute === 'onboarding' || currentRoute === 'dashboard') {
+    return (
+      <AdminDashboard 
+        onBackToTerminal={() => {
+          setCurrentRoute('terminal');
+          setViewMode('terminal');
+        }} 
+        tenantSlug={tenantInfo.tenantSlug} 
+      />
+    );
+  }
 
   // ROUTE 2: Standalone POS Terminal Software (pos.manipos.com or <tenant>.pos.manipos.com)
   if (currentRoute === 'terminal') {

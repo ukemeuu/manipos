@@ -46,7 +46,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 
 export function AdminDashboard({ onBackToTerminal }) {
-  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads', 'linkhub'
+  const [activeTab, setActiveTab] = useState('onboarding'); // 'onboarding', 'analytics', 'menu', 'staff', 'settings', 'suppliers', 'feedback', 'leads', 'linkhub'
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [staffList, setStaffList] = useState([]);
@@ -455,6 +455,18 @@ export function AdminDashboard({ onBackToTerminal }) {
         {/* Navigation Sidebar */}
         <aside className="w-64 bg-slate-900/40 border-r border-slate-900/80 p-6 space-y-2 shrink-0">
           <button
+            onClick={() => setActiveTab('onboarding')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'onboarding' 
+                ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck size={18} />
+            Store Setup Checklist
+          </button>
+
+          <button
             onClick={() => setActiveTab('analytics')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
               activeTab === 'analytics' 
@@ -567,6 +579,108 @@ export function AdminDashboard({ onBackToTerminal }) {
         <main className="flex-1 p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             
+            {/* STORE ONBOARDING CHECKLIST */}
+            {activeTab === 'onboarding' && (
+              <motion.div
+                key="onboarding"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-8 relative overflow-hidden">
+                  <div className="space-y-2">
+                    <span className="px-3.5 py-1 bg-amber-400/10 text-amber-400 border border-amber-400/20 text-xs font-bold rounded-full uppercase tracking-wider inline-block">
+                      Store Onboarding Progress
+                    </span>
+                    <h2 className="text-3xl font-black text-white tracking-tight">Welcome to ManiPOS 👋</h2>
+                    <p className="text-slate-400 text-sm max-w-xl leading-relaxed">
+                      Let's get <strong className="text-white">{restaurantName}</strong> ready to take its first order. Complete the setup steps below to launch your register.
+                    </p>
+                  </div>
+
+                  {/* Checklist Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-4 bg-slate-950 border border-slate-800/80 p-5 rounded-2xl">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-sm">✓</div>
+                      <div>
+                        <h4 className="font-bold text-white text-sm">1. Restaurant Details</h4>
+                        <p className="text-xs text-slate-400">Account & store workspace created</p>
+                      </div>
+                    </div>
+
+                    <div className={`flex items-center gap-4 bg-slate-950 border ${menuItems.length > 0 ? 'border-slate-800/80' : 'border-amber-500/40'} p-5 rounded-2xl`}>
+                      <div className={`w-10 h-10 rounded-xl ${menuItems.length > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-400/20 text-amber-400'} flex items-center justify-center font-black text-sm`}>
+                        {menuItems.length > 0 ? '✓' : '2'}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-white text-sm">2. Menu Catalog</h4>
+                        <p className="text-xs text-slate-400">{menuItems.length} active menu items</p>
+                      </div>
+                      <button onClick={() => setActiveTab('menu')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
+                        Configure Menu &rarr;
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-4 bg-slate-950 border border-slate-800/80 p-5 rounded-2xl">
+                      <div className="w-10 h-10 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center font-bold text-sm">3</div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-white text-sm">3. Staff & Cashier PINs</h4>
+                        <p className="text-xs text-slate-400">{staffList.length} staff member accounts</p>
+                      </div>
+                      <button onClick={() => setActiveTab('staff')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
+                        Staff &rarr;
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-4 bg-slate-950 border border-slate-800/80 p-5 rounded-2xl">
+                      <div className="w-10 h-10 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center font-bold text-sm">4</div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-white text-sm">4. Payment & Receipts</h4>
+                        <p className="text-xs text-slate-400">M-Pesa & Cash settings</p>
+                      </div>
+                      <button onClick={() => setActiveTab('settings')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
+                        Settings &rarr;
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const tenant = localStorage.getItem('pin_staff_user') ? JSON.parse(localStorage.getItem('pin_staff_user')).restaurantId : null;
+                          const sampleCategories = [
+                            { restaurant_id: tenant, name: 'Main Dishes', category: 'Main Dishes', price: 850, description: 'Chef Signature Specialty', is_available: true },
+                            { restaurant_id: tenant, name: 'Fresh Tropical Juice', category: 'Beverages & Drinks', price: 250, description: 'Cold pressed seasonal fruit juice', is_available: true }
+                          ];
+                          const { error } = await supabase.from('pos_menu').insert(sampleCategories);
+                          if (error) throw error;
+                          alert('Sample menu items loaded successfully!');
+                          const { data: updatedMenu } = await supabase.from('pos_menu').select('*');
+                          if (updatedMenu) setMenuItems(updatedMenu);
+                        } catch (err) {
+                          alert('Notice: ' + err.message);
+                        }
+                      }}
+                      className="px-4 py-3 bg-slate-800/80 text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-800 hover:text-white border border-slate-700 transition-all flex items-center gap-2"
+                    >
+                      <span>⚡</span> Load Starter Sample Menu (Optional)
+                    </button>
+
+                    <button 
+                      onClick={onBackToTerminal}
+                      className="px-6 py-3 bg-amber-400 text-slate-950 text-sm font-black rounded-xl hover:bg-amber-300 shadow-xl shadow-amber-400/10 flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <span>Enter POS Register</span>
+                      <span>&rarr;</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* ANALYTICS PANEL */}
             {activeTab === 'analytics' && (
               <motion.div

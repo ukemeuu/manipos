@@ -83,7 +83,7 @@ export function LandingPage({ onProceedToLogin }) {
 
       setOnboardSuccess(data);
       setTimeout(() => {
-        window.location.href = `/?tenant=${data.restaurant_slug}&page=pos`;
+        window.location.href = `/?tenant=${data.restaurant_slug}&page=onboarding`;
       }, 1800);
     } catch (err) {
       setOnboardError(err.message || 'Error creating store account.');

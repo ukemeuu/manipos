@@ -393,23 +393,6 @@ BEGIN
         p_phone
     ) ON CONFLICT (restaurant_id) DO NOTHING;
 
-    -- 4. Create Starter Menu Categories
-    INSERT INTO public.pos_categories (restaurant_id, name, icon, display_order)
-    VALUES 
-        (v_restaurant_id, 'Main Dishes', 'Utensils', 1)
-        RETURNING id INTO v_cat_main_id;
-
-    INSERT INTO public.pos_categories (restaurant_id, name, icon, display_order)
-    VALUES 
-        (v_restaurant_id, 'Beverages & Drinks', 'Coffee', 2)
-        RETURNING id INTO v_cat_drinks_id;
-
-    -- 5. Seed Starter Menu Items
-    INSERT INTO public.pos_menu (restaurant_id, category, name, price, description, is_available)
-    VALUES
-        (v_restaurant_id, 'Main Dishes', 'Chef Signature Dish', 850.00, 'Freshly prepared specialty dish', true),
-        (v_restaurant_id, 'Beverages & Drinks', 'Fresh Tropical Juice', 250.00, 'Cold pressed seasonal fruit juice', true);
-
     RETURN jsonb_build_object(
         'success', true,
         'restaurant_id', v_restaurant_id,

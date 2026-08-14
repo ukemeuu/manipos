@@ -2977,6 +2977,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     }, [orderChannel, selectedBrand, activeBrand]);
 
     // Cart operations
+    const tenantBrands = useMemo(() => {
+        const brands = new Set();
+        (menu || []).forEach(item => {
+            if (item.brand && item.brand !== 'All' && item.brand !== 'ManiPOS') {
+                brands.add(item.brand);
+            }
+        });
+        return Array.from(brands);
+    }, [menu]);
+
     const addToCart = (item) => {
         setCartOpen(true);
         const currentBrand = (selectedBrand && selectedBrand !== 'All') ? selectedBrand : activeBrand;
@@ -3768,15 +3778,23 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                             </span>
                                         </div>
                                     )}
-                                    {/* Switch brand button */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setActiveBrand(null)}
-                                        className="flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700 px-3.5 py-2 rounded-2xl font-bold text-xs shadow-sm transition-all"
-                                    >
-                                        <ArrowLeft size={13} />
-                                        <span>Switch Brand</span>
-                                    </button>
+                                    {/* Switch brand button — ONLY visible for multi-brand tenants (2+ brands) */}
+                                    {tenantBrands.length >= 2 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const currentIdx = tenantBrands.indexOf(activeBrand);
+                                                const nextIdx = currentIdx < 0 ? 0 : (currentIdx + 1) % tenantBrands.length;
+                                                const nextBrand = tenantBrands[nextIdx] || 'All';
+                                                setActiveBrand(nextBrand);
+                                                setSelectedBrand(nextBrand);
+                                            }}
+                                            className="flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700 px-3.5 py-2 rounded-2xl font-bold text-xs shadow-sm transition-all cursor-pointer"
+                                        >
+                                            <ArrowLeft size={13} />
+                                            <span>Switch Brand ({activeBrand || 'All'})</span>
+                                        </button>
+                                    )}
                                 </div>
                             );
                         })()}
