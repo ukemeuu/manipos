@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
+import { FeedbackDashboardView } from './FeedbackDashboardView';
 
 export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, tenantSlug }) {
   const [setupCompleted, setSetupCompleted] = useState(() => {
@@ -1295,65 +1296,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
+                className="space-y-6 text-slate-900 bg-slate-950/40 p-2 rounded-3xl"
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-black text-white">Guest Feedback & Reviews</h2>
-                    <p className="text-slate-400 text-sm mt-1">Real-time ratings, comments, and experience feedback submitted by dining guests.</p>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3">
-                    <div className="flex items-center gap-1 text-amber-400 font-black text-lg">
-                      <Star size={20} className="fill-amber-400 text-amber-400" />
-                      <span>
-                        {feedbackList.length > 0 
-                          ? (feedbackList.reduce((acc, f) => acc + (f.rating || 5), 0) / feedbackList.length).toFixed(1)
-                          : '5.0'}
-                      </span>
-                    </div>
-                    <span className="text-slate-500 text-xs font-bold uppercase border-l border-slate-800 pl-3">
-                      {feedbackList.length} Reviews
-                    </span>
-                  </div>
-                </div>
-
-                {/* Feedback Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {feedbackList.length === 0 ? (
-                    <div className="col-span-2 py-12 text-center bg-slate-900/40 border border-slate-900 rounded-2xl">
-                      <MessageSquare size={36} className="text-slate-600 mx-auto mb-3" />
-                      <h4 className="text-slate-300 font-extrabold text-base">No Customer Feedback Yet</h4>
-                      <p className="text-slate-500 text-xs mt-1">When guests scan the Feedback QR code on thermal receipts, their reviews will appear here.</p>
-                    </div>
-                  ) : (
-                    feedbackList.map((fb) => (
-                      <div key={fb.id || Math.random()} className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl space-y-3 shadow-md">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="text-white font-extrabold text-sm">{fb.customer_name || 'Anonymous Guest'}</h4>
-                            <p className="text-slate-400 text-[11px] font-medium">{fb.customer_contact || 'No contact info provided'}</p>
-                          </div>
-                          <div className="flex items-center gap-1 bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-full text-amber-400 font-black text-xs">
-                            <Star size={14} className="fill-amber-400 text-amber-400" />
-                            <span>{fb.rating || 5}.0</span>
-                          </div>
-                        </div>
-
-                        <div className="inline-block bg-slate-800 text-slate-300 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider">
-                          {fb.category || 'General Service'}
-                        </div>
-
-                        <p className="text-slate-200 text-xs leading-relaxed font-medium bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                          "{fb.comment || 'No written comment left.'}"
-                        </p>
-
-                        <div className="text-[10px] font-bold text-slate-500 text-right">
-                          {new Date(fb.created_at || Date.now()).toLocaleString()}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <FeedbackDashboardView />
               </motion.div>
             )}
 
