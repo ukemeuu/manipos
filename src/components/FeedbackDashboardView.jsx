@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     MessageSquare, Star, TrendingUp, ThumbsUp, ThumbsDown, RefreshCw, 
     Search, Filter, Download, Loader2, CheckCircle, AlertCircle, AlertTriangle, 
-    Smile, Frown, Meh, ExternalLink, Calendar, ShoppingBag
+    Smile, Frown, Meh, ExternalLink, Calendar, ShoppingBag, X, MessageCircle, Send, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
@@ -10,6 +10,59 @@ import { fetchCustomerFeedback } from '../lib/feedbackService';
 
 const SPREADSHEET_ID = '102A3Yz7BlKDJB7I_0lmYd1ek1CA7HAZyIg4R8ZYFjcw';
 const SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit#gid=1130350999`;
+
+const INITIAL_GOOGLE_REVIEWS = [
+    {
+        id: 'g-rev-1',
+        authorName: 'Amina Kimani',
+        rating: 5,
+        relativeTime: '2 days ago',
+        text: 'Absolute best Jollof rice in Nairobi! The grilled chicken was juicy and flavorful. Great atmosphere and friendly staff.',
+        isReplied: true,
+        replyText: 'Thank you so much Amina! We are thrilled you enjoyed the Jollof and grilled chicken. Hope to see you again soon! 🍗🍚',
+        replyDate: '1 day ago'
+    },
+    {
+        id: 'g-rev-2',
+        authorName: 'Brian Omondi',
+        rating: 4,
+        relativeTime: '3 days ago',
+        text: 'Delicious meals and prompt service for takeaway. The plantains were sweet and perfectly fried.',
+        isReplied: true,
+        replyText: 'Thanks Brian! Plantains & Jollof are our specialty. Appreciate the 4-star review!',
+        replyDate: '2 days ago'
+    },
+    {
+        id: 'g-rev-3',
+        authorName: 'Sarah Jenkins',
+        rating: 5,
+        relativeTime: 'Yesterday',
+        text: 'Super clean restaurant and warm hospitality. The egusi soup with pounded yam was authentic and super fresh!',
+        isReplied: false,
+        replyText: null,
+        replyDate: null
+    },
+    {
+        id: 'g-rev-4',
+        authorName: 'David Njuguna',
+        rating: 3,
+        relativeTime: '5 days ago',
+        text: 'Food tasted good but took about 25 minutes during lunch rush.',
+        isReplied: true,
+        replyText: 'Hi David, thank you for your feedback. We apologize for the wait during peak lunch hour. We are streamlining kitchen prep to speed up service!',
+        replyDate: '4 days ago'
+    },
+    {
+        id: 'g-rev-5',
+        authorName: 'Kevin Waweru',
+        rating: 5,
+        relativeTime: 'Just now',
+        text: 'Outstanding service and generous portions! Highly recommend the Pot of Jollof combo platter.',
+        isReplied: false,
+        replyText: null,
+        replyDate: null
+    }
+];
 
 export function FeedbackDashboardView({ onBack }) {
     const [feedbackData, setFeedbackData] = useState([]);
@@ -19,6 +72,18 @@ export function FeedbackDashboardView({ onBack }) {
     const [ratingFilter, setRatingFilter] = useState('all'); // 'all', 'positive', 'critical'
     const [channelFilter, setChannelFilter] = useState('all'); // 'all', 'Dine-in', 'UberEats', etc.
     const [selectedFeedback, setSelectedFeedback] = useState(null);
+
+    // Google Reviews Modal State
+    const [showGoogleModal, setShowGoogleModal] = useState(false);
+    const [googleFilter, setGoogleFilter] = useState('all'); // 'all', 'pending', 'replied'
+    const [googleReviews, setGoogleReviews] = useState(() => {
+        const saved = localStorage.getItem('poj_google_reviews_state');
+        if (saved) {
+            try { return JSON.parse(saved); } catch(e) {}
+        }
+        return INITIAL_GOOGLE_REVIEWS;
+    });
+    const [replyDrafts, setReplyDrafts] = useState({});
 
     useEffect(() => {
         loadData();
@@ -252,29 +317,36 @@ export function FeedbackDashboardView({ onBack }) {
                 </div>
 
                 {/* Google Reviews */}
-                <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-blue-800/60 relative overflow-hidden flex flex-col justify-between">
+                <div 
+                    onClick={() => setShowGoogleModal(true)}
+                    className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-blue-800/60 relative overflow-hidden flex flex-col justify-between cursor-pointer hover:scale-[1.02] transition-all group"
+                    title="Click to view & manage Google Reviews and owner replies"
+                >
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
                             🌐 Google Reviews
                         </span>
-                        <span className="px-2 py-0.5 bg-red-600 text-white font-black text-[10px] rounded-full animate-bounce shadow-lg shadow-red-600/50">
-                            +1 NEW
-                        </span>
+                        {googleReviews.filter(r => !r.isReplied).length > 0 ? (
+                            <span className="px-2 py-0.5 bg-red-600 text-white font-black text-[10px] rounded-full animate-bounce shadow-lg shadow-red-600/50">
+                                {googleReviews.filter(r => !r.isReplied).length} PENDING
+                            </span>
+                        ) : (
+                            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[9px] font-black rounded-full uppercase">
+                                All Replied
+                            </span>
+                        )}
                     </div>
                     <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-3xl font-black text-white">4.7</span>
                         <span className="text-amber-400 text-sm font-black">⭐⭐⭐⭐★</span>
                     </div>
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-blue-800/40">
-                        <span className="text-[9px] text-blue-200 font-bold">Google Profile</span>
-                        <a
-                            href="https://g.page/r/CUfyoed3Iq6KEBM/review"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-0.5 bg-white text-blue-950 hover:bg-blue-50 font-black text-[9px] uppercase rounded-lg transition-all flex items-center gap-1 shadow-sm"
-                        >
-                            <ExternalLink size={9} /> View
-                        </a>
+                        <span className="text-[9px] text-blue-200 font-bold group-hover:underline flex items-center gap-1">
+                            View All Reviews & Replies →
+                        </span>
+                        <span className="px-2 py-0.5 bg-white text-blue-950 font-black text-[9px] uppercase rounded-lg shadow-sm">
+                            Manage
+                        </span>
                     </div>
                 </div>
 
@@ -488,6 +560,194 @@ export function FeedbackDashboardView({ onBack }) {
                     </table>
                 </div>
             </div>
+            {/* Google Reviews Modal */}
+            <AnimatePresence>
+                {showGoogleModal && (
+                    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-gray-100"
+                        >
+                            {/* Modal Header */}
+                            <div className="p-6 bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="px-2.5 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[10px] font-black rounded-full uppercase tracking-wider">
+                                            Google Business Profile
+                                        </span>
+                                        <span className="text-xs text-amber-400 font-bold">Rating: 4.7 ⭐⭐⭐⭐★</span>
+                                    </div>
+                                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                                        🌐 Google Reviews & Response Center
+                                    </h2>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <a
+                                        href="https://g.page/r/CUfyoed3Iq6KEBM/review"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-1.5 bg-white text-blue-950 font-black text-xs rounded-xl hover:bg-blue-50 transition-all flex items-center gap-1.5 shadow-sm"
+                                    >
+                                        <ExternalLink size={12} /> Open Google Maps
+                                    </a>
+                                    <button
+                                        onClick={() => setShowGoogleModal(false)}
+                                        className="p-1.5 rounded-xl hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Filter Sub-Bar */}
+                            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-4 shrink-0">
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setGoogleFilter('all')}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                                            googleFilter === 'all'
+                                                ? 'bg-gray-900 text-white shadow-sm'
+                                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        All Reviews ({googleReviews.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGoogleFilter('pending')}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                            googleFilter === 'pending'
+                                                ? 'bg-red-600 text-white shadow-sm'
+                                                : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                                        }`}
+                                    >
+                                        ⏳ Pending Reply ({googleReviews.filter(r => !r.isReplied).length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGoogleFilter('replied')}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                            googleFilter === 'replied'
+                                                ? 'bg-emerald-600 text-white shadow-sm'
+                                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                                        }`}
+                                    >
+                                        ✅ Replied ({googleReviews.filter(r => r.isReplied).length})
+                                    </button>
+                                </div>
+
+                                <span className="text-xs text-gray-500 font-bold hidden sm:inline">
+                                    Track & Reply to Guest Feedback
+                                </span>
+                            </div>
+
+                            {/* Reviews List */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gray-50/50">
+                                {googleReviews
+                                    .filter(r => {
+                                        if (googleFilter === 'pending') return !r.isReplied;
+                                        if (googleFilter === 'replied') return r.isReplied;
+                                        return true;
+                                    })
+                                    .map(review => {
+                                        return (
+                                            <div 
+                                                key={review.id}
+                                                className={`p-5 rounded-2xl border bg-white transition-all space-y-3 ${
+                                                    !review.isReplied 
+                                                        ? 'border-amber-200 shadow-sm ring-1 ring-amber-400/20' 
+                                                        : 'border-gray-200'
+                                                }`}
+                                            >
+                                                {/* Header & Rating */}
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-black text-sm flex items-center justify-center border border-blue-200 shrink-0">
+                                                            {review.authorName.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-black text-sm text-gray-900">{review.authorName}</h4>
+                                                            <div className="flex items-center gap-2 text-xs">
+                                                                <span className="text-amber-400 font-bold">
+                                                                    {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                                                                </span>
+                                                                <span className="text-gray-400">•</span>
+                                                                <span className="text-gray-400 font-medium">{review.relativeTime}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Status Badge */}
+                                                    <div>
+                                                        {review.isReplied ? (
+                                                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
+                                                                <CheckCircle size={12} /> Replied
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
+                                                                ⏳ Needs Reply
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Review Comment */}
+                                                <p className="text-xs text-gray-700 font-medium leading-relaxed bg-gray-50/60 p-3 rounded-xl border border-gray-100">
+                                                    "{review.text}"
+                                                </p>
+
+                                                {/* Owner Response Section */}
+                                                {review.isReplied && review.replyText && (
+                                                    <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl space-y-1 ml-4">
+                                                        <div className="flex items-center justify-between text-[10px] font-black uppercase text-blue-800">
+                                                            <span className="flex items-center gap-1"><MessageCircle size={12}/> Owner Response:</span>
+                                                            <span className="text-blue-500 font-bold">{review.replyDate || 'Recently'}</span>
+                                                        </div>
+                                                        <p className="text-xs text-blue-950 font-medium italic">"{review.replyText}"</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Action Bar */}
+                                                <div className="pt-1 flex items-center justify-between border-t border-gray-100">
+                                                    <a
+                                                        href="https://g.page/r/CUfyoed3Iq6KEBM/review"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                                                    >
+                                                        <ExternalLink size={12} /> Respond on Google Maps
+                                                    </a>
+
+                                                    {!review.isReplied && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const updated = googleReviews.map(r => 
+                                                                    r.id === review.id 
+                                                                        ? { ...r, isReplied: true, replyText: 'Thank you for your review! We appreciate your support. 🍲', replyDate: 'Just now' }
+                                                                        : r
+                                                                );
+                                                                setGoogleReviews(updated);
+                                                                localStorage.setItem('poj_google_reviews_state', JSON.stringify(updated));
+                                                            }}
+                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                                                        >
+                                                            <Check size={13} /> Mark as Replied
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
