@@ -21,34 +21,7 @@ function App() {
     }
   });
   const [loading, setLoading] = useState(true);
-  const [storeStatus, setStoreStatus] = useState('approved');
-
-  useEffect(() => {
-    const fetchStoreStatus = async () => {
-      try {
-        const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-        const storeSlug = tenantInfo.tenantSlug || pinUser.tenantSlug;
-        const storeId = pinUser.restaurantId || pinUser.restaurant_id;
-
-        if (!storeSlug && !storeId) return;
-
-        let query = supabase.from('restaurants').select('status, is_active');
-        if (storeId) {
-          query = query.eq('id', storeId);
-        } else {
-          query = query.eq('slug', storeSlug);
-        }
-        const { data } = await query.maybeSingle();
-        if (data && data.status) {
-          setStoreStatus(data.status);
-        }
-      } catch (e) {
-        console.warn('Store status check notice:', e);
-      }
-    };
-
-    fetchStoreStatus();
-  }, [tenantInfo.tenantSlug, currentRoute]);
+  const [tenantInfo, setTenantInfo] = useState(() => getTenantInfo());
 
   // Clean router supporting subdomain detection, subpaths, hashes, and search queries
   const [currentRoute, setCurrentRoute] = useState(() => {
@@ -77,6 +50,35 @@ function App() {
     }
     return 'home';
   });
+
+  const [storeStatus, setStoreStatus] = useState('approved');
+
+  useEffect(() => {
+    const fetchStoreStatus = async () => {
+      try {
+        const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+        const storeSlug = tenantInfo.tenantSlug || pinUser.tenantSlug;
+        const storeId = pinUser.restaurantId || pinUser.restaurant_id;
+
+        if (!storeSlug && !storeId) return;
+
+        let query = supabase.from('restaurants').select('status, is_active');
+        if (storeId) {
+          query = query.eq('id', storeId);
+        } else {
+          query = query.eq('slug', storeSlug);
+        }
+        const { data } = await query.maybeSingle();
+        if (data && data.status) {
+          setStoreStatus(data.status);
+        }
+      } catch (e) {
+        console.warn('Store status check notice:', e);
+      }
+    };
+
+    fetchStoreStatus();
+  }, [tenantInfo.tenantSlug, currentRoute]);
 
   useEffect(() => {
     // Check initial session
