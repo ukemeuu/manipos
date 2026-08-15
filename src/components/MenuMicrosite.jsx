@@ -51,7 +51,10 @@ export const itemBelongsToBrand = (item, brand) => {
 
     // 2. Check primary brand field
     if (item.brand && item.brand.trim()) {
-        return item.brand.trim().toUpperCase() === targetBrandUpper;
+        const itemBrandUpper = item.brand.trim().toUpperCase();
+        if (itemBrandUpper === targetBrandUpper) return true;
+        if (targetBrandUpper === "POT OF JOLLOF" && (itemBrandUpper === "MANIPOS" || itemBrandUpper.includes("JOLLOF"))) return true;
+        return false;
     }
 
     // 3. Fallback for unassigned items: default to POT OF JOLLOF
@@ -422,11 +425,12 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'demostore' }
                 .from('pos_menu')
                 .select('*')
                 .eq('is_available', true)
-                .neq('show_on_microsite', false)
+                
                 .order('name', { ascending: true });
 
             if (error) throw error;
-            setMenu(data || []);
+            const validData = (data || []).filter(item => item.show_on_microsite !== false);
+            setMenu(validData);
 
             // Extract unique categories and respect custom category order
             let savedOrder = [];

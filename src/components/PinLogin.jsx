@@ -1,59 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { KeyRound, ArrowRight, Loader2, Store, Lock } from 'lucide-react';
-import { authenticateStaffPin } from '../services/data/staffService';
+import { Mail, Lock, ArrowRight, Loader2, UserCheck } from 'lucide-react';
+import { authenticateStaffLogin } from '../services/data/staffService';
 
 export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
-    const [restaurantSlug, setRestaurantSlug] = useState(initialTenantSlug || 'demostore');
-    const [pin, setPin] = useState(['', '', '', '']);
+    const [email, setEmail] = useState('admin@demostore.com');
+    const [password, setPassword] = useState('demostore2026');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        if (initialTenantSlug) {
-            setRestaurantSlug(initialTenantSlug);
-        }
-    }, [initialTenantSlug]);
-
-    // Focus management
-    const handleInput = (index, value) => {
-        if (value.length > 1) value = value.slice(-1);
-        if (!/^\d*$/.test(value)) return;
-
-        const newPin = [...pin];
-        newPin[index] = value;
-        setPin(newPin);
-
-        if (value !== '' && index < 3) {
-            const nextInput = document.getElementById(`pin-${index + 1}`);
-            if (nextInput) nextInput.focus();
-        }
-    };
-
-    const handleKeyDown = (index, e) => {
-        if (e.key === 'Backspace' && pin[index] === '' && index > 0) {
-            const prevInput = document.getElementById(`pin-${index - 1}`);
-            if (prevInput) prevInput.focus();
-        }
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const enteredPin = pin.join('');
-        if (enteredPin.length !== 4) return;
-        if (!restaurantSlug.trim()) {
-            setError('Please enter your Restaurant Code.');
-            return;
-        }
+        if (!email.trim() || !password) return;
 
         setLoading(true);
         setError('');
 
         try {
-            const cleanSlug = restaurantSlug.toLowerCase().trim();
-
-            const result = await authenticateStaffPin(cleanSlug, enteredPin);
+            const cleanEmail = email.toLowerCase().trim();
+            const result = await authenticateStaffLogin(cleanEmail, password);
 
             if (result.success) {
                 const staffPayload = result.staffUser;
@@ -62,75 +27,95 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                 onLoginSuccess({
                     access_token: 'staff_session_' + Date.now(),
                     staffUser: staffPayload
-                }, cleanSlug);
+                }, staffPayload.tenantSlug || initialTenantSlug);
                 return;
             } else {
-                throw new Error(result.error || 'Authentication error. Check security PIN.');
+                throw new Error(result.error || 'Authentication error. Please check your email and password.');
             }
         } catch (err) {
             console.error(err);
-            setError(err.message || 'Authentication error. Check security PIN.');
+            setError(err.message || 'Authentication error. Please check your email and password.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 text-left">
-            <div className="space-y-2">
-                <label htmlFor="restaurant-slug" className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                    <Store size={14} className="text-orange-500" />
-                    <span>Restaurant Code / Subdomain</span>
-                </label>
-                <div className="relative">
-                    <input
-                        id="restaurant-slug"
-                        type="text"
-                        required
-                        placeholder="e.g. demostore"
-                        value={restaurantSlug}
-                        onChange={(e) => setRestaurantSlug(e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm tracking-wide placeholder:text-slate-600"
-                    />
-                    <span className="absolute right-4 top-3.5 text-xs font-bold text-slate-500 pointer-events-none">.pos.manipos.com</span>
+        <form onSubmit={handleSubmit} className="space-y-5 text-left">
+            {error && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold p-3.5 rounded-2xl">
+                    {error}
                 </div>
+            )}
+
+            <div className="space-y-1.5">
+                <label htmlFor="staff-email" className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Mail size={14} className="text-orange-500" />
+                    <span>Staff Email Address</span>
+                </label>
+                <input
+                    id="staff-email"
+                    type="email"
+                    required
+                    placeholder="e.g. cashier@demostore.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm placeholder:text-slate-600"
+                />
             </div>
 
-            <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <div className="space-y-1.5">
+                <label htmlFor="staff-password" className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                     <Lock size={14} className="text-orange-500" />
-                    <span>Staff 4-Digit Security PIN</span>
+                    <span>Password</span>
                 </label>
-                <div className="flex justify-between gap-3">
-                    {pin.map((digit, i) => (
-                        <input
-                            key={i}
-                            id={`pin-${i}`}
-                            type="password"
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            value={digit}
-                            onChange={(e) => handleInput(i, e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(i, e)}
-                            className="w-14 h-14 text-center text-2xl font-black bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-orange-400 shadow-inner"
-                        />
+                <input
+                    id="staff-password"
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm placeholder:text-slate-600"
+                />
+            </div>
+
+            {/* Demo Quick Fill Controls */}
+            <div className="pt-1">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Quick Demo Accounts:</p>
+                <div className="flex flex-wrap gap-2">
+                    {[
+                        { label: 'Admin', email: 'admin@demostore.com', pass: 'demostore2026' },
+                        { label: 'Cashier', email: 'cashier@demostore.com', pass: 'cashier2026' },
+                        { label: 'Waiter', email: 'waiter@demostore.com', pass: 'waiter2026' }
+                    ].map(acc => (
+                        <button
+                            key={acc.email}
+                            type="button"
+                            onClick={() => {
+                                setEmail(acc.email);
+                                setPassword(acc.pass);
+                            }}
+                            className="px-2.5 py-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                            <UserCheck size={11} className="text-orange-400" />
+                            <span>{acc.label}</span>
+                        </button>
                     ))}
                 </div>
             </div>
 
-            <div className="min-h-[20px]">
-                {error && <p className="text-red-400 font-bold text-xs text-center animate-pulse">{error}</p>}
-            </div>
-
             <button
                 type="submit"
-                disabled={loading || pin.join('').length !== 4 || !restaurantSlug.trim()}
-                className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-4 rounded-2xl font-black text-base hover:from-orange-600 hover:to-amber-600 transition-all shadow-xl shadow-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed group cursor-pointer"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-black text-sm py-4 rounded-2xl transition-all shadow-xl shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
             >
-                {loading ? <Loader2 className="animate-spin" size={22} /> : (
+                {loading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                ) : (
                     <>
-                        <span>Enter POS Register</span>
-                        <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                        <span>Sign In to Terminal</span>
+                        <ArrowRight size={16} />
                     </>
                 )}
             </button>

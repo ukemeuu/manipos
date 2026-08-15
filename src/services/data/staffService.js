@@ -5,22 +5,22 @@ import { getLocalCollection, insertLocalRecord } from './localStoreService';
 const OFFLINE_STAFF_KEY = 'manipos_offline_staff_credentials';
 
 /**
- * Staff PIN Authentication Service with Offline Provisioning
+ * Staff Email & Password Authentication Service with Offline Provisioning
  */
-export async function authenticateStaffPin(restaurantSlug, pinCode) {
-    const cleanSlug = restaurantSlug.toLowerCase().trim();
+export async function authenticateStaffLogin(email, password) {
+    const cleanEmail = (email || '').toLowerCase().trim();
 
     // 1. Primary: Verify online via secure Postgres RPC function
     if (isOnline()) {
         try {
-            const { data: rpcRes, error: rpcError } = await supabase.rpc('verify_staff_pin', {
-                p_restaurant_slug: cleanSlug,
-                p_pin: pinCode
+            const { data: rpcRes, error: rpcError } = await supabase.rpc('verify_staff_login', {
+                p_email: cleanEmail,
+                p_password: password
             });
 
             if (rpcRes && rpcRes.success) {
                 const staffPayload = rpcRes.staff_user;
-                provisionOfflineStaffCredential(cleanSlug, staffPayload, pinCode);
+                provisionOfflineStaffCredential(cleanEmail, staffPayload, password);
                 return { success: true, staffUser: staffPayload };
             }
 
@@ -28,12 +28,40 @@ export async function authenticateStaffPin(restaurantSlug, pinCode) {
                 return { success: false, error: rpcRes.error };
             }
         } catch (err) {
-            console.warn('[StaffService] RPC authentication unreachable, attempting local offline check:', err);
+            console.warn('[StaffService] RPC authentication notice:', err);
         }
+
+        // Try Supabase auth direct email/password fallback
+        try {
+            const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                email: cleanEmail,
+                password: password
+            });
+
+            if (authData && authData.user) {
+                const staffPayload = {
+                    id: authData.user.id,
+                    name: authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'Staff Member',
+                    email: authData.user.email,
+                    role: authData.user.user_metadata?.role || 'admin',
+                    restaurantId: authData.user.user_metadata?.restaurant_id || 'demostore',
+                    restaurantName: authData.user.user_metadata?.restaurant_name || 'ManiPOS Restaurant',
+                    tenantSlug: authData.user.user_metadata?.slug || 'demostore'
+                };
+                return { success: true, staffUser: staffPayload };
+            }
+        } catch (e) {}
     }
 
     // 2. Offline Fallback: Authenticate against locally provisioned credentials
-    return verifyOfflineStaffCredential(cleanSlug, pinCode);
+    return verifyOfflineStaffCredential(cleanEmail, password);
+}
+
+/**
+ * Legacy/PIN compatibility wrapper
+ */
+export async function authenticateStaffPin(restaurantSlug, pinCode) {
+    return authenticateStaffLogin(restaurantSlug, pinCode);
 }
 
 /**

@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { getPublicFeatures } from '../config/features';
 import { FeatureCard } from './FeatureCard';
+import { authenticateStaffLogin } from '../services/data/staffService';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
@@ -59,8 +60,11 @@ export function LandingPage({ onProceedToLogin }) {
   // Self-Service Store Onboarding State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
   const [showSignInModal, setShowSignInModal] = useState(false);
-  const [signInSlug, setSignInSlug] = useState('');
-  const [onboardData, setOnboardData] = useState({ name: '', slug: '', managerName: '', pin: '1234', phone: '' });
+  const [signInEmail, setSignInEmail] = useState('');
+  const [signInPassword, setSignInPassword] = useState('');
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [signInError, setSignInError] = useState('');
+  const [onboardData, setOnboardData] = useState({ name: '', slug: '', managerName: '', email: '', pin: '1234', phone: '' });
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardError, setOnboardError] = useState('');
   const [onboardSuccess, setOnboardSuccess] = useState(null);
@@ -1044,45 +1048,77 @@ export function LandingPage({ onProceedToLogin }) {
                 </span>
                 <h3 className="text-2xl font-black text-white tracking-tight">Sign In to ManiPOS</h3>
                 <p className="text-slate-400 text-xs leading-relaxed">
-                  Enter your restaurant subdomain code or store slug to access your POS terminal & management workspace.
+                  Enter your email address and password to access your restaurant workspace.
                 </p>
               </div>
 
+              {signInError && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold p-3.5 rounded-xl">
+                  {signInError}
+                </div>
+              )}
+
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  const slug = (signInSlug || '').toLowerCase().trim();
-                  if (!slug) return;
-                  setShowSignInModal(false);
-                  if (onProceedToLogin) {
-                    onProceedToLogin(slug);
-                  } else {
-                    window.location.href = `/?tenant=${slug}&page=pos`;
+                  if (!signInEmail || !signInPassword) return;
+                  setSignInLoading(true);
+                  setSignInError('');
+
+                  try {
+                    const res = await authenticateStaffLogin(signInEmail, signInPassword);
+                    if (res.success) {
+                      localStorage.setItem('pin_staff_user', JSON.stringify(res.staffUser));
+                      setShowSignInModal(false);
+                      window.location.href = '/app';
+                    } else {
+                      setSignInError(res.error || 'Authentication error. Please check your credentials.');
+                    }
+                  } catch (err) {
+                    setSignInError(err.message || 'Unable to connect. Check internet connection.');
+                  } finally {
+                    setSignInLoading(false);
                   }
                 }}
                 className="space-y-4"
               >
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Store Subdomain / Slug</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. demostore, urbanbistro, myrestaurant"
-                      value={signInSlug}
-                      onChange={(e) => setSignInSlug(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-mono font-bold"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-mono pt-0.5">e.g. https://[store-slug].pos.manipos.com</p>
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. admin@demostore.com"
+                    value={signInEmail}
+                    onChange={(e) => setSignInEmail(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={signInPassword}
+                    onChange={(e) => setSignInPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
+                  />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm py-3.5 rounded-xl transition-all shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2 cursor-pointer mt-4"
+                  disabled={signInLoading}
+                  className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm py-3.5 rounded-xl transition-all shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2 cursor-pointer mt-4 disabled:opacity-50"
                 >
-                  <span>Continue to Store Login</span>
-                  <ArrowRight size={16} />
+                  {signInLoading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <span>Sign In to Workspace</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
                 </button>
               </form>
             </motion.div>

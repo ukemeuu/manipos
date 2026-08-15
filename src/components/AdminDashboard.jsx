@@ -296,8 +296,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
     const payload = {
       restaurant_id: currentRestaurantId,
       name: form.staffName.value,
+      email: form.email ? form.email.value : `${form.staffName.value.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`,
       role: form.role.value,
-      pin_code: form.pin.value
+      pin_code: form.password ? form.password.value : '1234'
     };
 
     try {
@@ -978,7 +979,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                     <p className="text-slate-400 text-sm mt-1">Configure staff authorization credentials and role permissions.</p>
                   </div>
                   <button
-                    onClick={() => setEditingStaff({ name: '', role: 'staff', pin: '' })}
+                    onClick={() => setEditingStaff({ name: '', email: '', role: 'cashier', password: '' })}
                     className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
                   >
                     <Plus size={16} /> Add Staff Account
@@ -991,8 +992,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                     <thead>
                       <tr className="border-b border-slate-900/80 bg-slate-900/20 text-xs text-slate-500 font-bold uppercase tracking-wider">
                         <th className="py-4 px-6">Name</th>
+                        <th className="py-4 px-6">Email Address</th>
                         <th className="py-4 px-6">Role</th>
-                        <th className="py-4 px-6">Security PIN</th>
+                        <th className="py-4 px-6">Password</th>
                         <th className="py-4 px-6 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -1000,6 +1002,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                       {staffList.map(staff => (
                         <tr key={staff.id} className="hover:bg-slate-900/20 transition-colors">
                           <td className="py-4 px-6 font-bold text-white">{staff.name}</td>
+                          <td className="py-4 px-6 text-slate-300 font-mono text-xs">{staff.email || `${staff.name.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`}</td>
                           <td className="py-4 px-6">
                             <span className={`px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider ${
                               staff.role === 'admin' 
@@ -1009,7 +1012,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                               {staff.role}
                             </span>
                           </td>
-                          <td className="py-4 px-6 text-slate-400 font-mono">••••</td>
+                          <td className="py-4 px-6 text-slate-400 font-mono">••••••••</td>
                           <td className="py-4 px-6 text-right space-x-2">
                             <button
                               onClick={() => setEditingStaff(staff)}
@@ -1675,14 +1678,26 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
 
               <form onSubmit={handleSaveStaff} className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-400 block">Name</label>
+                  <label className="text-xs font-bold text-slate-400 block">Staff Name</label>
                   <input
                     name="staffName"
                     type="text"
                     required
                     defaultValue={editingStaff.name}
-                    placeholder="e.g. John Doe"
+                    placeholder="e.g. Sarah Connor"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 block">Email Address</label>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    defaultValue={editingStaff.email}
+                    placeholder="e.g. sarah@demostore.com"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none font-medium"
                   />
                 </div>
 
@@ -1691,26 +1706,25 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                     <label className="text-xs font-bold text-slate-400 block">Role</label>
                     <select
                       name="role"
-                      defaultValue={editingStaff.role || 'staff'}
+                      defaultValue={editingStaff.role || 'cashier'}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-sm focus:border-emerald-500 focus:outline-none text-slate-300"
                     >
-                      <option value="staff">Cashier</option>
+                      <option value="cashier">Cashier</option>
+                      <option value="waiter">Waiter</option>
                       <option value="manager">Manager</option>
-                      <option value="admin">Admin</option>
+                      <option value="admin">Store Admin</option>
                     </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-400 block">Security PIN (4 digits)</label>
+                    <label className="text-xs font-bold text-slate-400 block">Password</label>
                     <input
-                      name="pin"
-                      type="text"
-                      maxLength={4}
-                      pattern="\d{4}"
-                      required
-                      defaultValue={editingStaff.pin}
-                      placeholder="e.g. 1234"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none font-mono"
+                      name="password"
+                      type="password"
+                      required={!editingStaff.id}
+                      defaultValue={editingStaff.pin_code || editingStaff.pin || ''}
+                      placeholder="••••••••"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none font-medium"
                     />
                   </div>
                 </div>
