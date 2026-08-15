@@ -61,6 +61,56 @@ const INITIAL_GOOGLE_REVIEWS = [
         isReplied: false,
         replyText: null,
         replyDate: null
+    },
+    {
+        id: 'g-rev-6',
+        authorName: 'Grace Muthoni',
+        rating: 5,
+        relativeTime: '1 week ago',
+        text: 'The suya spice on the beef was incredible. Great West African flavors in Nairobi!',
+        isReplied: true,
+        replyText: 'Asante Grace! Glad you loved the Suya Beef. Looking forward to serving you again!',
+        replyDate: '6 days ago'
+    },
+    {
+        id: 'g-rev-7',
+        authorName: 'Emmanuel Adebayo',
+        rating: 5,
+        relativeTime: '1 week ago',
+        text: 'Felt like home! Authentic Nigerian Jollof and fried croaker fish. 10/10 recommend.',
+        isReplied: true,
+        replyText: 'Thank you Emmanuel! We take huge pride in preserving authentic West African taste!',
+        replyDate: '6 days ago'
+    },
+    {
+        id: 'g-rev-8',
+        authorName: 'Wanjiku Kamau',
+        rating: 4,
+        relativeTime: '2 weeks ago',
+        text: 'Great portion sizes. The pepper soup had just the right level of heat.',
+        isReplied: true,
+        replyText: 'Thank you Wanjiku! Glad the pepper soup hit the spot!',
+        replyDate: '2 weeks ago'
+    },
+    {
+        id: 'g-rev-9',
+        authorName: 'Marcus Vance',
+        rating: 5,
+        relativeTime: '2 weeks ago',
+        text: 'Visited while on a business trip to Nairobi. Friendly waiters and high hygiene standards.',
+        isReplied: false,
+        replyText: null,
+        replyDate: null
+    },
+    {
+        id: 'g-rev-10',
+        authorName: 'Faith Chebet',
+        rating: 5,
+        relativeTime: '3 weeks ago',
+        text: 'Fast delivery on UberEats and food arrived piping hot. Jollof rice was top tier.',
+        isReplied: true,
+        replyText: 'Thank you Faith! We pack all our delivery orders to stay fresh and hot.',
+        replyDate: '3 weeks ago'
     }
 ];
 
@@ -83,7 +133,41 @@ export function FeedbackDashboardView({ onBack }) {
         }
         return INITIAL_GOOGLE_REVIEWS;
     });
-    const [replyDrafts, setReplyDrafts] = useState({});
+
+    // Add New Review Form State
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [newAuthor, setNewAuthor] = useState('');
+    const [newRating, setNewRating] = useState(5);
+    const [newText, setNewText] = useState('');
+    const [newTime, setNewTime] = useState('Recently');
+    const [newStatus, setNewStatus] = useState('pending');
+    const [newReplyText, setNewReplyText] = useState('');
+
+    const handleAddReview = (e) => {
+        e.preventDefault();
+        if (!newAuthor.trim() || !newText.trim()) return;
+
+        const newEntry = {
+            id: `g-rev-${Date.now()}`,
+            authorName: newAuthor.trim(),
+            rating: Number(newRating),
+            relativeTime: newTime.trim() || 'Recently',
+            text: newText.trim(),
+            isReplied: newStatus === 'replied',
+            replyText: newStatus === 'replied' ? (newReplyText.trim() || 'Thank you for your review!') : null,
+            replyDate: newStatus === 'replied' ? 'Just now' : null
+        };
+
+        const updated = [newEntry, ...googleReviews];
+        setGoogleReviews(updated);
+        localStorage.setItem('poj_google_reviews_state', JSON.stringify(updated));
+
+        // Reset
+        setNewAuthor('');
+        setNewText('');
+        setNewReplyText('');
+        setShowAddForm(false);
+    };
 
     useEffect(() => {
         loadData();
@@ -584,12 +668,19 @@ export function FeedbackDashboardView({ onBack }) {
                                     </h2>
                                 </div>
 
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 sm:gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAddForm(!showAddForm)}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                                    >
+                                        {showAddForm ? '✕ Close Form' : '➕ Add Review'}
+                                    </button>
                                     <a
                                         href="https://g.page/r/CUfyoed3Iq6KEBM/review"
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="px-3 py-1.5 bg-white text-blue-950 font-black text-xs rounded-xl hover:bg-blue-50 transition-all flex items-center gap-1.5 shadow-sm"
+                                        className="px-3 py-1.5 bg-white text-blue-950 font-black text-xs rounded-xl hover:bg-blue-50 transition-all flex items-center gap-1.5 shadow-sm hidden sm:flex"
                                     >
                                         <ExternalLink size={12} /> Open Google Maps
                                     </a>
@@ -601,6 +692,94 @@ export function FeedbackDashboardView({ onBack }) {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Add Review Form Panel */}
+                            {showAddForm && (
+                                <form onSubmit={handleAddReview} className="p-5 bg-blue-50/80 border-b border-blue-200 space-y-3 shrink-0">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-black text-xs text-blue-950 uppercase tracking-wider flex items-center gap-1.5">
+                                            ➕ Add / Import Google Business Review
+                                        </h3>
+                                        <span className="text-[10px] text-blue-700 font-bold">Copy review details from Google Business</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                                        <input
+                                            type="text"
+                                            placeholder="Customer Name (e.g. Joy Wambui)"
+                                            value={newAuthor}
+                                            onChange={(e) => setNewAuthor(e.target.value)}
+                                            required
+                                            className="bg-white border border-blue-200 rounded-xl p-2.5 font-bold focus:outline-none focus:border-blue-600"
+                                        />
+                                        <select
+                                            value={newRating}
+                                            onChange={(e) => setNewRating(Number(e.target.value))}
+                                            className="bg-white border border-blue-200 rounded-xl p-2.5 font-bold focus:outline-none focus:border-blue-600"
+                                        >
+                                            <option value={5}>⭐⭐⭐⭐⭐ (5 Stars)</option>
+                                            <option value={4}>⭐⭐⭐⭐ (4 Stars)</option>
+                                            <option value={3}>⭐⭐⭐ (3 Stars)</option>
+                                            <option value={2}>⭐⭐ (2 Stars)</option>
+                                            <option value={1}>⭐ (1 Star)</option>
+                                        </select>
+                                        <input
+                                            type="text"
+                                            placeholder="Date / Relative Time (e.g. 2 days ago)"
+                                            value={newTime}
+                                            onChange={(e) => setNewTime(e.target.value)}
+                                            className="bg-white border border-blue-200 rounded-xl p-2.5 font-bold focus:outline-none focus:border-blue-600"
+                                        />
+                                    </div>
+                                    <textarea
+                                        placeholder="Enter customer's review comment..."
+                                        value={newText}
+                                        onChange={(e) => setNewText(e.target.value)}
+                                        required
+                                        rows={2}
+                                        className="w-full bg-white border border-blue-200 rounded-xl p-2.5 font-medium text-xs focus:outline-none focus:border-blue-600"
+                                    />
+                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                                            <label className="text-xs font-bold text-blue-900 flex items-center gap-1.5 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="status"
+                                                    checked={newStatus === 'pending'}
+                                                    onChange={() => setNewStatus('pending')}
+                                                    className="accent-amber-600"
+                                                />
+                                                ⏳ Needs Reply
+                                            </label>
+                                            <label className="text-xs font-bold text-blue-900 flex items-center gap-1.5 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="status"
+                                                    checked={newStatus === 'replied'}
+                                                    onChange={() => setNewStatus('replied')}
+                                                    className="accent-emerald-600"
+                                                />
+                                                ✅ Already Replied
+                                            </label>
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            className="w-full sm:w-auto px-5 py-2 bg-blue-900 hover:bg-blue-950 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                            <Check size={14} /> Save Review to Dashboard
+                                        </button>
+                                    </div>
+                                    {newStatus === 'replied' && (
+                                        <input
+                                            type="text"
+                                            placeholder="Owner Response text (optional)"
+                                            value={newReplyText}
+                                            onChange={(e) => setNewReplyText(e.target.value)}
+                                            className="w-full bg-white border border-emerald-300 rounded-xl p-2 text-xs font-medium focus:outline-none"
+                                        />
+                                    )}
+                                </form>
+                            )}
 
                             {/* Filter Sub-Bar */}
                             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-4 shrink-0">
