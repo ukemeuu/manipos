@@ -5,6 +5,7 @@ import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2,
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
 import { CampaignsView } from './CampaignsView';
+import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { queueOfflineOrder, syncOfflineQueue } from '../lib/offlineQueue';
 import { logAuditEvent } from '../lib/auditLogger';
 import { createPosOrder } from '../services/data/orderService';
@@ -3568,6 +3569,17 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 Staff & Terminals
                             </button>
                         )}
+                        <button
+                            type="button"
+                            onClick={() => setActiveView('feedback')}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                                activeView === 'feedback'
+                                    ? 'bg-emerald-600 text-white font-black shadow-sm'
+                                    : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                        >
+                            💬 Customer Feedback
+                        </button>
                     </div>
 
                     <button
@@ -5246,6 +5258,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                         </div>
                     );
                 })()}
+
+                {activeView === 'feedback' && (
+                    <div className="flex-1 flex flex-col overflow-y-auto bg-gray-50/50 p-6 font-sans">
+                        <FeedbackDashboardView />
+                    </div>
+                )}
 
                 {activeView === 'menu_settings' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-6 gap-6 font-sans">
