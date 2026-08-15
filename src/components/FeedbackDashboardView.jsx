@@ -268,7 +268,7 @@ export function FeedbackDashboardView({ onBack }) {
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-blue-800/40">
                         <span className="text-[9px] text-blue-200 font-bold">Google Profile</span>
                         <a
-                            href="https://search.google.com/local/writereview?placeid=ChIJk9X55X8LLxgR_potofjollof"
+                            href="https://g.page/r/CUfyoed3Iq6KEBM/review"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-2 py-0.5 bg-white text-blue-950 hover:bg-blue-50 font-black text-[9px] uppercase rounded-lg transition-all flex items-center gap-1 shadow-sm"
