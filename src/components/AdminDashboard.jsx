@@ -550,6 +550,17 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                 <Users size={18} />
                 Staff & Access
               </button>
+              <button
+                onClick={() => setActiveTab('feedback')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+                  activeTab === 'feedback' 
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
+              >
+                <MessageSquare size={18} />
+                Customer Feedback
+              </button>
 
               {/* COLLAPSIBLE SETTINGS & TOOLS GROUP */}
               <div className="pt-2">
@@ -594,17 +605,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                       Supplier Management
                     </button>
 
-                    <button
-                      onClick={() => setActiveTab('feedback')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'feedback' 
-                          ? 'bg-amber-400 text-slate-950 font-bold' 
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                      }`}
-                    >
-                      <MessageSquare size={14} />
-                      Customer Feedback
-                    </button>
+                    
 
                     <button
                       onClick={() => setActiveTab('linkhub')}
