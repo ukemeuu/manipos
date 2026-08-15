@@ -29,6 +29,8 @@ import {
   X,
   AlertTriangle,
 } from 'lucide-react';
+import { getPublicFeatures } from '../config/features';
+import { FeatureCard } from './FeatureCard';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
@@ -449,54 +451,24 @@ export function LandingPage({ onProceedToLogin }) {
 
       {/* ── MORE FEATURES GRID ── */}
       <section className="py-10 pb-28 px-6">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[
-            {
-              icon: <Globe size={22} />,
-              title: 'QR Code Digital Menu',
-              desc: 'Allow guests to scan QR codes at tables to view your digital menu, order, and pay directly from their smartphones.',
-            },
-            {
-              icon: <MapPin size={22} />,
-              title: 'Multi-Location & Subdomains',
-              desc: 'Manage all your restaurant outlets under subdomains (e.g. branch.manipos.com) with central reporting and control.',
-            },
-            {
-              icon: <PieChart size={22} />,
-              title: 'Report & Sales Analytics',
-              desc: 'Access real-time sales reports, daily Z-reports, top-performing items, and cashier audit logs from any browser.',
-            },
-            {
-              icon: <Layers size={22} />,
-              title: 'Inventory & Recipe Control',
-              desc: 'Track ingredient stock levels automatically as orders are billed. Get low stock alerts and variance tracking.',
-            },
-            {
-              icon: <Users size={22} />,
-              title: 'Staff & Role Management',
-              desc: 'Create role-based accounts for cashiers, waiters, kitchen staff, and managers with controlled access per outlet.',
-            },
-            {
-              icon: <WifiOff size={22} />,
-              title: 'Offline-First Architecture',
-              desc: 'POS keeps running during internet outages. Receipts and kitchen tickets print locally, then auto-sync to the cloud.',
-            },
-          ].map((feat, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.08, duration: 0.5 }}
-              className="bg-white/[0.03] border border-white/[0.07] hover:border-amber-400/30 hover:bg-white/[0.05] rounded-2xl p-7 space-y-4 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-xl bg-amber-400/15 border border-amber-400/25 text-amber-400 flex items-center justify-center group-hover:bg-amber-400/25 transition-all">
-                {feat.icon}
-              </div>
-              <h3 className="text-lg font-black text-white">{feat.title}</h3>
-              <p className="text-white/50 text-sm leading-relaxed font-medium">{feat.desc}</p>
-            </motion.div>
-          ))}
+        <div className="max-w-7xl mx-auto space-y-10">
+          <div className="text-center space-y-3">
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
+              System Capabilities & Development Roadmap
+            </div>
+            <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+              Production Capabilities & Feature Roadmap
+            </h3>
+            <p className="text-white/50 text-base max-w-xl mx-auto font-medium">
+              Features marked LIVE are ready for production store operations. Modules in active development are clearly marked as Coming Soon.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {getPublicFeatures().map((feat, i) => (
+              <FeatureCard key={feat.id} feature={feat} index={i} />
+            ))}
+          </div>
         </div>
       </section>
 
@@ -1103,35 +1075,6 @@ export function LandingPage({ onProceedToLogin }) {
                     />
                   </div>
                   <p className="text-[10px] text-slate-500 font-mono pt-0.5">e.g. https://[store-slug].pos.manipos.com</p>
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Quick Select Existing Outlets:</label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { name: 'Pot of Jollof', slug: 'potofjollof' },
-                      { name: 'Little Lagos', slug: 'littlelagos' },
-                      { name: 'Café Swahili', slug: 'cafeswahili' },
-                      { name: 'Samaki Street', slug: 'samakistreet' }
-                    ].map(outlet => (
-                      <button
-                        key={outlet.slug}
-                        type="button"
-                        onClick={() => {
-                          setShowSignInModal(false);
-                          if (onProceedToLogin) {
-                            onProceedToLogin(outlet.slug);
-                          } else {
-                            window.location.href = `/?tenant=${outlet.slug}&page=pos`;
-                          }
-                        }}
-                        className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 text-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Building2 size={12} className="text-amber-400" />
-                        <span>{outlet.name}</span>
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <button
