@@ -156,7 +156,12 @@ export function LandingPage({ onProceedToLogin }) {
       setOnboardSuccess(resultData);
       localStorage.removeItem('pin_staff_user');
     } catch (err) {
-      setOnboardError(err.message || 'Error creating store account.');
+      const errMsg = err.message || 'Error creating store account.';
+      if (errMsg.includes('schema cache')) {
+        setOnboardError("Supabase schema cache update required. Please run NOTIFY pgrst, 'reload schema'; in your Supabase SQL Editor.");
+      } else {
+        setOnboardError(errMsg);
+      }
     } finally {
       setOnboardLoading(false);
     }

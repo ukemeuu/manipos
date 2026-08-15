@@ -84,6 +84,9 @@ export async function authenticateStaffLogin(email, password) {
             }
         } catch (err) {
             console.warn('[StaffService] RPC authentication notice:', err);
+            if (err.message && err.message.includes('schema cache')) {
+                return { success: false, error: "Supabase schema cache update required. Please run NOTIFY pgrst, 'reload schema'; in your Supabase SQL Editor." };
+            }
         }
     }
 
