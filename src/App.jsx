@@ -81,11 +81,18 @@ function App() {
   }, [tenantInfo.tenantSlug, currentRoute]);
 
   useEffect(() => {
+    // Safety timer: guarantee loading spinner dismisses within 500ms
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 500);
+
     // Check initial session
     supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
       if (activeSession) {
         setSession(prev => ({ ...prev, ...activeSession }));
       }
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
 
@@ -96,7 +103,10 @@ function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Listen to browser navigation changes
