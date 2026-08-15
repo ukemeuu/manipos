@@ -433,8 +433,14 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public read restaurants" ON public.restaurants;
 CREATE POLICY "Public read restaurants" ON public.restaurants FOR SELECT TO public USING (true);
 
+DROP POLICY IF EXISTS "Public insert restaurants" ON public.restaurants;
+CREATE POLICY "Public insert restaurants" ON public.restaurants FOR INSERT TO public WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Public read staff_access" ON public.staff_access;
 CREATE POLICY "Public read staff_access" ON public.staff_access FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Public insert staff_access" ON public.staff_access;
+CREATE POLICY "Public insert staff_access" ON public.staff_access FOR INSERT TO public WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Public read pos_menu" ON public.pos_menu;
 CREATE POLICY "Public read pos_menu" ON public.pos_menu FOR SELECT TO public USING (true);

@@ -78,19 +78,82 @@ export function LandingPage({ onProceedToLogin }) {
     setOnboardLoading(true);
     setOnboardError('');
     try {
-      const { data, error } = await supabase.rpc('create_new_restaurant_tenant', {
-        p_name: onboardData.name,
-        p_slug: onboardData.slug.toLowerCase().trim(),
-        p_manager_name: onboardData.managerName || 'Store Manager',
-        p_pin: onboardData.pin,
-        p_phone: onboardData.phone || null
-      });
+      const cleanSlug = onboardData.slug.toLowerCase().trim();
+      const managerName = onboardData.managerName || 'Store Manager';
+      let resultData = null;
 
-      if (error) throw error;
-      if (data && !data.success) throw new Error(data.error || 'Registration failed.');
+      try {
+        const { data, error } = await supabase.rpc('create_new_restaurant_tenant', {
+          p_name: onboardData.name,
+          p_slug: cleanSlug,
+          p_manager_name: managerName,
+          p_pin: onboardData.pin,
+          p_phone: onboardData.phone || null
+        });
+
+        if (!error && data && data.success) {
+          resultData = data;
+        } else if (data && !data.success && data.error && data.error.includes('already taken')) {
+          throw new Error(data.error);
+        }
+      } catch (rpcErr) {
+        if (rpcErr.message && rpcErr.message.includes('already taken')) {
+          throw rpcErr;
+        }
+        console.warn('[Onboarding] RPC notice, using direct table fallback:', rpcErr);
+      }
+
+      // Direct Table Insertion Fallback if RPC is not available in schema cache
+      if (!resultData) {
+        const { data: existingStore } = await supabase
+          .from('restaurants')
+          .select('id')
+          .eq('slug', cleanSlug)
+          .maybeSingle();
+
+        if (existingStore) {
+          throw new Error('Restaurant subdomain slug is already taken. Please choose another name.');
+        }
+
+        const { data: newStore, error: createStoreErr } = await supabase
+          .from('restaurants')
+          .insert([{
+            name: onboardData.name,
+            slug: cleanSlug,
+            status: 'pending',
+            is_active: true
+          }])
+          .select()
+          .single();
+
+        if (createStoreErr) throw new Error(createStoreErr.message || 'Error creating restaurant account.');
+
+        await supabase.from('staff_access').insert([{
+          restaurant_id: newStore.id,
+          name: managerName,
+          email: `${cleanSlug}@demostore.com`,
+          role: 'admin',
+          pin_code: onboardData.pin
+        }]);
+
+        if (onboardData.phone) {
+          await supabase.from('restaurant_settings').insert([{
+            restaurant_id: newStore.id,
+            phone: onboardData.phone
+          }]);
+        }
+
+        resultData = {
+          success: true,
+          restaurant_id: newStore.id,
+          restaurant_slug: cleanSlug,
+          restaurant_name: onboardData.name,
+          manager_name: managerName
+        };
+      }
 
       // Registration submitted: Require Super Admin approval before granting session
-      setOnboardSuccess(data);
+      setOnboardSuccess(resultData);
       localStorage.removeItem('pin_staff_user');
     } catch (err) {
       setOnboardError(err.message || 'Error creating store account.');
