@@ -495,9 +495,3 @@ EXCEPTION WHEN OTHERS THEN
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-RETURN jsonb_build_object(
-        'success', false,
-        'error', SQLERRM
-    );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
