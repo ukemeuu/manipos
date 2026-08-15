@@ -24,36 +24,15 @@ export async function authenticateStaffLogin(email, password) {
                 return { success: true, staffUser: staffPayload };
             }
 
-            if (rpcRes && !rpcRes.success && rpcRes.error) {
-                return { success: false, error: rpcRes.error };
+            if (rpcRes && !rpcRes.success) {
+                return { success: false, error: rpcRes.error || 'Unable to sign in. Please check your credentials or account approval status.' };
             }
         } catch (err) {
             console.warn('[StaffService] RPC authentication notice:', err);
         }
-
-        // Try Supabase auth direct email/password fallback
-        try {
-            const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-                email: cleanEmail,
-                password: password
-            });
-
-            if (authData && authData.user) {
-                const staffPayload = {
-                    id: authData.user.id,
-                    name: authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'Staff Member',
-                    email: authData.user.email,
-                    role: authData.user.user_metadata?.role || 'admin',
-                    restaurantId: authData.user.user_metadata?.restaurant_id || 'demostore',
-                    restaurantName: authData.user.user_metadata?.restaurant_name || 'ManiPOS Restaurant',
-                    tenantSlug: authData.user.user_metadata?.slug || 'demostore'
-                };
-                return { success: true, staffUser: staffPayload };
-            }
-        } catch (e) {}
     }
 
-    // 2. Offline Fallback: Authenticate against locally provisioned credentials
+    // 2. Offline Fallback: Authenticate against strictly provisioned credentials
     return verifyOfflineStaffCredential(cleanEmail, password);
 }
 
@@ -72,7 +51,6 @@ function provisionOfflineStaffCredential(tenantSlug, staffUser, pinCode) {
         const stored = JSON.parse(localStorage.getItem(OFFLINE_STAFF_KEY) || '{}');
         if (!stored[tenantSlug]) stored[tenantSlug] = {};
         
-        // Simple salt & hash for local offline PIN verification
         stored[tenantSlug][pinCode] = {
             ...staffUser,
             provisioned_at: new Date().toISOString()
@@ -85,7 +63,7 @@ function provisionOfflineStaffCredential(tenantSlug, staffUser, pinCode) {
 }
 
 /**
- * Verify PIN locally when offline
+ * Verify credentials locally ONLY if previously provisioned online for an approved tenant
  */
 function verifyOfflineStaffCredential(tenantSlug, pinCode) {
     try {
@@ -101,26 +79,14 @@ function verifyOfflineStaffCredential(tenantSlug, pinCode) {
             };
         }
 
-        // Demo fallback for local development preview
-        let demoRole = 'cashier';
-        if (pinCode === '1234' || pinCode === '0000') demoRole = 'admin';
-        else if (pinCode === '9999') demoRole = 'manager';
-
-        const fallbackUser = {
-            id: 'staff-offline-' + Date.now(),
-            name: demoRole === 'admin' ? 'Terminal Admin' : (demoRole === 'manager' ? 'Shift Supervisor' : 'POS Cashier'),
-            role: demoRole,
-            restaurantId: tenantSlug,
-            restaurantName: `${tenantSlug.toUpperCase()} Terminal`,
-            tenantSlug: tenantSlug
-        };
-
         return {
-            success: true,
-            staffUser: fallbackUser,
-            is_offline_login: true
+            success: false,
+            error: 'Unable to sign in. Please check your credentials or account approval status.'
         };
     } catch (e) {
-        return { success: false, error: 'Offline authentication failed. Please check security PIN.' };
+        return {
+            success: false,
+            error: 'Unable to sign in. Please check your credentials or account approval status.'
+        };
     }
 }

@@ -97,7 +97,8 @@ DECLARE
 BEGIN
     v_clean_email := lower(trim(p_email));
 
-    SELECT s.id, s.name, s.email, s.role, s.restaurant_id, s.pin_code, s.pin_hash
+    -- 1. Find active staff account by email
+    SELECT s.id, s.name, s.email, s.role, s.restaurant_id, s.pin_code, s.pin_hash, s.active
     INTO v_staff
     FROM public.staff_access s
     WHERE lower(s.email) = v_clean_email
@@ -107,26 +108,58 @@ BEGIN
     IF NOT FOUND THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Invalid email address. No staff account found.'
+            'error', 'Unable to sign in. Please check your credentials or account approval status.'
         );
     END IF;
 
-    -- Verify password against hashed credentials or fallback PIN code
+    -- 2. Fetch associated restaurant record
+    SELECT id, name, slug, status, is_active
+    INTO v_restaurant
+    FROM public.restaurants
+    WHERE id = v_staff.restaurant_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Unable to sign in. Please check your credentials or account approval status.'
+        );
+    END IF;
+
+    -- 3. SERVER-SIDE ACCOUNT APPROVAL GATE
+    IF v_restaurant.status = 'pending' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Your ManiPOS account is awaiting platform approval. We will notify you once approved.'
+        );
+    ELSIF v_restaurant.status = 'rejected' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Account access has been rejected.'
+        );
+    ELSIF v_restaurant.status = 'suspended' OR v_restaurant.is_active = false THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Account access has been suspended.'
+        );
+    ELSIF v_restaurant.status != 'approved' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Unable to sign in. Account is not approved.'
+        );
+    END IF;
+
+    -- 4. Verify password against hashed credentials or fallback PIN code
     IF NOT (
         (v_staff.pin_hash IS NOT NULL AND v_staff.pin_hash = crypt(p_password, v_staff.pin_hash))
         OR v_staff.pin_code = p_password
-        OR p_password = '1234'
-        OR p_password = 'demostore2026'
+        OR (p_password = '1234' AND (v_restaurant.slug = 'demostore' OR v_restaurant.slug = 'potofjollof'))
+        OR (p_password = 'demostore2026' AND (v_restaurant.slug = 'demostore' OR v_restaurant.slug = 'potofjollof'))
     ) THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Incorrect password. Please verify your password and try again.'
+            'error', 'Unable to sign in. Please check your credentials or account approval status.'
         );
     END IF;
-
-    SELECT id, name, slug INTO v_restaurant
-    FROM public.restaurants
-    WHERE id = v_staff.restaurant_id;
 
     RETURN jsonb_build_object(
         'success', true,
@@ -161,14 +194,37 @@ DECLARE
 BEGIN
     v_clean_slug := lower(trim(p_restaurant_slug));
 
-    SELECT id, name, slug INTO v_restaurant
+    SELECT id, name, slug, status, is_active INTO v_restaurant
     FROM public.restaurants
     WHERE lower(slug) = v_clean_slug;
 
     IF NOT FOUND THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Invalid Restaurant Code. Store not found.'
+            'error', 'Unable to sign in. Please check your credentials or account approval status.'
+        );
+    END IF;
+
+    -- SERVER-SIDE ACCOUNT APPROVAL GATE
+    IF v_restaurant.status = 'pending' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Your ManiPOS account is awaiting platform approval. We will notify you once approved.'
+        );
+    ELSIF v_restaurant.status = 'rejected' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Account access has been rejected.'
+        );
+    ELSIF v_restaurant.status = 'suspended' OR v_restaurant.is_active = false THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Account access has been suspended.'
+        );
+    ELSIF v_restaurant.status != 'approved' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Unable to sign in. Account is not approved.'
         );
     END IF;
 
@@ -179,14 +235,14 @@ BEGIN
       AND (
           pin_code = p_pin
           OR (pin_hash IS NOT NULL AND pin_hash = crypt(p_pin, pin_hash))
-          OR p_pin = '1234'
+          OR (p_pin = '1234' AND (v_restaurant.slug = 'demostore' OR v_restaurant.slug = 'potofjollof'))
       )
     LIMIT 1;
 
     IF NOT FOUND THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Invalid Security Credentials for ' || v_restaurant.name
+            'error', 'Unable to sign in. Please check your credentials or account approval status.'
         );
     END IF;
 

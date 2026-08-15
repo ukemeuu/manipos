@@ -89,22 +89,9 @@ export function LandingPage({ onProceedToLogin }) {
       if (error) throw error;
       if (data && !data.success) throw new Error(data.error || 'Registration failed.');
 
-      // Establish authenticated store manager session
-      const staffUser = {
-        id: data.staff_id || data.restaurant_id,
-        name: data.manager_name || onboardData.managerName || 'Store Manager',
-        role: 'admin',
-        restaurantId: data.restaurant_id,
-        restaurantName: data.restaurant_name || onboardData.name,
-        tenantSlug: data.restaurant_slug || onboardData.slug.toLowerCase().trim()
-      };
-      localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
-      localStorage.removeItem('manipos_setup_completed');
-
+      // Registration submitted: Require Super Admin approval before granting session
       setOnboardSuccess(data);
-      setTimeout(() => {
-        window.location.href = `/?tenant=${data.restaurant_slug}&page=onboarding`;
-      }, 1500);
+      localStorage.removeItem('pin_staff_user');
     } catch (err) {
       setOnboardError(err.message || 'Error creating store account.');
     } finally {
@@ -922,13 +909,15 @@ export function LandingPage({ onProceedToLogin }) {
               </div>
 
               {onboardSuccess ? (
-                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-3">
-                  <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-xl font-black">✓</div>
-                  <h4 className="text-lg font-bold text-white">Store Successfully Created!</h4>
-                  <p className="text-slate-300 text-xs">
-                    Welcome <span className="font-bold text-emerald-400">{onboardSuccess.restaurant_name}</span>. Redirecting to your live register terminal...
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6 text-center space-y-3">
+                  <div className="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-xl font-black">⏳</div>
+                  <h4 className="text-lg font-bold text-white">Registration Submitted Successfully!</h4>
+                  <p className="text-slate-300 text-xs leading-relaxed">
+                    Thank you <span className="font-bold text-amber-400">{onboardSuccess.restaurant_name}</span>. Your restaurant account has been created with status <span className="font-mono text-amber-400 font-bold">PENDING APPROVAL</span>.
                   </p>
-                  <div className="text-xs font-bold text-slate-500 animate-pulse">Opening POS Terminal...</div>
+                  <p className="text-slate-400 text-xs bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    ManiPOS Platform Super Admin review is required before logging into POS or Management Workspaces.
+                  </p>
                 </div>
               ) : (
                 <form onSubmit={handleSelfServiceOnboard} className="space-y-4">

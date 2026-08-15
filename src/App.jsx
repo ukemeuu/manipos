@@ -60,17 +60,42 @@ function App() {
         const storeSlug = tenantInfo.tenantSlug || pinUser.tenantSlug;
         const storeId = pinUser.restaurantId || pinUser.restaurant_id;
 
-        if (!storeSlug && !storeId) return;
+        if (!storeSlug && !storeId) {
+          if (session && currentRoute !== 'home' && currentRoute !== 'superadmin' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite') {
+            handleGlobalSignOut();
+          }
+          return;
+        }
 
-        let query = supabase.from('restaurants').select('status, is_active');
+        let query = supabase.from('restaurants').select('id, name, slug, status, is_active');
         if (storeId) {
           query = query.eq('id', storeId);
         } else {
           query = query.eq('slug', storeSlug);
         }
-        const { data } = await query.maybeSingle();
-        if (data && data.status) {
-          setStoreStatus(data.status);
+        const { data, error } = await query.maybeSingle();
+
+        if (error || !data) {
+          console.warn('[Security Guard] Store record not found on server:', error);
+          if (session) {
+            localStorage.removeItem('pin_staff_user');
+            localStorage.removeItem('manipos_selected_brand');
+            setSession(null);
+          }
+          return;
+        }
+
+        const activeStatus = (data.is_active === false) ? 'suspended' : (data.status || 'pending');
+        setStoreStatus(activeStatus);
+
+        // SERVER-SIDE APPROVAL GUARD: Revoke session immediately if store is not approved or is inactive
+        if (activeStatus !== 'approved') {
+          console.warn(`[Security Guard] Revoking access for tenant ${data.slug}. Status: ${activeStatus}`);
+          if (session) {
+            localStorage.removeItem('pin_staff_user');
+            localStorage.removeItem('manipos_selected_brand');
+            setSession(null);
+          }
         }
       } catch (e) {
         console.warn('Store status check notice:', e);
@@ -78,7 +103,7 @@ function App() {
     };
 
     fetchStoreStatus();
-  }, [tenantInfo.tenantSlug, currentRoute]);
+  }, [tenantInfo.tenantSlug, currentRoute, session]);
 
   useEffect(() => {
     // Safety timer: guarantee loading spinner dismisses within 500ms
