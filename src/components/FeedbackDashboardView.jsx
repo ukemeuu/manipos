@@ -105,7 +105,7 @@ export function FeedbackDashboardView({ onBack }) {
 
     // Unique Channels
     const channels = useMemo(() => {
-        const set = new Set();
+        const set = new Set(['Google Reviews', 'Dine-in', 'Takeaway', 'Delivery']);
         feedbackData.forEach(f => {
             if (f.serviceType) set.add(f.serviceType.trim());
         });
@@ -262,8 +262,8 @@ export function FeedbackDashboardView({ onBack }) {
                         </span>
                     </div>
                     <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-3xl font-black text-white">4.9</span>
-                        <span className="text-amber-400 text-sm font-black">⭐⭐⭐⭐⭐</span>
+                        <span className="text-3xl font-black text-white">4.7</span>
+                        <span className="text-amber-400 text-sm font-black">⭐⭐⭐⭐★</span>
                     </div>
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-blue-800/40">
                         <span className="text-[9px] text-blue-200 font-bold">Google Profile</span>
