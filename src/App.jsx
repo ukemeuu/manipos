@@ -184,7 +184,7 @@ function App() {
 
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
   if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
-    return <MenuMicrosite onBack={navigateToHome} />;
+    return <MenuMicrosite onBack={navigateToHome} tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
   }
 
   // AUTHENTICATED SESSION ROUTING ENGINE
