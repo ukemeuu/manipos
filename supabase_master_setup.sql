@@ -519,11 +519,12 @@ BEGIN
     VALUES (p_name, v_clean_slug, 'pending', true)
     RETURNING id INTO v_restaurant_id;
 
-    -- 2. Create Initial Manager Account with Hashed PIN
-    INSERT INTO public.staff_access (restaurant_id, name, role, pin_code, pin_hash)
+    -- 2. Create Initial Manager Account with Hashed PIN & Email
+    INSERT INTO public.staff_access (restaurant_id, name, email, role, pin_code, pin_hash)
     VALUES (
         v_restaurant_id,
         p_manager_name,
+        v_clean_slug || '@demostore.com',
         'admin',
         p_pin,
         crypt(p_pin, gen_salt('bf'))
@@ -551,3 +552,20 @@ EXCEPTION WHEN OTHERS THEN
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- Overload signature for PostgREST schema cache compatibility (p_manager_name, p_name, p_phone, p_pin, p_slug)
+CREATE OR REPLACE FUNCTION public.create_new_restaurant_tenant(
+    p_manager_name TEXT,
+    p_name TEXT,
+    p_phone TEXT,
+    p_pin TEXT,
+    p_slug TEXT
+) RETURNS JSONB AS $$
+BEGIN
+    RETURN public.create_new_restaurant_tenant(p_name, p_slug, p_manager_name, p_pin, p_phone);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
