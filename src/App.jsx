@@ -208,6 +208,18 @@ function App() {
 
     // Authenticated Home / Workspace Selector
     if (currentRoute === 'app' || currentRoute === 'home') {
+      const isSetupCompleted = localStorage.getItem('manipos_setup_completed') === 'true';
+      if (!isSetupCompleted) {
+        return (
+          <AdminDashboard 
+            onBackToTerminal={() => setCurrentRoute('terminal')}
+            onOpenAppHome={() => setCurrentRoute('app')}
+            onSignOut={handleGlobalSignOut}
+            tenantSlug={tenantInfo.tenantSlug} 
+          />
+        );
+      }
+
       return (
         <AuthenticatedHome
           restaurantName={staffUser.restaurantName}

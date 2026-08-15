@@ -63,7 +63,7 @@ export function AuthenticatedHome({
             </div>
 
             <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">
-              Welcome back, {staffName || 'Owner'}
+              Welcome back, {staffName && staffName !== 'Store Manager' ? staffName : (restaurantName || 'Owner')}
             </h2>
 
             <div className="flex items-center justify-center gap-3 text-xs md:text-sm text-slate-400 font-semibold">
@@ -141,16 +141,6 @@ export function AuthenticatedHome({
               </div>
             </motion.div>
 
-          </div>
-
-          {/* Bottom Sign Out Link */}
-          <div className="pt-4">
-            <button
-              onClick={onSignOut}
-              className="text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
-            >
-              [ Sign Out ]
-            </button>
           </div>
 
         </div>
