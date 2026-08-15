@@ -490,6 +490,8 @@ DROP POLICY IF EXISTS "Allow authenticated select leads" ON public.leads;
 CREATE POLICY "Allow authenticated select leads" ON public.leads FOR SELECT TO authenticated USING (true);
 
 -- 8. Automated Self-Service Restaurant Onboarding RPC Function
+DROP FUNCTION IF EXISTS public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT) CASCADE;
+
 CREATE OR REPLACE FUNCTION public.create_new_restaurant_tenant(
     p_name TEXT,
     p_slug TEXT,
@@ -501,8 +503,6 @@ DECLARE
     v_clean_slug TEXT;
     v_restaurant_id UUID;
     v_staff_id UUID;
-    v_cat_main_id UUID;
-    v_cat_drinks_id UUID;
 BEGIN
     v_clean_slug := lower(trim(p_slug));
 
