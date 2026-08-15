@@ -350,6 +350,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     // Order info aligned with Google Sheets format
     const [customerName, setCustomerName] = useState('');
     const [customerNameText, setCustomerNameText] = useState('');
+    const [customerType, setCustomerType] = useState('New'); // 'New' or 'Returning'
     const [selectedTable, setSelectedTable] = useState('');
     const [selectedBrand, setSelectedBrand] = useState('All');
     const [orderChannel, setOrderChannel] = useState('Walk-in');
@@ -3122,7 +3123,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const splitNotesPart = paymentMethod === 'Split' 
                 ? `Split Pay: Cash (KES ${splitCash || 0}), M-Pesa (KES ${splitMpesa || 0}), Card (KES ${splitCard || 0})`
                 : '';
-            const finalNotes = [guestNotesPart, splitNotesPart].filter(Boolean).join(', ');
+            const typeNotesPart = `[Guest Tag: ${customerType === 'Returning' ? 'Returning Customer' : 'New Customer'}]`;
+            const finalNotes = [typeNotesPart, guestNotesPart, splitNotesPart].filter(Boolean).join(', ');
 
             // Build the created_at timestamp.
             // If the user specified a custom order date (e.g. YYYY-MM-DD), we combine it with the current local time
@@ -3144,6 +3146,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const orderPayload = {
                 idempotency_key: idempotencyKey,
                 customer_name: finalCustName,
+                customer_type: customerType,
                 dining_option: diningOption,
                 payment_method: paymentMethod,
                 payment_status: paymentStatus,
@@ -7406,6 +7409,38 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
                     {/* Order Details & Checkout Configuration */}
                     <div className="border-t border-gray-100 p-2.5 bg-gray-50/50 space-y-2 shrink-0">
+                        {/* New vs Returning Customer Classification Toggle */}
+                        <div className="p-1.5 bg-white border border-gray-200/80 rounded-2xl shadow-xs space-y-1">
+                            <div className="flex justify-between items-center px-1">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Customer Status Tag *</label>
+                                <span className="text-[8px] font-bold text-gray-400">1-Click Tag</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setCustomerType('New')}
+                                    className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+                                        customerType === 'New'
+                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.01]'
+                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    <span>✨ New Customer</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCustomerType('Returning')}
+                                    className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+                                        customerType === 'Returning'
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.01]'
+                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    <span>🔄 Returning</span>
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Guest Name input + Register New Guest button */}
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
