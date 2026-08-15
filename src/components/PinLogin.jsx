@@ -5,7 +5,7 @@ import { KeyRound, ArrowRight, Loader2, Store, Lock } from 'lucide-react';
 import { authenticateStaffPin } from '../services/data/staffService';
 
 export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
-    const [restaurantSlug, setRestaurantSlug] = useState(initialTenantSlug || 'littlelagos');
+    const [restaurantSlug, setRestaurantSlug] = useState(initialTenantSlug || 'demostore');
     const [pin, setPin] = useState(['', '', '', '']);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -87,7 +87,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                         id="restaurant-slug"
                         type="text"
                         required
-                        placeholder="e.g. littlelagos"
+                        placeholder="e.g. demostore"
                         value={restaurantSlug}
                         onChange={(e) => setRestaurantSlug(e.target.value)}
                         className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm tracking-wide placeholder:text-slate-600"

@@ -46,10 +46,8 @@ const COLOR_MAP = {
 
 export function RestaurantLinkHub() {
   const tenantInfo = getTenantInfo();
-  const tenantSlug = tenantInfo.tenantSlug || 'potofjollof';
-  const tenantDisplayName = (tenantSlug === 'potofjollof' || tenantSlug === 'mutekitchens') 
-    ? 'MUTE KITCHENS' 
-    : tenantSlug.replace('-', ' ').toUpperCase();
+  const tenantSlug = tenantInfo.tenantSlug || 'demostore';
+  const tenantDisplayName = tenantSlug.replace('-', ' ').toUpperCase();
 
   const [links, setLinks] = useState([]);
   const [hubSettings, setHubSettings] = useState({

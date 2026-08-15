@@ -1835,7 +1835,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                   const formData = new FormData(e.target);
                   const linkData = {
                     ...(editingLink.id ? { id: editingLink.id } : {}),
-                    tenant_id: getTenantInfo().tenantSlug || 'potofjollof',
+                    tenant_id: getTenantInfo().tenantSlug || 'demostore',
                     title: formData.get('title'),
                     subtitle: formData.get('subtitle'),
                     url: formData.get('url'),

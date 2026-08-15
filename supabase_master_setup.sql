@@ -20,10 +20,10 @@ CREATE TABLE IF NOT EXISTS public.restaurants (
 -- Seed Default Demo Restaurants
 INSERT INTO public.restaurants (name, slug)
 VALUES 
-    ('Little Lagos Restaurant', 'littlelagos'),
-    ('Pot of Jollof Kitchen', 'potofjollof'),
-    ('Café Swahili', 'cafeswahili'),
-    ('Samaki Street Grills', 'samakistreet')
+    ('Demo Restaurant Outlet', 'demostore'),
+    ('Urban Bistro & Grill', 'urbanbistro'),
+    ('Sunset Café', 'sunsetcafe'),
+    ('Savory Street Kitchen', 'savorygrill')
 ON CONFLICT (slug) DO NOTHING;
 
 
@@ -42,24 +42,24 @@ CREATE TABLE IF NOT EXISTS public.staff_access (
 -- Seed Staff Accounts (PIN: 1234 for Admin Cashier, 0000 for Manager)
 DO $$
 DECLARE
-    littlelagos_id UUID;
-    potofjollof_id UUID;
+    demostore_id UUID;
+    urbanbistro_id UUID;
 BEGIN
-    SELECT id INTO littlelagos_id FROM public.restaurants WHERE slug = 'littlelagos';
-    SELECT id INTO potofjollof_id FROM public.restaurants WHERE slug = 'potofjollof';
+    SELECT id INTO demostore_id FROM public.restaurants WHERE slug = 'demostore';
+    SELECT id INTO urbanbistro_id FROM public.restaurants WHERE slug = 'urbanbistro';
 
-    IF littlelagos_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.staff_access WHERE restaurant_id = littlelagos_id) THEN
+    IF demostore_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.staff_access WHERE restaurant_id = demostore_id) THEN
         INSERT INTO public.staff_access (restaurant_id, name, role, pin_code, pin_hash)
         VALUES 
-            (littlelagos_id, 'Admin Cashier', 'admin', '1234', crypt('1234', gen_salt('bf'))),
-            (littlelagos_id, 'Floor Manager', 'manager', '0000', crypt('0000', gen_salt('bf')));
+            (demostore_id, 'Demo Lead Cashier', 'admin', '1234', crypt('1234', gen_salt('bf'))),
+            (demostore_id, 'Shift Supervisor', 'manager', '0000', crypt('0000', gen_salt('bf')));
     END IF;
 
-    IF potofjollof_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.staff_access WHERE restaurant_id = potofjollof_id) THEN
+    IF urbanbistro_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.staff_access WHERE restaurant_id = urbanbistro_id) THEN
         INSERT INTO public.staff_access (restaurant_id, name, role, pin_code, pin_hash)
         VALUES 
-            (potofjollof_id, 'POJ Lead Cashier', 'admin', '1234', crypt('1234', gen_salt('bf'))),
-            (potofjollof_id, 'Shift Supervisor', 'manager', '9999', crypt('9999', gen_salt('bf')));
+            (urbanbistro_id, 'Store Admin', 'admin', '1234', crypt('1234', gen_salt('bf'))),
+            (urbanbistro_id, 'Shift Manager', 'manager', '9999', crypt('9999', gen_salt('bf')));
     END IF;
 END $$;
 
@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS public.suppliers (
 -- 6. Marketing, Links, Feedback & Landing Page Tables
 CREATE TABLE IF NOT EXISTS public.tenant_links (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'potofjollof',
+    tenant_id TEXT NOT NULL DEFAULT 'demostore',
     title TEXT NOT NULL,
     url TEXT NOT NULL,
     subtitle TEXT,
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_links (
 
 CREATE TABLE IF NOT EXISTS public.pos_feedback (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'potofjollof',
+    tenant_id TEXT NOT NULL DEFAULT 'demostore',
     rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
     category TEXT NOT NULL DEFAULT 'Food Quality',
     comment TEXT,

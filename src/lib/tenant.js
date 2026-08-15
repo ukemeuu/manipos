@@ -4,12 +4,12 @@
  * Domain Structure:
  * - manipos.com -> Marketing Landing Page
  * - pos.manipos.com -> Staff/POS App Login & General Terminal
- * - <slug>.pos.manipos.com -> Restaurant-specific Scoped POS Terminal (e.g. littlelagos.pos.manipos.com)
- * - <slug>.manipos.com / <slug>.restaurant.manipos.com -> Guest Public Menu Microsite (e.g. potofjollof.manipos.com)
- * - <slug>.manipos.com/feedback or <slug>.feedback.manipos.com -> Guest Feedback Form (e.g. potofjollof.manipos.com/feedback)
+ * - <slug>.pos.manipos.com -> Restaurant-specific Scoped POS Terminal (e.g. demostore.pos.manipos.com)
+ * - <slug>.manipos.com / <slug>.restaurant.manipos.com -> Guest Public Menu Microsite (e.g. demostore.manipos.com)
+ * - <slug>.manipos.com/feedback or <slug>.feedback.manipos.com -> Guest Feedback Form (e.g. demostore.manipos.com/feedback)
  * 
  * Local Development Fallback (localhost:5173):
- * - Supports ?tenant=potofjollof or ?page=feedback or #feedback or subdomains (potofjollof.localhost:5173)
+ * - Supports ?tenant=demostore or ?page=feedback or #feedback or subdomains (demostore.localhost:5173)
  */
 
 export function getTenantInfo() {

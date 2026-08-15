@@ -1068,7 +1068,7 @@ export function LandingPage({ onProceedToLogin }) {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. potofjollof, littlelagos, myrestaurant"
+                      placeholder="e.g. demostore, urbanbistro, myrestaurant"
                       value={signInSlug}
                       onChange={(e) => setSignInSlug(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-mono font-bold"

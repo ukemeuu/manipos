@@ -59,13 +59,13 @@ export const itemBelongsToBrand = (item, brand) => {
 };
 
 
-export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof' }) {
-    const isSingleBrand = window.location.hostname.includes('potofjollof') || tenantSlug === 'potofjollof';
+export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'demostore' }) {
+    const isSingleBrand = window.location.hostname.includes('demostore') || tenantSlug === 'demostore';
     const [menu, setMenu] = useState([]);
     const [categories, setCategories] = useState(['All']);
     const [activeBrand, setActiveBrand] = useState(() => {
         if (defaultBrand) return defaultBrand;
-        if (isSingleBrand) return 'POT OF JOLLOF';
+        if (isSingleBrand) return 'DEMO STORE';
         return 'All';
     });
     const [activeCategory, setActiveCategory] = useState('All');
