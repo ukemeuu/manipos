@@ -18,12 +18,13 @@ const mapRow = (row) => {
         serviceRating: getVal(7) !== null ? Number(getVal(7)) : null,
         speedRating: getVal(8) !== null ? Number(getVal(8)) : null,
         cleanlinessRating: getVal(9) !== null ? Number(getVal(9)) : null,
-        comments: getFormattedVal(10)
+        comments: getFormattedVal(10),
+        photoUrl: getFormattedVal(11)
     };
 };
 
 const isValidFeedback = (item) => {
-    return item.timestamp && item.timestamp.trim() !== '';
+    return item.timestamp && item.timestamp.trim() !== '' && item.timestamp.toLowerCase() !== 'timestamp';
 };
 
 /**
@@ -48,30 +49,38 @@ export const fetchCustomerFeedback = async (forceRefresh = false, onCacheHit = n
     }
 
     const sheetId = '102A3Yz7BlKDJB7I_0lmYd1ek1CA7HAZyIg4R8ZYFjcw';
-    const gid = '1130350999';
-    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid}`;
+    // Try both tab name "Feedback" (where Apps Script appends rows) and GID fallback
+    const urls = [
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=Feedback`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=1130350999`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`
+    ];
 
-    try {
-        const response = await fetch(url);
-        const text = await response.text();
-        const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
-        
-        if (!match) {
-            throw new Error('Could not parse Google Sheets response wrapper');
+    for (const url of urls) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) continue;
+            const text = await response.text();
+            const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
+            
+            if (!match) continue;
+
+            const json = JSON.parse(match[1]);
+            const rows = json.table?.rows || [];
+            const normalizedData = rows.map(mapRow).filter(isValidFeedback);
+
+            if (normalizedData.length > 0) {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(normalizedData));
+                localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+                return normalizedData;
+            }
+        } catch (error) {
+            console.warn(`Failed fetch attempt from ${url}:`, error);
         }
-
-        const json = JSON.parse(match[1]);
-        const rows = json.table?.rows || [];
-        const normalizedData = rows.map(mapRow).filter(isValidFeedback);
-
-        localStorage.setItem(CACHE_KEY, JSON.stringify(normalizedData));
-        localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
-        return normalizedData;
-    } catch (error) {
-        console.error('Failed to fetch customer feedback data:', error);
-        if (hasCache) {
-            return JSON.parse(cachedStr);
-        }
-        return [];
     }
+
+    if (hasCache) {
+        return JSON.parse(cachedStr);
+    }
+    return [];
 };

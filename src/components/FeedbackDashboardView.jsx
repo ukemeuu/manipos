@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     MessageSquare, Star, TrendingUp, ThumbsUp, ThumbsDown, RefreshCw, 
-    Search, Filter, Download, Loader2, CheckCircle, AlertCircle, 
+    Search, Filter, Download, Loader2, CheckCircle, AlertCircle, AlertTriangle, 
     Smile, Frown, Meh, ExternalLink, Calendar, ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -233,7 +233,7 @@ export function FeedbackDashboardView({ onBack }) {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* Overall Score */}
                 <div className="bg-gradient-to-br from-gray-900 to-black text-white p-5 rounded-2xl shadow-md border border-gray-800 relative overflow-hidden">
                     <div className="flex justify-between items-start mb-3">
@@ -247,8 +247,35 @@ export function FeedbackDashboardView({ onBack }) {
                         <span className="text-sm font-bold text-gray-400">/ 5.0</span>
                     </div>
                     <p className="text-xs text-emerald-400 font-bold mt-2 flex items-center gap-1">
-                        <ThumbsUp size={12} /> {metrics.positivePercent}% Positive Feedback (4-5★)
+                        <ThumbsUp size={12} /> {metrics.positivePercent}% Positive (4-5★)
                     </p>
+                </div>
+
+                {/* Google Reviews */}
+                <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-blue-800/60 relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
+                            🌐 Google Reviews
+                        </span>
+                        <span className="px-2 py-0.5 bg-red-600 text-white font-black text-[10px] rounded-full animate-bounce shadow-lg shadow-red-600/50">
+                            +1 NEW
+                        </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                        <span className="text-3xl font-black text-white">4.9</span>
+                        <span className="text-amber-400 text-sm font-black">⭐⭐⭐⭐⭐</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-blue-800/40">
+                        <span className="text-[9px] text-blue-200 font-bold">Google Profile</span>
+                        <a
+                            href="https://search.google.com/local/writereview?placeid=ChIJk9X55X8LLxgR_potofjollof"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 bg-white text-blue-950 hover:bg-blue-50 font-black text-[9px] uppercase rounded-lg transition-all flex items-center gap-1 shadow-sm"
+                        >
+                            <ExternalLink size={9} /> View
+                        </a>
+                    </div>
                 </div>
 
                 {/* Food Quality */}
@@ -263,7 +290,7 @@ export function FeedbackDashboardView({ onBack }) {
                         <span className="text-3xl font-black text-gray-900">{metrics.avgFood}</span>
                         <span className="text-xs font-bold text-gray-400">/ 5.0</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-2 font-medium">Quality, presentation & flavor rating</p>
+                    <p className="text-[11px] text-gray-500 mt-2 font-medium">Quality & flavor rating</p>
                 </div>
 
                 {/* Service Quality */}
@@ -278,7 +305,7 @@ export function FeedbackDashboardView({ onBack }) {
                         <span className="text-3xl font-black text-gray-900">{metrics.avgService}</span>
                         <span className="text-xs font-bold text-gray-400">/ 5.0</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-2 font-medium">Staff friendliness & professionalism</p>
+                    <p className="text-[11px] text-gray-500 mt-2 font-medium">Staff friendliness</p>
                 </div>
 
                 {/* Speed & Cleanliness */}
