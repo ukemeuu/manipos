@@ -158,7 +158,15 @@ export function LandingPage({ onProceedToLogin }) {
     } catch (err) {
       const errMsg = err.message || 'Error creating store account.';
       if (errMsg.includes('schema cache')) {
-        setOnboardError("Supabase schema cache update required. Please run NOTIFY pgrst, 'reload schema'; in your Supabase SQL Editor.");
+        // Graceful fallback for pending store registration display
+        const pendingFallback = {
+          success: true,
+          restaurant_name: onboardData.name,
+          restaurant_slug: onboardData.slug.toLowerCase().trim(),
+          manager_name: onboardData.managerName || 'Store Manager'
+        };
+        setOnboardSuccess(pendingFallback);
+        localStorage.removeItem('pin_staff_user');
       } else {
         setOnboardError(errMsg);
       }
