@@ -61,6 +61,318 @@ export const itemBelongsToBrand = (item, brand) => {
     return targetBrandUpper === 'POT OF JOLLOF';
 };
 
+// Interactive Order Success & M-Pesa Payment Verification Modal Component
+const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSettings }) => {
+    const [copiedPaybill, setCopiedPaybill] = useState(false);
+    const [copiedAccount, setCopiedAccount] = useState(false);
+    const [inputMpesaCode, setInputMpesaCode] = useState(orderSuccess?.mpesaCode || '');
+    const [isUpdating, setIsUpdating] = useState(false);
+
+    const paybillNo = whatsappSettings?.paybill_number || '4122896';
+    const whatsappPhone = orderSuccess?.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617';
+
+    // Real-time Supabase subscription to automatically update customer screen when cashier accepts/confirms payment
+    useEffect(() => {
+        if (!orderSuccess?.orderId) return;
+
+        const channel = supabase
+            .channel(`microsite_order_status_${orderSuccess.orderId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'pos_orders',
+                    filter: `id=eq.${orderSuccess.orderId}`
+                },
+                (payload) => {
+                    const newRec = payload.new;
+                    if (!newRec) return;
+
+                    const statusLower = (newRec.status || '').toLowerCase();
+                    const payStatusLower = (newRec.payment_status || '').toLowerCase();
+
+                    if (
+                        payStatusLower === 'paid' ||
+                        payStatusLower === 'approved' ||
+                        statusLower === 'accepted' ||
+                        statusLower === 'preparing' ||
+                        statusLower === 'in progress' ||
+                        statusLower === 'ready' ||
+                        statusLower === 'completed'
+                    ) {
+                        setOrderSuccess(prev => prev ? ({ ...prev, stage: 'confirmed' }) : null);
+                    } else if (statusLower === 'cancelled' || statusLower === 'declined' || statusLower === 'voided') {
+                        setOrderSuccess(prev => prev ? ({ ...prev, stage: 'cancelled' }) : null);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [orderSuccess?.orderId, setOrderSuccess]);
+
+    const handleCancelOrder = async () => {
+        if (!window.confirm("Are you sure you want to cancel this order?")) return;
+        setIsUpdating(true);
+        try {
+            await supabase
+                .from('pos_orders')
+                .update({ status: 'Cancelled', payment_status: 'Cancelled' })
+                .eq('id', orderSuccess.orderId);
+        } catch (e) {
+            console.error("Cancel error:", e);
+        } finally {
+            setIsUpdating(false);
+            setOrderSuccess(null);
+        }
+    };
+
+    const handleMarkPaid = async () => {
+        setIsUpdating(true);
+        const code = inputMpesaCode.trim().toUpperCase();
+        try {
+            await supabase
+                .from('pos_orders')
+                .update({
+                    payment_status: 'pending_verification',
+                    notes: code ? `[M-Pesa Code: ${code}] ${orderSuccess.notes || ''}` : orderSuccess.notes
+                })
+                .eq('id', orderSuccess.orderId);
+        } catch (e) {
+            console.error("Mark paid error:", e);
+        } finally {
+            setIsUpdating(false);
+        }
+
+        setOrderSuccess(prev => ({
+            ...prev,
+            stage: 'verifying',
+            mpesaCode: code
+        }));
+    };
+
+    const stage = orderSuccess?.stage || 'payment_instructions';
+
+    return (
+        <div className="min-h-screen bg-gray-950/80 backdrop-blur-md text-gray-900 flex items-center justify-center p-4 z-50 fixed inset-0 overflow-y-auto">
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="max-w-md w-full bg-white border border-gray-200 rounded-[2.5rem] p-6 sm:p-8 text-center shadow-2xl relative overflow-hidden my-auto"
+            >
+                {/* Order Ticket Header Badge */}
+                <div className="mb-4">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-900 bg-amber-100 border border-amber-300 px-3.5 py-1 rounded-full inline-block shadow-xs">
+                        Order Ticket #{orderSuccess.ticketNumber}
+                    </span>
+                </div>
+
+                {/* STAGE 1: Paybill No, Account No, Cancel & Mark Paid Buttons */}
+                {stage === 'payment_instructions' && (
+                    <div className="space-y-5">
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-950 tracking-tight">Complete Payment</h2>
+                            <p className="text-xs text-gray-500 mt-1 font-medium">Please send M-Pesa payment to submit your delivery order to the kitchen.</p>
+                        </div>
+
+                        {/* Bill Total Card */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex justify-between items-center text-left">
+                            <div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">Total Amount Due</span>
+                                <span className="text-2xl font-black text-black font-mono">KES {orderSuccess.total.toLocaleString()}</span>
+                            </div>
+                            <span className="px-2.5 py-1 bg-amber-500/10 text-amber-700 border border-amber-500/20 text-[10px] font-black uppercase rounded-lg">
+                                Pending M-Pesa
+                            </span>
+                        </div>
+
+                        {/* Paybill & Account Number Card */}
+                        <div className="bg-amber-50/70 border-2 border-amber-300/50 rounded-2xl p-4 text-left space-y-3">
+                            <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
+                                <div>
+                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">M-Pesa Paybill</span>
+                                    <span className="text-xl font-black text-black font-mono">{paybillNo}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(paybillNo);
+                                        setCopiedPaybill(true);
+                                        setTimeout(() => setCopiedPaybill(false), 2000);
+                                    }}
+                                    className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
+                                >
+                                    {copiedPaybill ? '✓ Copied' : 'Copy Paybill'}
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
+                                <div>
+                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">Account Number</span>
+                                    <span className="text-xl font-black text-black font-mono">#{orderSuccess.ticketNumber}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`#${orderSuccess.ticketNumber}`);
+                                        setCopiedAccount(true);
+                                        setTimeout(() => setCopiedAccount(false), 2000);
+                                    }}
+                                    className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
+                                >
+                                    {copiedAccount ? '✓ Copied' : 'Copy Account'}
+                                </button>
+                            </div>
+
+                            {/* Optional Confirmation Code Field */}
+                            <div className="pt-1">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wider block mb-1">M-Pesa Confirmation Code (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. QGH8912X4"
+                                    value={inputMpesaCode}
+                                    onChange={(e) => setInputMpesaCode(e.target.value.toUpperCase())}
+                                    className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs font-mono font-bold uppercase text-gray-900 focus:outline-none focus:border-black"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Two Action Buttons: Cancel vs Mark Paid */}
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                            <button
+                                type="button"
+                                disabled={isUpdating}
+                                onClick={handleCancelOrder}
+                                className="w-full py-3.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-black text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 cursor-pointer text-center"
+                            >
+                                ❌ Cancel Order
+                            </button>
+
+                            <button
+                                type="button"
+                                disabled={isUpdating}
+                                onClick={handleMarkPaid}
+                                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 text-center"
+                            >
+                                {isUpdating ? <Loader2 size={14} className="animate-spin" /> : '✅ Mark Paid'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* STAGE 2: Verifying Payment + Share Confirmation Code to WhatsApp */}
+                {stage === 'verifying' && (
+                    <div className="space-y-5">
+                        <div className="relative w-20 h-20 mx-auto flex items-center justify-center my-2">
+                            <div className="absolute inset-0 bg-amber-400/20 rounded-full animate-ping"></div>
+                            <div className="relative w-16 h-16 bg-amber-500 text-white rounded-full flex items-center justify-center border-4 border-white shadow-xl">
+                                <Loader2 className="animate-spin" size={32} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-950 tracking-tight">Verifying Your Payment...</h2>
+                            <p className="text-xs text-gray-500 mt-1 font-medium max-w-xs mx-auto">
+                                Waiting for cashier/waiter to verify your payment and accept your order to the kitchen.
+                            </p>
+                        </div>
+
+                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-left space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400 font-bold uppercase tracking-wider">Order Ticket</span>
+                                <span className="font-mono font-black text-black text-sm">#{orderSuccess.ticketNumber}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400 font-bold uppercase tracking-wider">Total Amount</span>
+                                <span className="font-mono font-black text-emerald-600 text-sm">KES {orderSuccess.total.toLocaleString()}</span>
+                            </div>
+                            {orderSuccess.mpesaCode && (
+                                <div className="flex justify-between items-center text-xs pt-1.5 border-t border-gray-200">
+                                    <span className="text-gray-400 font-bold uppercase tracking-wider">M-Pesa Code</span>
+                                    <span className="font-mono font-black text-black bg-amber-100 px-2 py-0.5 rounded text-xs">{orderSuccess.mpesaCode}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Share Confirmation Code to WhatsApp Button */}
+                        <a
+                            href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
+                                `Hello Pot of Jollof! I have sent M-Pesa payment of KES ${orderSuccess.total.toLocaleString()} for Order #${orderSuccess.ticketNumber}${orderSuccess.mpesaCode ? ` (M-Pesa Code: ${orderSuccess.mpesaCode})` : ''}. Please verify and accept my order!`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+                        >
+                            📲 Share Confirmation Code to WhatsApp
+                        </a>
+
+                        <button
+                            type="button"
+                            onClick={handleCancelOrder}
+                            className="text-xs text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
+                        >
+                            Cancel order request
+                        </button>
+                    </div>
+                )}
+
+                {/* STAGE 3: Payment Successful & Accepted */}
+                {stage === 'confirmed' && (
+                    <div className="space-y-5">
+                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-4 border-emerald-200 shadow-xl my-2">
+                            <CheckCircle size={44} className="animate-bounce" />
+                        </div>
+
+                        <div>
+                            <h2 className="text-2xl font-black text-emerald-950 tracking-tight">Payment Successful! 🎉</h2>
+                            <p className="text-xs text-gray-500 mt-1 font-medium max-w-xs mx-auto">
+                                Payment verified by cashier! Your order is accepted & sent to the kitchen.
+                            </p>
+                        </div>
+
+                        <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 text-left space-y-3">
+                            <span className="text-[10px] font-black uppercase text-emerald-800 tracking-widest block text-center">Live Order Status</span>
+                            <div className="flex items-center justify-between text-[11px] font-bold text-emerald-950">
+                                <span className="flex items-center gap-1 text-emerald-700">✓ Paid</span>
+                                <span className="text-emerald-300">➔</span>
+                                <span className="flex items-center gap-1 text-emerald-800 animate-pulse">🍳 Cooking</span>
+                                <span className="text-emerald-300">➔</span>
+                                <span className="text-gray-400">🛵 Delivery</span>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setOrderSuccess(null)}
+                            className="w-full py-4 bg-black hover:bg-neutral-850 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                        >
+                            Back to Menu
+                        </button>
+                    </div>
+                )}
+
+                {/* STAGE 4: Cancelled */}
+                {stage === 'cancelled' && (
+                    <div className="space-y-4">
+                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto border-2 border-red-200 my-2">
+                            <X size={32} />
+                        </div>
+                        <h2 className="text-xl font-black text-gray-900">Order Cancelled</h2>
+                        <p className="text-xs text-gray-500">This order was cancelled. You can place a new order anytime.</p>
+                        <button
+                            onClick={() => setOrderSuccess(null)}
+                            className="w-full py-3.5 bg-black text-white font-black text-xs uppercase rounded-xl"
+                        >
+                            Back to Menu
+                        </button>
+                    </div>
+                )}
+            </motion.div>
+        </div>
+    );
+};
 
 export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof' }) {
     const isSingleBrand = window.location.hostname.includes('potofjollof') || tenantSlug === 'potofjollof';
@@ -994,12 +1306,16 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             }
 
             setOrderSuccess({
+                orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
-                total: cartTotal,
+                total: finalTotal,
                 brand: activeBrand === 'All' ? (cart.length > 0 ? getBrandForItem(cart[0]) : 'POT OF JOLLOF') : activeBrand,
                 items: cart.map(i => `${i.quantity}x ${i.name}${i.instructions ? ` (${i.instructions})` : ''}`).join('\n'),
                 diningOption: diningOption,
-                deliveryAddress: diningOption === 'Delivery' ? deliveryAddress : ''
+                deliveryAddress: diningOption === 'Delivery' ? deliveryAddress : '',
+                notes: finalNotes,
+                stage: 'payment_instructions',
+                mpesaCode: ''
             });
             setCart([]);
             setCartOpen(false);
@@ -1021,57 +1337,12 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     };
 
     if (orderSuccess) {
-        const getWhatsAppLink = () => {
-            const phone = orderSuccess.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617';
-            const deliveryText = orderSuccess.deliveryAddress ? `\n*Delivery Address:* ${orderSuccess.deliveryAddress}` : '';
-            const message = `Hello! I have placed an order on the Self-Service Microsite.\n\n*Order Number:* #${orderSuccess.ticketNumber}\n*Brand:* ${orderSuccess.brand}\n*Dining Option:* ${orderSuccess.diningOption}${deliveryText}\n*Total:* KES ${orderSuccess.total.toLocaleString()}\n\n*Items Ordered:*\n${orderSuccess.items}\n\nPlease confirm my order. Thank you!`;
-            return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        };
-
         return (
-            <div className="min-h-screen bg-gray-50 text-gray-900 flex items-center justify-center p-4">
-                <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="max-w-md w-full bg-white border border-gray-200 rounded-[2.5rem] p-8 text-center shadow-2xl relative overflow-hidden"
-                >
-                    <div className="w-20 h-20 bg-neutral-100 text-black rounded-full flex items-center justify-center mx-auto mb-6 border border-neutral-200">
-                        <CheckCircle size={40} className="animate-pulse" />
-                    </div>
-
-                    <h2 className="text-3xl font-black tracking-tight text-gray-950 mb-2">Order Received!</h2>
-                    <p className="text-gray-500 text-sm mb-6">Your order has been sent directly to the kitchen display screen.</p>
-
-                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6 mb-8">
-                        <p className="text-[10px] uppercase font-black tracking-widest text-gray-400 mb-1">Your Order Number</p>
-                        <h1 className="text-6xl font-black tracking-tighter text-black mb-2">#{orderSuccess.ticketNumber}</h1>
-                        <div className="h-px bg-gray-200 my-4"></div>
-                        <div className="flex justify-between items-center text-sm font-bold">
-                            <span className="text-gray-500">Total Bill:</span>
-                            <span className="text-gray-950 text-lg">KES {orderSuccess.total.toLocaleString()}</span>
-                        </div>
-                        <p className="text-[10px] text-black font-black uppercase tracking-wider mt-3">
-                            Please pay at the counter when your meal is ready
-                        </p>
-                    </div>
-
-                    <a
-                        href={getWhatsAppLink()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-4 mb-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-emerald-600/15 flex items-center justify-center gap-2"
-                    >
-                        Send Order to WhatsApp
-                    </a>
-
-                    <button 
-                        onClick={() => setOrderSuccess(null)}
-                        className="w-full py-4 bg-black hover:bg-neutral-850 text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-black/10"
-                    >
-                        Back to Menu
-                    </button>
-                </motion.div>
-            </div>
+            <MicrositeOrderSuccessModal 
+                orderSuccess={orderSuccess} 
+                setOrderSuccess={setOrderSuccess} 
+                whatsappSettings={whatsappSettings} 
+            />
         );
     }
 
