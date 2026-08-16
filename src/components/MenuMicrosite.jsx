@@ -464,6 +464,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const [addressSuggestions, setAddressSuggestions] = useState([]);
     const [isSearchingAddress, setIsSearchingAddress] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const selectedAddressRef = useRef(false);
 
 
     const fetchPastOrders = async (guestId) => {
@@ -744,6 +745,13 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     // Ultra-fast Real-time Address Autocomplete lookup via Google Places API + Komoot Photon fallback
     useEffect(() => {
+        if (selectedAddressRef.current) {
+            selectedAddressRef.current = false;
+            setAddressSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
         if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
             setAddressSuggestions([]);
             setShowSuggestions(false);
@@ -855,6 +863,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     const handleSelectAddressSuggestion = async (suggestion) => {
         const formatted = suggestion.display_name;
+        selectedAddressRef.current = true;
         setDeliveryAddress(formatted);
         setAddressSuggestions([]);
         setShowSuggestions(false);
@@ -1957,7 +1966,10 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                                     required
                                                                     value={deliveryAddress}
                                                                     disabled={submitting}
-                                                                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                                    onChange={(e) => {
+                                                                        selectedAddressRef.current = false;
+                                                                        setDeliveryAddress(e.target.value);
+                                                                    }}
                                                                     onFocus={() => setShowSuggestions(true)}
                                                                     className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-semibold shadow-xs"
                                                                 />
