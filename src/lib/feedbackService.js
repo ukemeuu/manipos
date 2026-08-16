@@ -84,3 +84,53 @@ export const fetchCustomerFeedback = async (forceRefresh = false, onCacheHit = n
     }
     return [];
 };
+
+/**
+ * Fetches Google Business Reviews from Google Spreadsheet tab "Google_Reviews"
+ */
+export const fetchGoogleReviewsFromSheet = async () => {
+    const sheetId = '102A3Yz7BlKDJB7I_0lmYd1ek1CA7HAZyIg4R8ZYFjcw';
+    const urls = [
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=Google_Reviews`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=GoogleReviews`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=Reviews`
+    ];
+
+    for (const url of urls) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) continue;
+            const text = await response.text();
+            const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
+            if (!match) continue;
+
+            const json = JSON.parse(match[1]);
+            const rows = json.table?.rows || [];
+
+            const reviews = rows.map((r, i) => {
+                const cells = r.c || [];
+                const getStr = (idx) => cells[idx]?.f !== undefined ? cells[idx].f : (cells[idx]?.v !== undefined ? String(cells[idx].v) : '');
+                const getNum = (idx) => cells[idx]?.v !== undefined ? Number(cells[idx].v) : 5;
+
+                const name = getStr(1) || getStr(0) || `Guest #${i + 1}`;
+                if (!name || name.toLowerCase() === 'author' || name.toLowerCase() === 'name') return null;
+
+                return {
+                    id: `g-sheet-rev-${i}`,
+                    authorName: name,
+                    rating: getNum(2) || 5,
+                    relativeTime: getStr(0) || 'Recently',
+                    text: getStr(3) || 'Great food and service.',
+                    isReplied: getStr(4).toLowerCase() === 'true' || getStr(4).toLowerCase() === 'replied' || Boolean(getStr(5)),
+                    replyText: getStr(5) || null,
+                    replyDate: getStr(6) || null
+                };
+            }).filter(Boolean);
+
+            if (reviews.length > 0) return reviews;
+        } catch (e) {
+            console.warn('Google reviews sheet fetch error:', e);
+        }
+    }
+    return null;
+};

@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     MessageSquare, Star, TrendingUp, ThumbsUp, ThumbsDown, RefreshCw, 
     Search, Filter, Download, Loader2, CheckCircle, AlertCircle, AlertTriangle, 
-    Smile, Frown, Meh, ExternalLink, Calendar, ShoppingBag, X, MessageCircle, Send, Check
+    Smile, Frown, Meh, ExternalLink, Calendar, ShoppingBag, X, MessageCircle, Send, Check, Upload, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { fetchCustomerFeedback } from '../lib/feedbackService';
+import { fetchCustomerFeedback, fetchGoogleReviewsFromSheet } from '../lib/feedbackService';
 
 const SPREADSHEET_ID = '102A3Yz7BlKDJB7I_0lmYd1ek1CA7HAZyIg4R8ZYFjcw';
 const SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit#gid=1130350999`;
@@ -169,6 +169,11 @@ export function FeedbackDashboardView({ onBack }) {
         setShowAddForm(false);
     };
 
+    // Bulk Paste & Sync State
+    const [syncingGoogleReviews, setSyncingGoogleReviews] = useState(false);
+    const [showBulkPasteModal, setShowBulkPasteModal] = useState(false);
+    const [bulkText, setBulkText] = useState('');
+
     useEffect(() => {
         loadData();
     }, []);
@@ -182,11 +187,83 @@ export function FeedbackDashboardView({ onBack }) {
                 if (cached) setFeedbackData(cached);
             });
             if (data) setFeedbackData(data);
+
+            // Also try auto-syncing Google Reviews from Sheet tab "Google_Reviews"
+            loadSheetGoogleReviews();
         } catch (err) {
             console.error('Error loading feedback data:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    };
+
+    const loadSheetGoogleReviews = async () => {
+        setSyncingGoogleReviews(true);
+        try {
+            const sheetReviews = await fetchGoogleReviewsFromSheet();
+            if (sheetReviews && sheetReviews.length > 0) {
+                setGoogleReviews(sheetReviews);
+                localStorage.setItem('poj_google_reviews_state', JSON.stringify(sheetReviews));
+            }
+        } catch (e) {
+            console.warn('Sheet google reviews load error:', e);
+        } finally {
+            setSyncingGoogleReviews(false);
+        }
+    };
+
+    const handleBulkImport = (e) => {
+        e.preventDefault();
+        if (!bulkText.trim()) return;
+
+        try {
+            let parsed = [];
+            if (bulkText.trim().startsWith('[') || bulkText.trim().startsWith('{')) {
+                const data = JSON.parse(bulkText.trim());
+                parsed = Array.isArray(data) ? data : (data.reviews || data.data || []);
+            } else {
+                const lines = bulkText.trim().split('\n');
+                parsed = lines.map((line, idx) => {
+                    const parts = line.split('\t').length > 1 ? line.split('\t') : line.split(',');
+                    if (parts.length < 2) return null;
+                    const authorName = parts[0]?.trim() || `Guest #${idx + 1}`;
+                    const rating = parseInt(parts[1], 10) || 5;
+                    const text = parts[2]?.trim() || parts.slice(2).join(', ').trim() || 'Great experience!';
+                    return {
+                        id: `g-bulk-${Date.now()}-${idx}`,
+                        authorName,
+                        rating: Math.min(5, Math.max(1, rating)),
+                        relativeTime: 'Recently',
+                        text,
+                        isReplied: false,
+                        replyText: null,
+                        replyDate: null
+                    };
+                }).filter(Boolean);
+            }
+
+            if (parsed.length > 0) {
+                const formatted = parsed.map((item, idx) => ({
+                    id: item.id || `g-imported-${Date.now()}-${idx}`,
+                    authorName: item.authorName || item.author_name || item.name || `Guest #${idx + 1}`,
+                    rating: Number(item.rating || item.stars || 5),
+                    relativeTime: item.relativeTime || item.time || item.date || 'Recently',
+                    text: item.text || item.comment || item.snippet || 'Review from Google Business',
+                    isReplied: item.isReplied || Boolean(item.replyText),
+                    replyText: item.replyText || null,
+                    replyDate: item.replyDate || null
+                }));
+
+                const merged = [...formatted, ...googleReviews];
+                setGoogleReviews(merged);
+                localStorage.setItem('poj_google_reviews_state', JSON.stringify(merged));
+                setBulkText('');
+                setShowBulkPasteModal(false);
+                alert(`Successfully imported ${formatted.length} Google Reviews!`);
+            }
+        } catch (err) {
+            alert('Failed to parse reviews. Please paste valid JSON or CSV lines (Name, Rating, Review text).');
         }
     };
 
@@ -668,22 +745,30 @@ export function FeedbackDashboardView({ onBack }) {
                                     </h2>
                                 </div>
 
-                                <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={loadSheetGoogleReviews}
+                                        disabled={syncingGoogleReviews}
+                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                    >
+                                        <RefreshCw size={12} className={syncingGoogleReviews ? 'animate-spin' : ''} />
+                                        {syncingGoogleReviews ? 'Syncing Sheet...' : '⚡ Auto-Sync Sheet'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowBulkPasteModal(!showBulkPasteModal)}
+                                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                                    >
+                                        <Upload size={12} /> Bulk Import 322
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setShowAddForm(!showAddForm)}
                                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
                                     >
-                                        {showAddForm ? '✕ Close Form' : '➕ Add Review'}
+                                        {showAddForm ? '✕ Close' : '➕ Single Review'}
                                     </button>
-                                    <a
-                                        href="https://g.page/r/CUfyoed3Iq6KEBM/review"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-3 py-1.5 bg-white text-blue-950 font-black text-xs rounded-xl hover:bg-blue-50 transition-all flex items-center gap-1.5 shadow-sm hidden sm:flex"
-                                    >
-                                        <ExternalLink size={12} /> Open Google Maps
-                                    </a>
                                     <button
                                         onClick={() => setShowGoogleModal(false)}
                                         className="p-1.5 rounded-xl hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
@@ -692,6 +777,37 @@ export function FeedbackDashboardView({ onBack }) {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Bulk Paste Panel */}
+                            {showBulkPasteModal && (
+                                <form onSubmit={handleBulkImport} className="p-5 bg-amber-50/90 border-b border-amber-200 space-y-3 shrink-0">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-black text-xs text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                                            📥 Bulk Paste All 322 Google Business Reviews
+                                        </h3>
+                                        <span className="text-[10px] text-amber-800 font-bold">Paste CSV (Name, Rating, Review) or JSON array</span>
+                                    </div>
+                                    <textarea
+                                        placeholder={`Paste lines of reviews here...\nExample format:\nAmina Kimani, 5, Amazing Jollof rice!\nBrian Omondi, 4, Great plantains and service.`}
+                                        value={bulkText}
+                                        onChange={(e) => setBulkText(e.target.value)}
+                                        required
+                                        rows={4}
+                                        className="w-full bg-white border border-amber-300 rounded-xl p-3 font-mono text-xs focus:outline-none focus:border-amber-600"
+                                    />
+                                    <div className="flex items-center justify-between pt-1">
+                                        <span className="text-[11px] text-amber-800 font-medium">
+                                            Tip: Or sync automatically from Google Sheet tab <strong>Google_Reviews</strong>.
+                                        </span>
+                                        <button
+                                            type="submit"
+                                            className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                                        >
+                                            <Upload size={14} /> Import All Pasted Reviews
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
 
                             {/* Add Review Form Panel */}
                             {showAddForm && (
