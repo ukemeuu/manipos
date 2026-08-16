@@ -1749,13 +1749,13 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                             animate={{ x: 0 }}
                             exit={{ x: '100%' }}
                             transition={{ type: 'tween', duration: 0.3 }}
-                            className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white border-l border-gray-200 z-50 flex flex-col shadow-2xl text-gray-900"
+                            className="fixed right-0 top-0 bottom-0 h-[100dvh] w-full max-w-md bg-white border-l border-gray-200 z-50 flex flex-col shadow-2xl text-gray-900 overflow-hidden"
                         >
                             {/* Drawer Header */}
-                            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+                            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
                                 <div className="flex items-center gap-2">
                                     <ShoppingCart size={20} className="text-black" />
-                                    <h2 className="text-lg font-black tracking-tight text-gray-900">Your Cart ({cartCount})</h2>
+                                    <h2 className="text-base sm:text-lg font-black tracking-tight text-gray-900">Your Cart ({cartCount})</h2>
                                 </div>
                                 <button 
                                     disabled={submitting}
@@ -1766,317 +1766,335 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                 </button>
                             </div>
 
-                            {/* Cart Items List */}
-                            <div className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-gray-50/30">
-                                {cart.map(item => (
-                                    <div key={item.id} className="bg-white border border-gray-200 p-4 rounded-2xl flex flex-col gap-3 relative group">
-                                        <button
-                                            disabled={submitting}
-                                            onClick={() => removeFromCart(item.id)}
-                                            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-650 transition-colors"
-                                            title="Remove item"
-                                        >
-                                            <X size={14} />
-                                        </button>
-
-                                        <div className="flex justify-between items-start pr-6">
-                                            <div>
-                                                <h4 className="font-bold text-xs text-gray-900">{item.name}</h4>
-                                                <span className="text-[9px] text-gray-500 font-mono">KES {item.price.toLocaleString()}</span>
-                                            </div>
-                                            <span className="text-xs font-black text-gray-900 font-mono">KES {(item.price * item.quantity).toLocaleString()}</span>
-                                        </div>
-
-                                        <div className="flex justify-between items-center gap-4 pt-2 border-t border-gray-100">
-                                            {/* Special prep notes */}
-                                            <input 
-                                                type="text"
-                                                placeholder="Special prep instructions (e.g. No onions)"
-                                                value={item.instructions}
-                                                disabled={submitting}
-                                                onChange={(e) => updateItemInstructions(item.id, e.target.value)}
-                                                className="flex-1 bg-transparent text-[10px] text-gray-600 placeholder-gray-400 border-b border-gray-200 py-1 focus:outline-none focus:border-black font-medium"
-                                            />
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <button 
+                            {/* Form wrapping scrollable content + sticky footer button */}
+                            <form onSubmit={handleSubmitOrder} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                                {/* Scrollable Content Body */}
+                                <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-5 custom-scrollbar bg-gray-50/30">
+                                    {/* Cart Items List */}
+                                    <div className="space-y-3">
+                                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Items in Cart</span>
+                                        {cart.map(item => (
+                                            <div key={item.id} className="bg-white border border-gray-200 p-3.5 rounded-2xl flex flex-col gap-2.5 relative group shadow-xs">
+                                                <button
                                                     disabled={submitting}
-                                                    onClick={() => updateQuantity(item.id, -1)}
-                                                    className="w-6 h-6 rounded-md bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors text-gray-700"
+                                                    onClick={() => removeFromCart(item.id)}
+                                                    className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-650 transition-colors"
+                                                    title="Remove item"
                                                 >
-                                                    <Minus size={10} />
+                                                    <X size={14} />
                                                 </button>
-                                                <span className="text-xs font-black font-mono w-4 text-center text-gray-900">{item.quantity}</span>
-                                                <button 
-                                                    disabled={submitting}
-                                                    onClick={() => updateQuantity(item.id, 1)}
-                                                    className="w-6 h-6 rounded-md bg-black hover:bg-neutral-800 flex items-center justify-center transition-colors text-white"
-                                                >
-                                                    <Plus size={10} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
 
-                            {/* Checkout Form & Summary */}
-                            <form onSubmit={handleSubmitOrder} className="p-6 bg-gray-50 border-t border-gray-200 space-y-4 shrink-0">
-                                {/* Guest Account Panel Summary */}
-                                {guestUser ? (
-                                    <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
-                                        <div className="flex flex-col text-left">
-                                            <span className="font-bold text-gray-900">👤 Placing order as {guestUser.first_name}</span>
-                                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">{guestUser.phone}</span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAccountOpen(true)}
-                                            className="text-[9px] font-black text-black hover:underline uppercase tracking-wider"
-                                        >
-                                            Switch
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
-                                        <div className="flex flex-col text-left">
-                                            <span className="font-bold text-gray-700">👤 Guest Checkout</span>
-                                            <span className="text-[9px] text-gray-450 mt-0.5">Register/log in to save address & track orders.</span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAccountOpen(true)}
-                                            className="text-[9px] font-black text-black hover:underline uppercase tracking-wider"
-                                        >
-                                            Log In
-                                        </button>
-                                    </div>
-                                )}
+                                                <div className="flex justify-between items-start pr-6">
+                                                    <div>
+                                                        <h4 className="font-bold text-xs text-gray-900">{item.name}</h4>
+                                                        <span className="text-[9px] text-gray-500 font-mono">KES {item.price.toLocaleString()}</span>
+                                                    </div>
+                                                    <span className="text-xs font-black text-gray-900 font-mono">KES {(item.price * item.quantity).toLocaleString()}</span>
+                                                </div>
 
-                                <div className="grid grid-cols-3 gap-2 bg-white p-1 rounded-xl border border-gray-200">
-                                    <button
-                                        type="button"
-                                        disabled={submitting}
-                                        onClick={() => setDiningOption('Dine-in')}
-                                        className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                                            diningOption === 'Dine-in'
-                                                ? 'bg-black text-white shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-900'
-                                        }`}
-                                    >
-                                        Eat Here
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={submitting}
-                                        onClick={() => setDiningOption('Takeaway')}
-                                        className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                                            diningOption === 'Takeaway'
-                                                ? 'bg-black text-white shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-900'
-                                        }`}
-                                    >
-                                        Takeaway
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={submitting}
-                                        onClick={() => setDiningOption('Delivery')}
-                                        className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                                            diningOption === 'Delivery'
-                                                ? 'bg-black text-white shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-900'
-                                        }`}
-                                    >
-                                        Delivery
-                                    </button>
-                                </div>
+                                                <div className="flex justify-between items-center gap-3 pt-2 border-t border-gray-100">
+                                                    {/* Special prep notes */}
+                                                    <input 
+                                                        type="text"
+                                                        placeholder="Special prep instructions (e.g. No onions)"
+                                                        value={item.instructions}
+                                                        disabled={submitting}
+                                                        onChange={(e) => updateItemInstructions(item.id, e.target.value)}
+                                                        className="flex-1 bg-transparent text-[10px] text-gray-600 placeholder-gray-400 border-b border-gray-200 py-1 focus:outline-none focus:border-black font-medium"
+                                                    />
 
-                                {/* Dynamic inputs */}
-                                <div className="space-y-3">
-                                    <input
-                                        type="text"
-                                        placeholder="Your Name (Optional)"
-                                        value={customerName}
-                                        disabled={submitting}
-                                        onChange={(e) => setCustomerName(e.target.value)}
-                                        className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
-                                    />
-                                    {diningOption === 'Delivery' && (
-                                        <div className="space-y-2 text-left">
-                                            {guestUser && savedAddresses.length > 0 && (
-                                                <div className="space-y-1.5">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Select Delivery Address</span>
-                                                    <div className="flex flex-col gap-1.5">
-                                                        {savedAddresses.map((addr, idx) => (
-                                                            <button
-                                                                key={idx}
-                                                                type="button"
-                                                                onClick={() => setDeliveryAddress(addr)}
-                                                                className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
-                                                                    deliveryAddress === addr
-                                                                        ? 'bg-black border-black text-white font-bold'
-                                                                        : 'bg-white border-gray-255 text-gray-700 hover:border-gray-300'
-                                                                }`}
-                                                            >
-                                                                📍 {addr}
-                                                            </button>
-                                                        ))}
-                                                        <button
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <button 
+                                                            disabled={submitting}
                                                             type="button"
-                                                            onClick={() => {
-                                                                if (savedAddresses.includes(deliveryAddress)) {
-                                                                    setDeliveryAddress('');
-                                                                }
-                                                            }}
-                                                            className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
-                                                                !savedAddresses.includes(deliveryAddress)
-                                                                    ? 'bg-black border-black text-white font-bold'
-                                                                    : 'bg-white border-gray-250 text-gray-800 hover:bg-gray-100 font-bold border-dashed'
-                                                            }`}
+                                                            onClick={() => updateQuantity(item.id, -1)}
+                                                            className="w-6 h-6 rounded-md bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors text-gray-700"
                                                         >
-                                                            ➕ Add New Address
+                                                            <Minus size={10} />
+                                                        </button>
+                                                        <span className="text-xs font-black font-mono w-4 text-center text-gray-900">{item.quantity}</span>
+                                                        <button 
+                                                            disabled={submitting}
+                                                            type="button"
+                                                            onClick={() => updateQuantity(item.id, 1)}
+                                                            className="w-6 h-6 rounded-md bg-black hover:bg-neutral-800 flex items-center justify-center transition-colors text-white"
+                                                        >
+                                                            <Plus size={10} />
                                                         </button>
                                                     </div>
                                                 </div>
-                                            )}
-                                            
-                                            {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
-                                                <div className="relative">
-                                                    <div className="relative flex items-center">
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Delivery Address (e.g. Kilimani, Westlands, Purple Tower) *"
-                                                            required
-                                                            value={deliveryAddress}
-                                                            disabled={submitting}
-                                                            onChange={(e) => setDeliveryAddress(e.target.value)}
-                                                            onFocus={() => setShowSuggestions(true)}
-                                                            className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-semibold shadow-xs"
-                                                        />
-                                                        {isSearchingAddress && (
-                                                            <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
-                                                                🔍 Searching...
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {/* Real-time Address Autocomplete Floating Dropdown */}
-                                                    {showSuggestions && addressSuggestions.length > 0 && (
-                                                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
-                                                            <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
-                                                                <span>📍 Select Matching Location:</span>
-                                                                <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
-                                                            </div>
-                                                            {addressSuggestions.map((s, idx) => (
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Checkout Options & Form Inputs Container */}
+                                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-4 text-left shadow-xs">
+                                        {/* Guest Account Panel Summary */}
+                                        {guestUser ? (
+                                            <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
+                                                <div className="flex flex-col text-left">
+                                                    <span className="font-bold text-gray-900">👤 Placing order as {guestUser.first_name}</span>
+                                                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">{guestUser.phone}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAccountOpen(true)}
+                                                    className="text-[9px] font-black text-black hover:underline uppercase tracking-wider"
+                                                >
+                                                    Switch
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
+                                                <div className="flex flex-col text-left">
+                                                    <span className="font-bold text-gray-700">👤 Guest Checkout</span>
+                                                    <span className="text-[9px] text-gray-450 mt-0.5">Register/log in to save address & track orders.</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAccountOpen(true)}
+                                                    className="text-[9px] font-black text-black hover:underline uppercase tracking-wider"
+                                                >
+                                                    Log In
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-3 gap-2 bg-white p-1 rounded-xl border border-gray-200">
+                                            <button
+                                                type="button"
+                                                disabled={submitting}
+                                                onClick={() => setDiningOption('Dine-in')}
+                                                className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                                    diningOption === 'Dine-in'
+                                                        ? 'bg-black text-white shadow-sm'
+                                                        : 'text-gray-500 hover:text-gray-900'
+                                                }`}
+                                            >
+                                                Eat Here
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={submitting}
+                                                onClick={() => setDiningOption('Takeaway')}
+                                                className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                                    diningOption === 'Takeaway'
+                                                        ? 'bg-black text-white shadow-sm'
+                                                        : 'text-gray-500 hover:text-gray-900'
+                                                }`}
+                                            >
+                                                Takeaway
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={submitting}
+                                                onClick={() => setDiningOption('Delivery')}
+                                                className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                                    diningOption === 'Delivery'
+                                                        ? 'bg-black text-white shadow-sm'
+                                                        : 'text-gray-500 hover:text-gray-900'
+                                                }`}
+                                            >
+                                                Delivery
+                                            </button>
+                                        </div>
+
+                                        {/* Dynamic inputs */}
+                                        <div className="space-y-3">
+                                            <input
+                                                type="text"
+                                                placeholder="Your Name (Optional)"
+                                                value={customerName}
+                                                disabled={submitting}
+                                                onChange={(e) => setCustomerName(e.target.value)}
+                                                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                            />
+                                            {diningOption === 'Delivery' && (
+                                                <div className="space-y-2 text-left">
+                                                    {guestUser && savedAddresses.length > 0 && (
+                                                        <div className="space-y-1.5">
+                                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Select Delivery Address</span>
+                                                            <div className="flex flex-col gap-1.5">
+                                                                {savedAddresses.map((addr, idx) => (
+                                                                    <button
+                                                                        key={idx}
+                                                                        type="button"
+                                                                        onClick={() => setDeliveryAddress(addr)}
+                                                                        className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
+                                                                            deliveryAddress === addr
+                                                                                ? 'bg-black border-black text-white font-bold'
+                                                                                : 'bg-white border-gray-255 text-gray-700 hover:border-gray-300'
+                                                                        }`}
+                                                                    >
+                                                                        📍 {addr}
+                                                                    </button>
+                                                                ))}
                                                                 <button
-                                                                    key={idx}
                                                                     type="button"
-                                                                    onClick={() => handleSelectAddressSuggestion(s)}
-                                                                    className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                    onClick={() => {
+                                                                        if (savedAddresses.includes(deliveryAddress)) {
+                                                                            setDeliveryAddress('');
+                                                                        }
+                                                                    }}
+                                                                    className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
+                                                                        !savedAddresses.includes(deliveryAddress)
+                                                                            ? 'bg-black border-black text-white font-bold'
+                                                                            : 'bg-white border-gray-250 text-gray-800 hover:bg-gray-100 font-bold border-dashed'
+                                                                    }`}
                                                                 >
-                                                                    <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
-                                                                    <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                    ➕ Add New Address
                                                                 </button>
-                                                            ))}
+                                                            </div>
                                                         </div>
                                                     )}
+                                                    
+                                                    {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
+                                                        <div className="relative">
+                                                            <div className="relative flex items-center">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Delivery Address (e.g. Kilimani, Westlands, Purple Tower) *"
+                                                                    required
+                                                                    value={deliveryAddress}
+                                                                    disabled={submitting}
+                                                                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                                    onFocus={() => setShowSuggestions(true)}
+                                                                    className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-semibold shadow-xs"
+                                                                />
+                                                                {isSearchingAddress && (
+                                                                    <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
+                                                                        🔍 Searching...
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            
+                                                            {/* Real-time Address Autocomplete Floating Dropdown */}
+                                                            {showSuggestions && addressSuggestions.length > 0 && (
+                                                                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
+                                                                    <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
+                                                                        <span>📍 Select Matching Location:</span>
+                                                                        <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
+                                                                    </div>
+                                                                    {addressSuggestions.map((s, idx) => (
+                                                                        <button
+                                                                            key={idx}
+                                                                            type="button"
+                                                                            onClick={() => handleSelectAddressSuggestion(s)}
+                                                                            className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                        >
+                                                                            <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
+                                                                            <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                    )}
                                                 </div>
-
                                             )}
+                                            <input
+                                                type="text"
+                                                placeholder="Order notes / delivery specs / special request"
+                                                value={notes}
+                                                disabled={submitting}
+                                                onChange={(e) => setNotes(e.target.value)}
+                                                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                            />
                                         </div>
-                                    )}
-                                    <input
-                                        type="text"
-                                        placeholder="Order notes / delivery specs / special request"
-                                        value={notes}
-                                        disabled={submitting}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
-                                    />
+
+                                        {/* Promo Code Input Block */}
+                                        <div className="pt-2 border-t border-gray-100 text-left space-y-1.5">
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo / Discount Code</span>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter code (e.g. MUTE10)"
+                                                    value={promoCode}
+                                                    onChange={(e) => setPromoCode(e.target.value)}
+                                                    disabled={submitting}
+                                                    className="flex-1 bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium uppercase font-mono"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleApplyPromoCode}
+                                                    disabled={submitting || !promoCode.trim()}
+                                                    className="px-4 py-2 bg-black hover:bg-neutral-850 disabled:opacity-40 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
+                                                >
+                                                    Apply
+                                                </button>
+                                            </div>
+                                            {promoError && <p className="text-[9px] font-bold text-red-500 ml-1">{promoError}</p>}
+                                            {promoSuccess && <p className="text-[9px] font-bold text-emerald-600 ml-1">✓ {promoSuccess}</p>}
+                                        </div>
+
+                                        {/* Order Summary calculations */}
+                                        <div className="space-y-2 pt-2 text-xs font-bold border-t border-gray-200">
+                                            <div className="flex justify-between items-center text-gray-500">
+                                                <span>Subtotal:</span>
+                                                <span>KES {cartTotal.toLocaleString()}</span>
+                                            </div>
+                                            {discountAmount > 0 && (
+                                                <div className="flex justify-between items-center text-emerald-600">
+                                                    <span>Discount Applied:</span>
+                                                    <span>- KES {discountAmount.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            {packagingFeeAmount > 0 && (
+                                                <div className="flex justify-between items-center text-gray-500">
+                                                    <span>Packaging Fee:</span>
+                                                    <span>KES {packagingFeeAmount.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between items-center text-gray-500">
+                                                <span>Delivery Fee:</span>
+                                                <span>
+                                                    {diningOption === 'Delivery' ? (
+                                                        isGeocoding ? (
+                                                            <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                                                                <Loader2 className="animate-spin" size={10} /> Calculating...
+                                                            </span>
+                                                        ) : geocodingError ? (
+                                                            <span className="text-red-500 text-[10px]">{geocodingError} (KES {calculatedDeliveryFee})</span>
+                                                        ) : (
+                                                            <span>
+                                                                KES {calculatedDeliveryFee.toLocaleString()}
+                                                                {calculatedDistance && ` (${calculatedDistance.toFixed(1)} km)`}
+                                                            </span>
+                                                        )
+                                                    ) : 'FREE'}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-end text-sm text-gray-900 font-black pt-1">
+                                                <span>Total:</span>
+                                                <span className="text-lg text-black font-mono">KES {finalTotal.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                {/* Promo Code Input Block */}
-                                <div className="pt-2 border-t border-gray-100 text-left space-y-1.5">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo / Discount Code</span>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Enter code (e.g. MUTE10)"
-                                            value={promoCode}
-                                            onChange={(e) => setPromoCode(e.target.value)}
-                                            disabled={submitting}
-                                            className="flex-1 bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium uppercase font-mono"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleApplyPromoCode}
-                                            disabled={submitting || !promoCode.trim()}
-                                            className="px-4 py-2 bg-black hover:bg-neutral-850 disabled:opacity-40 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
-                                        >
-                                            Apply
-                                        </button>
+                                {/* Sticky Mobile Submit Footer */}
+                                <div className="p-4 bg-white border-t border-gray-200 shadow-2xl shrink-0 z-30 space-y-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                                    <div className="flex justify-between items-center px-1 text-xs font-black text-gray-900">
+                                        <span className="text-gray-500 uppercase tracking-wider text-[10px]">Total Amount:</span>
+                                        <span className="text-base font-mono text-black">KES {finalTotal.toLocaleString()}</span>
                                     </div>
-                                    {promoError && <p className="text-[9px] font-bold text-red-500 ml-1">{promoError}</p>}
-                                    {promoSuccess && <p className="text-[9px] font-bold text-emerald-600 ml-1">✓ {promoSuccess}</p>}
+                                    <button
+                                        type="submit"
+                                        disabled={submitting || cart.length === 0}
+                                        className="w-full py-4 bg-black hover:bg-neutral-850 active:scale-[0.99] disabled:opacity-50 text-white font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-black/10 flex items-center justify-center gap-2 cursor-pointer"
+                                    >
+                                        {submitting ? (
+                                            <>
+                                                <Loader2 className="animate-spin" size={16} /> Submitting Order...
+                                            </>
+                                        ) : (
+                                            <>
+                                                Submit Order to Kitchen ➔
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
-
-                                {/* Order Summary calculations */}
-                                <div className="space-y-2 pt-2 text-xs font-bold border-t border-gray-200">
-                                    <div className="flex justify-between items-center text-gray-500">
-                                        <span>Subtotal:</span>
-                                        <span>KES {cartTotal.toLocaleString()}</span>
-                                    </div>
-                                    {discountAmount > 0 && (
-                                        <div className="flex justify-between items-center text-emerald-600">
-                                            <span>Discount Applied:</span>
-                                            <span>- KES {discountAmount.toLocaleString()}</span>
-                                        </div>
-                                    )}
-                                    {packagingFeeAmount > 0 && (
-                                        <div className="flex justify-between items-center text-gray-500">
-                                            <span>Packaging Fee:</span>
-                                            <span>KES {packagingFeeAmount.toLocaleString()}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between items-center text-gray-500">
-                                        <span>Delivery Fee:</span>
-                                        <span>
-                                            {diningOption === 'Delivery' ? (
-                                                isGeocoding ? (
-                                                    <span className="flex items-center gap-1 text-[10px] text-gray-400">
-                                                        <Loader2 className="animate-spin" size={10} /> Calculating...
-                                                    </span>
-                                                ) : geocodingError ? (
-                                                    <span className="text-red-500 text-[10px]">{geocodingError} (KES {calculatedDeliveryFee})</span>
-                                                ) : (
-                                                    <span>
-                                                        KES {calculatedDeliveryFee.toLocaleString()}
-                                                        {calculatedDistance && ` (${calculatedDistance.toFixed(1)} km)`}
-                                                    </span>
-                                                )
-                                            ) : 'FREE'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-end text-sm text-gray-900 font-black pt-1">
-                                        <span>Total:</span>
-                                        <span className="text-lg text-black font-mono">KES {finalTotal.toLocaleString()}</span>
-                                    </div>
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={submitting || cart.length === 0}
-                                    className="w-full py-4 bg-black hover:bg-neutral-850 disabled:opacity-50 text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-black/10 flex items-center justify-center gap-2"
-                                >
-                                    {submitting ? (
-                                        <>
-                                            <Loader2 className="animate-spin" size={16} /> Submitting Order...
-                                        </>
-                                    ) : (
-                                        'Submit Order to Kitchen'
-                                    )}
-                                </button>
                             </form>
                         </motion.div>
                     </>
