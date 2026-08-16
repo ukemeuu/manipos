@@ -53,7 +53,7 @@ export const itemBelongsToBrand = (item, brand) => {
     if (item.brand && item.brand.trim()) {
         const itemBrandUpper = item.brand.trim().toUpperCase();
         if (itemBrandUpper === targetBrandUpper) return true;
-        if (targetBrandUpper === "POT OF JOLLOF" && (itemBrandUpper === "MANIPOS" || itemBrandUpper.includes("JOLLOF"))) return true;
+        if (targetBrandUpper === 'POT OF JOLLOF' && (itemBrandUpper === 'MANIPOS' || itemBrandUpper.includes('JOLLOF'))) return true;
         return false;
     }
 
@@ -63,14 +63,13 @@ export const itemBelongsToBrand = (item, brand) => {
 
 
 export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof' }) {
-    const host = window.location.hostname.toLowerCase();
-    const isSingleBrand = host.includes('potofjollof') || host.includes('poj') || host.includes('demostore') || tenantSlug === 'potofjollof' || defaultBrand;
+    const isSingleBrand = window.location.hostname.includes('potofjollof') || tenantSlug === 'potofjollof';
     const [menu, setMenu] = useState([]);
     const [categories, setCategories] = useState(['All']);
     const [activeBrand, setActiveBrand] = useState(() => {
         if (defaultBrand) return defaultBrand;
         if (isSingleBrand) return 'POT OF JOLLOF';
-        return 'POT OF JOLLOF';
+        return 'All';
     });
     const [activeCategory, setActiveCategory] = useState('All');
 
@@ -270,7 +269,9 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         };
     }, []);
 
-    // OpenStreetMap Nominatim geocoding & Haversine calculator for distance-based delivery fee
+    const GOOGLE_PLACES_API_KEY = 'AIzaSyDhwk7tNH19ACOUo0WUIJsVGSUtVLji_yM';
+
+    // Google Places API Geocoding & Distance-Based Delivery Fee Engine
     useEffect(() => {
         if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
             setCalculatedDistance(null);
@@ -284,39 +285,49 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         const delayDebounceFn = setTimeout(async () => {
             try {
                 const cleanQuery = deliveryAddress.trim();
-                let data = [];
+                let results = [];
 
-                // Attempt 1: Query + ", Kenya"
-                let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=1`, {
-                    headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
-                });
-                if (res.ok) data = await res.json();
-
-                // Attempt 2: Raw query
-                if (!data || data.length === 0) {
-                    res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery)}&format=json&limit=1`, {
-                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
-                    });
-                    if (res.ok) data = await res.json();
+                // Attempt 1: Google Places / Geocoding API
+                try {
+                    const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ', Nairobi, Kenya')}&key=${GOOGLE_PLACES_API_KEY}`;
+                    const res = await fetch(googleUrl);
+                    if (res.ok) {
+                        const gData = await res.json();
+                        if (gData.results && gData.results.length > 0) {
+                            results = gData.results.map(r => ({
+                                display_name: r.formatted_address,
+                                lat: r.geometry.location.lat,
+                                lon: r.geometry.location.lng,
+                                provider: 'Google Places'
+                            }));
+                        }
+                    }
+                } catch (gErr) {
+                    console.warn("Google Geocoding API fetch warning:", gErr);
                 }
 
-                // Attempt 3: Query + ", Nairobi"
-                if (!data || data.length === 0) {
-                    res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Nairobi')}&format=json&limit=1`, {
+                // Fallback attempt: OpenStreetMap
+                if (!results || results.length === 0) {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=1`, {
                         headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
                     });
-                    if (res.ok) data = await res.json();
+                    if (res.ok) {
+                        const osmData = await res.json();
+                        if (osmData && osmData.length > 0) {
+                            results = osmData;
+                        }
+                    }
                 }
                 
-                if (data && data.length > 0) {
+                if (results && results.length > 0) {
                     setGeocodingError('');
-                    const lat = parseFloat(data[0].lat);
-                    const lon = parseFloat(data[0].lon);
+                    const lat = parseFloat(results[0].lat);
+                    const lon = parseFloat(results[0].lon);
                     
-                    // Haversine formula
+                    // Haversine distance from Pot of Jollof Store
                     const R = 6371; // km
-                    const lat1 = whatsappSettings.store_lat;
-                    const lon1 = whatsappSettings.store_lng;
+                    const lat1 = whatsappSettings.store_lat || -1.2921;
+                    const lon1 = whatsappSettings.store_lng || 36.8219;
                     const lat2 = lat;
                     const lon2 = lon;
                     
@@ -326,25 +337,27 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                               Math.sin(dLon/2) * Math.sin(dLon/2);
                     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                    const distance = R * c; // in km
+                    // Apply Nairobi road factor multiplier (1.25x for driving routes)
+                    const distance = Math.round((R * c * 1.25) * 10) / 10;
                     
                     setCalculatedDistance(distance);
                     
                     // Calculate Delivery Fee
-                    let fee = whatsappSettings.base_delivery_fee;
-                    if (distance > whatsappSettings.base_delivery_distance) {
-                        const extraDistance = distance - whatsappSettings.base_delivery_distance;
-                        fee += extraDistance * (whatsappSettings.delivery_fee_per_km || 85);
+                    let fee = whatsappSettings.base_delivery_fee || 150;
+                    const baseDist = whatsappSettings.base_delivery_distance || 3;
+                    if (distance > baseDist) {
+                        const extraDistance = distance - baseDist;
+                        fee += extraDistance * (whatsappSettings.delivery_fee_per_km || 40);
                     }
                     setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
                 } else {
-                    setGeocodingError("Address not found. Flat delivery fee applied.");
-                    setCalculatedDeliveryFee(whatsappSettings.base_delivery_fee + 100);
+                    setGeocodingError("Address location not found. Default delivery fee applied.");
+                    setCalculatedDeliveryFee((whatsappSettings.base_delivery_fee || 150) + 100);
                 }
             } catch (err) {
                 console.error("Geocoding failed:", err);
-                setGeocodingError("Could not calculate exact distance. Flat fee applied.");
-                setCalculatedDeliveryFee(whatsappSettings.base_delivery_fee + 100);
+                setGeocodingError("Could not calculate exact distance. Default fee applied.");
+                setCalculatedDeliveryFee((whatsappSettings.base_delivery_fee || 150) + 100);
             } finally {
                 setIsGeocoding(false);
             }
@@ -353,7 +366,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         return () => clearTimeout(delayDebounceFn);
     }, [deliveryAddress, diningOption, whatsappSettings]);
 
-    // Real-time Address Autocomplete lookup (flexible search in Kenya)
+    // Real-time Address Autocomplete lookup via Google Places API
     useEffect(() => {
         if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
             setAddressSuggestions([]);
@@ -365,20 +378,45 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         const debounceTimer = setTimeout(async () => {
             try {
                 const cleanQuery = deliveryAddress.trim();
-                let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=5&addressdetails=1&countrycodes=ke`, {
-                    headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
-                });
-                let data = res.ok ? await res.json() : [];
-                
-                if (!data || data.length === 0) {
-                    res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery)}&format=json&limit=5&addressdetails=1`, {
-                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
-                    });
-                    data = res.ok ? await res.json() : [];
+                let suggestions = [];
+
+                // 1. Google Places Geocoding API
+                try {
+                    const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ', Kenya')}&key=${GOOGLE_PLACES_API_KEY}`;
+                    const res = await fetch(googleUrl);
+                    if (res.ok) {
+                        const gData = await res.json();
+                        if (gData.results && gData.results.length > 0) {
+                            suggestions = gData.results.slice(0, 5).map(r => ({
+                                display_name: r.formatted_address,
+                                lat: r.geometry.location.lat,
+                                lon: r.geometry.location.lng,
+                                provider: 'Google Places'
+                            }));
+                        }
+                    }
+                } catch(e) {
+                    console.warn("Google Places Autocomplete error:", e);
                 }
 
-                setAddressSuggestions(data || []);
-                setShowSuggestions((data && data.length > 0) ? true : false);
+                // 2. OpenStreetMap Fallback if Google returned no suggestions
+                if (!suggestions || suggestions.length === 0) {
+                    let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=5&addressdetails=1&countrycodes=ke`, {
+                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
+                    });
+                    if (res.ok) {
+                        const osmData = await res.json();
+                        suggestions = (osmData || []).map(item => ({
+                            display_name: item.display_name,
+                            lat: item.lat,
+                            lon: item.lon,
+                            provider: 'Maps'
+                        }));
+                    }
+                }
+
+                setAddressSuggestions(suggestions || []);
+                setShowSuggestions((suggestions && suggestions.length > 0) ? true : false);
             } catch(err) {
                 console.error("Address autocomplete search failed:", err);
                 setAddressSuggestions([]);
@@ -390,7 +428,6 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         return () => clearTimeout(debounceTimer);
     }, [deliveryAddress, diningOption]);
 
-
     const handleSelectAddressSuggestion = (suggestion) => {
         const formatted = suggestion.display_name;
         setDeliveryAddress(formatted);
@@ -399,8 +436,8 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
         const lat2 = parseFloat(suggestion.lat);
         const lon2 = parseFloat(suggestion.lon);
-        const lat1 = whatsappSettings.store_lat;
-        const lon1 = whatsappSettings.store_lng;
+        const lat1 = whatsappSettings.store_lat || -1.2921;
+        const lon1 = whatsappSettings.store_lng || 36.8219;
 
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -408,14 +445,15 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                   Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                   Math.sin(dLon/2) * Math.sin(dLon/2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const distance = 6371 * c; // in km
+        const distance = Math.round((6371 * c * 1.25) * 10) / 10; // in km
 
         setCalculatedDistance(distance);
 
-        let fee = whatsappSettings.base_delivery_fee;
-        if (distance > whatsappSettings.base_delivery_distance) {
-            const extraDistance = distance - whatsappSettings.base_delivery_distance;
-            fee += extraDistance * whatsappSettings.delivery_fee_per_km; // 85 KES / km
+        let fee = whatsappSettings.base_delivery_fee || 150;
+        const baseDist = whatsappSettings.base_delivery_distance || 3;
+        if (distance > baseDist) {
+            const extraDistance = distance - baseDist;
+            fee += extraDistance * (whatsappSettings.delivery_fee_per_km || 40);
         }
         setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
     };
@@ -426,7 +464,6 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 .from('pos_menu')
                 .select('*')
                 .eq('is_available', true)
-                
                 .order('name', { ascending: true });
 
             if (error) throw error;
