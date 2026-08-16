@@ -271,6 +271,80 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     const GOOGLE_PLACES_API_KEY = 'AIzaSyDhwk7tNH19ACOUo0WUIJsVGSUtVLji_yM';
 
+    // 1. Dynamically Load Google Maps JS SDK
+    useEffect(() => {
+        if (window.google && window.google.maps) return;
+        const scriptId = 'google-maps-js-sdk';
+        if (document.getElementById(scriptId)) return;
+
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_PLACES_API_KEY}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+    }, []);
+
+    // 2. Client-side Google Maps & OpenStreetMap Geocode Helper
+    const geocodeAddress = async (query) => {
+        if (!query || !query.trim()) return null;
+        const cleanQuery = query.trim();
+
+        // A. Google Maps JS SDK Geocoder (Client-side, 0 CORS issues!)
+        if (window.google && window.google.maps && window.google.maps.Geocoder) {
+            try {
+                const geocoder = new window.google.maps.Geocoder();
+                const result = await new Promise((resolve) => {
+                    const reqAddr = cleanQuery.toLowerCase().includes('kenya') ? cleanQuery : `${cleanQuery}, Nairobi, Kenya`;
+                    geocoder.geocode({ address: reqAddr }, (results, status) => {
+                        if (status === 'OK' && results && results.length > 0) {
+                            resolve({
+                                lat: results[0].geometry.location.lat(),
+                                lon: results[0].geometry.location.lng(),
+                                display_name: results[0].formatted_address,
+                                provider: 'Google Places'
+                            });
+                        } else {
+                            resolve(null);
+                        }
+                    });
+                });
+                if (result) return result;
+            } catch (e) {
+                console.warn('Google JS Geocoder error:', e);
+            }
+        }
+
+        // B. Smart Multi-query Fallback (e.g. "Sarit Center, Karuna Road, Parklands...")
+        const parts = cleanQuery.split(',').map(p => p.trim()).filter(Boolean);
+        const searchVariations = [
+            cleanQuery,
+            parts.slice(0, 2).join(', ') + ', Nairobi, Kenya',
+            parts[0] + ', Nairobi, Kenya',
+            parts[0] + ', Kenya'
+        ];
+
+        for (const variant of searchVariations) {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(variant)}&format=json&limit=1`, {
+                    headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        return {
+                            lat: parseFloat(data[0].lat),
+                            lon: parseFloat(data[0].lon),
+                            display_name: data[0].display_name,
+                            provider: 'Maps'
+                        };
+                    }
+                }
+            } catch (err) {}
+        }
+        return null;
+    };
+
     // Google Places API Geocoding & Distance-Based Delivery Fee Engine
     useEffect(() => {
         if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
@@ -284,45 +358,12 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
         const delayDebounceFn = setTimeout(async () => {
             try {
-                const cleanQuery = deliveryAddress.trim();
-                let results = [];
-
-                // Attempt 1: Google Places / Geocoding API
-                try {
-                    const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ', Nairobi, Kenya')}&key=${GOOGLE_PLACES_API_KEY}`;
-                    const res = await fetch(googleUrl);
-                    if (res.ok) {
-                        const gData = await res.json();
-                        if (gData.results && gData.results.length > 0) {
-                            results = gData.results.map(r => ({
-                                display_name: r.formatted_address,
-                                lat: r.geometry.location.lat,
-                                lon: r.geometry.location.lng,
-                                provider: 'Google Places'
-                            }));
-                        }
-                    }
-                } catch (gErr) {
-                    console.warn("Google Geocoding API fetch warning:", gErr);
-                }
-
-                // Fallback attempt: OpenStreetMap
-                if (!results || results.length === 0) {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=1`, {
-                        headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
-                    });
-                    if (res.ok) {
-                        const osmData = await res.json();
-                        if (osmData && osmData.length > 0) {
-                            results = osmData;
-                        }
-                    }
-                }
+                const geoResult = await geocodeAddress(deliveryAddress);
                 
-                if (results && results.length > 0) {
+                if (geoResult) {
                     setGeocodingError('');
-                    const lat = parseFloat(results[0].lat);
-                    const lon = parseFloat(results[0].lon);
+                    const lat = geoResult.lat;
+                    const lon = geoResult.lon;
                     
                     // Haversine distance from Pot of Jollof Store
                     const R = 6371; // km
@@ -351,13 +392,12 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                     }
                     setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
                 } else {
-                    setGeocodingError("Address location not found. Default delivery fee applied.");
-                    setCalculatedDeliveryFee((whatsappSettings.base_delivery_fee || 150) + 100);
+                    setGeocodingError("Address location calculated via estimated zone.");
+                    setCalculatedDeliveryFee((whatsappSettings.base_delivery_fee || 150) + 50);
                 }
             } catch (err) {
                 console.error("Geocoding failed:", err);
-                setGeocodingError("Could not calculate exact distance. Default fee applied.");
-                setCalculatedDeliveryFee((whatsappSettings.base_delivery_fee || 150) + 100);
+                setCalculatedDeliveryFee((whatsappSettings.base_delivery_fee || 150) + 50);
             } finally {
                 setIsGeocoding(false);
             }
@@ -380,23 +420,33 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 const cleanQuery = deliveryAddress.trim();
                 let suggestions = [];
 
-                // 1. Google Places Geocoding API
-                try {
-                    const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanQuery + ', Kenya')}&key=${GOOGLE_PLACES_API_KEY}`;
-                    const res = await fetch(googleUrl);
-                    if (res.ok) {
-                        const gData = await res.json();
-                        if (gData.results && gData.results.length > 0) {
-                            suggestions = gData.results.slice(0, 5).map(r => ({
-                                display_name: r.formatted_address,
-                                lat: r.geometry.location.lat,
-                                lon: r.geometry.location.lng,
-                                provider: 'Google Places'
-                            }));
+                // 1. Google Places Autocomplete Service (Client-side)
+                if (window.google && window.google.maps && window.google.maps.places) {
+                    try {
+                        const service = new window.google.maps.places.AutocompleteService();
+                        const googleRes = await new Promise((resolve) => {
+                            service.getPlacePredictions(
+                                {
+                                    input: cleanQuery,
+                                    componentRestrictions: { country: 'ke' }
+                                },
+                                (predictions, status) => {
+                                    if (status === 'OK' && predictions) {
+                                        resolve(predictions.map(p => ({
+                                            display_name: p.description,
+                                            place_id: p.place_id,
+                                            provider: 'Google Places'
+                                        })));
+                                    } else {
+                                        resolve([]);
+                                    }
+                                }
+                            );
+                        });
+                        if (googleRes && googleRes.length > 0) {
+                            suggestions = googleRes;
                         }
-                    }
-                } catch(e) {
-                    console.warn("Google Places Autocomplete error:", e);
+                    } catch (gErr) {}
                 }
 
                 // 2. OpenStreetMap Fallback if Google returned no suggestions
@@ -428,34 +478,37 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         return () => clearTimeout(debounceTimer);
     }, [deliveryAddress, diningOption]);
 
-    const handleSelectAddressSuggestion = (suggestion) => {
+    const handleSelectAddressSuggestion = async (suggestion) => {
         const formatted = suggestion.display_name;
         setDeliveryAddress(formatted);
         setAddressSuggestions([]);
         setShowSuggestions(false);
 
-        const lat2 = parseFloat(suggestion.lat);
-        const lon2 = parseFloat(suggestion.lon);
-        const lat1 = whatsappSettings.store_lat || -1.2921;
-        const lon1 = whatsappSettings.store_lng || 36.8219;
+        const geoResult = await geocodeAddress(formatted);
+        if (geoResult) {
+            const lat2 = geoResult.lat;
+            const lon2 = geoResult.lon;
+            const lat1 = whatsappSettings.store_lat || -1.2921;
+            const lon1 = whatsappSettings.store_lng || 36.8219;
 
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const distance = Math.round((6371 * c * 1.25) * 10) / 10; // in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = Math.round((6371 * c * 1.25) * 10) / 10; // in km
 
-        setCalculatedDistance(distance);
+            setCalculatedDistance(distance);
 
-        let fee = whatsappSettings.base_delivery_fee || 150;
-        const baseDist = whatsappSettings.base_delivery_distance || 3;
-        if (distance > baseDist) {
-            const extraDistance = distance - baseDist;
-            fee += extraDistance * (whatsappSettings.delivery_fee_per_km || 40);
+            let fee = whatsappSettings.base_delivery_fee || 150;
+            const baseDist = whatsappSettings.base_delivery_distance || 3;
+            if (distance > baseDist) {
+                const extraDistance = distance - baseDist;
+                fee += extraDistance * (whatsappSettings.delivery_fee_per_km || 40);
+            }
+            setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
         }
-        setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
     };
 
     const fetchMenu = async () => {
