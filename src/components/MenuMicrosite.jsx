@@ -716,7 +716,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         return () => clearTimeout(delayDebounceFn);
     }, [deliveryAddress, diningOption, whatsappSettings]);
 
-    // Ultra-fast Real-time Address Autocomplete lookup via Google Places API
+    // Ultra-fast Real-time Address Autocomplete lookup via Google Places API + Komoot Photon fallback
     useEffect(() => {
         if (diningOption !== 'Delivery' || !deliveryAddress.trim() || deliveryAddress.length < 2) {
             setAddressSuggestions([]);
@@ -742,13 +742,14 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                     componentRestrictions: { country: 'ke' }
                                 },
                                 (predictions, status) => {
-                                    if (status === 'OK' && predictions) {
+                                    if (status === 'OK' && predictions && predictions.length > 0) {
                                         resolve(predictions.map(p => ({
                                             display_name: p.description,
                                             place_id: p.place_id,
                                             provider: 'Google Places'
                                         })));
                                     } else {
+                                        console.warn("Google Places Autocomplete status:", status);
                                         resolve([]);
                                     }
                                 }
@@ -757,14 +758,45 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                         if (googleRes && googleRes.length > 0) {
                             suggestions = googleRes;
                         }
-                    } catch (gErr) {}
+                    } catch (gErr) {
+                        console.warn("Google Places JS error:", gErr);
+                    }
                 }
 
-                // 2. Fast Fallback if Google returned no suggestions
+                // 2. High-speed Fallback 1: Photon Komoot API (Instant Elastic Search index)
                 if (!suggestions || suggestions.length === 0) {
                     try {
                         const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 1000);
+                        const timeoutId = setTimeout(() => controller.abort(), 1200);
+                        const photonRes = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(cleanQuery + ' Nairobi Kenya')}&limit=5`, {
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+                        
+                        if (photonRes.ok) {
+                            const pData = await photonRes.json();
+                            if (pData && pData.features && pData.features.length > 0) {
+                                suggestions = pData.features.map(f => {
+                                    const props = f.properties;
+                                    const name = props.name || props.street || cleanQuery;
+                                    const city = props.city || props.county || 'Nairobi';
+                                    return {
+                                        display_name: `${name}, ${city}, Kenya`,
+                                        lat: f.geometry.coordinates[1],
+                                        lon: f.geometry.coordinates[0],
+                                        provider: 'Maps'
+                                    };
+                                });
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                // 3. Fallback 2: OpenStreetMap Nominatim API
+                if (!suggestions || suggestions.length === 0) {
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 1200);
                         let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Kenya')}&format=json&limit=5&countrycodes=ke`, {
                             signal: controller.signal,
                             headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' }
