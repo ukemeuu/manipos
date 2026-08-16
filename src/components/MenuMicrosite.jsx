@@ -71,10 +71,53 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
     const paybillNo = whatsappSettings?.paybill_number || '4122896';
     const whatsappPhone = orderSuccess?.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617';
 
-    // Real-time Supabase subscription to automatically update customer screen when cashier accepts/confirms payment
+    // Realtime WebSockets + 2s Polling Engine to automatically update customer screen when cashier accepts order
     useEffect(() => {
         if (!orderSuccess?.orderId) return;
 
+        const checkOrderStatus = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('pos_orders')
+                    .select('id, status, payment_status')
+                    .eq('id', orderSuccess.orderId)
+                    .maybeSingle();
+
+                if (data) {
+                    const statusLower = (data.status || '').toLowerCase().trim();
+                    const payStatusLower = (data.payment_status || '').toLowerCase().trim();
+
+                    // If operator/cashier accepted order or confirmed payment
+                    if (
+                        payStatusLower === 'paid' ||
+                        payStatusLower === 'approved' ||
+                        payStatusLower === 'verified' ||
+                        statusLower === 'accepted' ||
+                        statusLower === 'preparing' ||
+                        statusLower === 'in progress' ||
+                        statusLower === 'in_progress' ||
+                        statusLower === 'ready' ||
+                        statusLower === 'completed' ||
+                        statusLower === 'approved' ||
+                        statusLower === 'processing'
+                    ) {
+                        setOrderSuccess(prev => prev ? ({ ...prev, stage: 'confirmed' }) : null);
+                    } else if (statusLower === 'cancelled' || statusLower === 'declined' || statusLower === 'voided') {
+                        setOrderSuccess(prev => prev ? ({ ...prev, stage: 'cancelled' }) : null);
+                    }
+                }
+            } catch (e) {
+                console.warn("Polling order status error:", e);
+            }
+        };
+
+        // 1. Instant check on mount / state change
+        checkOrderStatus();
+
+        // 2. High-frequency 2-second polling interval
+        const pollInterval = setInterval(checkOrderStatus, 2000);
+
+        // 3. Realtime Supabase Subscription
         const channel = supabase
             .channel(`microsite_order_status_${orderSuccess.orderId}`)
             .on(
@@ -86,30 +129,13 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                     filter: `id=eq.${orderSuccess.orderId}`
                 },
                 (payload) => {
-                    const newRec = payload.new;
-                    if (!newRec) return;
-
-                    const statusLower = (newRec.status || '').toLowerCase();
-                    const payStatusLower = (newRec.payment_status || '').toLowerCase();
-
-                    if (
-                        payStatusLower === 'paid' ||
-                        payStatusLower === 'approved' ||
-                        statusLower === 'accepted' ||
-                        statusLower === 'preparing' ||
-                        statusLower === 'in progress' ||
-                        statusLower === 'ready' ||
-                        statusLower === 'completed'
-                    ) {
-                        setOrderSuccess(prev => prev ? ({ ...prev, stage: 'confirmed' }) : null);
-                    } else if (statusLower === 'cancelled' || statusLower === 'declined' || statusLower === 'voided') {
-                        setOrderSuccess(prev => prev ? ({ ...prev, stage: 'cancelled' }) : null);
-                    }
+                    checkOrderStatus();
                 }
             )
             .subscribe();
 
         return () => {
+            clearInterval(pollInterval);
             supabase.removeChannel(channel);
         };
     }, [orderSuccess?.orderId, setOrderSuccess]);
