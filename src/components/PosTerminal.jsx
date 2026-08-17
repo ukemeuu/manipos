@@ -1,22 +1,52 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { connectQZ, disconnectQZ, isQZConnected, onQZStatusChange, listPrinters, printOrFallback } from '../lib/qzPrint';
-import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus, Wifi, WifiOff } from 'lucide-react';
+import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
 import { CampaignsView } from './CampaignsView';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
-import { queueOfflineOrder, syncOfflineQueue } from '../lib/offlineQueue';
-import { logAuditEvent } from '../lib/auditLogger';
-import { createPosOrder } from '../services/data/orderService';
-import { getMenuItems, getCategories, getModifierGroups } from '../services/data/menuService';
-import { openLocalShift, closeLocalShift, getActiveLocalShift } from '../services/data/shiftService';
-import { onConnectivityChange, isOnline } from '../services/data/connectivityService';
-import { getFeedbackUrl } from '../lib/tenant';
 
 const MUTE_LOGO_URL = '/logo.png';
 
-export const BRAND_OPTIONS = [];
+export const BRAND_OPTIONS = [
+    {
+        id: 'POT OF JOLLOF',
+        name: 'Pot of Jollof',
+        tagline: 'Authentic West African Rice & Combos',
+        icon: '🫕',
+        logo: '/jollof_logo.png',
+        color: 'from-amber-500 to-emerald-600',
+        borderColor: 'border-emerald-500/30'
+    },
+    {
+        id: 'LITTLE LAGOS',
+        name: 'Little Lagos',
+        tagline: 'Lagos Street Food, Suya & Grills',
+        icon: '🌶️',
+        logo: '/lagos_logo.png',
+        color: 'from-orange-500 to-red-600',
+        borderColor: 'border-orange-500/30'
+    },
+    {
+        id: 'CAFE SWAHILI',
+        name: 'Cafe Swahili',
+        tagline: 'Coastal Swahili Delights & Coffees',
+        icon: '☕',
+        logo: '/swahili_logo.png',
+        color: 'from-blue-500 to-indigo-600',
+        borderColor: 'border-blue-500/30'
+    },
+    {
+        id: 'SAMAKI STREET',
+        name: 'Samaki Street',
+        tagline: 'Fresh Seafood, Fish & Grilled Platters',
+        icon: '🐟',
+        logo: '/samaki_logo.jpg',
+        color: 'from-cyan-500 to-teal-600',
+        borderColor: 'border-cyan-500/30'
+    }
+];
 
 const DEFAULT_CATEGORIES = [
     { name: 'Starters & Bites', icon: '🍢' },
@@ -210,7 +240,7 @@ export const deobfuscateTicket = (scrambledStr) => {
     return original;
 };
 
-export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onOpenDashboard, onOpenAppHome }) {
+export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }) {
     const isSystemAdmin = React.useMemo(() => {
         try {
             const stored = localStorage.getItem('pin_staff_user');
@@ -272,7 +302,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
     const [menu, setMenu] = useState([]);
     const [loadingMenu, setLoadingMenu] = useState(true);
-    const [activeBrand, setActiveBrand] = useState('All');
+    const [activeBrand, setActiveBrand] = useState(null);
     const [activeCategory, setActiveCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState([]);
@@ -352,7 +382,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const [customerNameText, setCustomerNameText] = useState('');
     const [customerType, setCustomerType] = useState('New'); // 'New' or 'Returning'
     const [selectedTable, setSelectedTable] = useState('');
-    const [selectedBrand, setSelectedBrand] = useState('All');
+    const [selectedBrand, setSelectedBrand] = useState('POT OF JOLLOF');
     const [orderChannel, setOrderChannel] = useState('Walk-in');
     const [diningOption, setDiningOption] = useState('Dine-in'); // 'Dine-in', 'Takeaway', 'Delivery'
     const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH', 'MPESA', 'CARD', etc.
@@ -369,7 +399,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     // Clear Sales overlay states
     const [clearSalesModalOpen, setClearSalesModalOpen] = useState(false);
     const [clearAction, setClearAction] = useState('Cancelled'); // 'Cancelled' or 'Declined'
-    const [clearBrand, setClearBrand] = useState('All');
+    const [clearBrand, setClearBrand] = useState('POT OF JOLLOF');
     const [clearChannel, setClearChannel] = useState('Walk-in');
     const [clearService, setClearService] = useState('Dine-in');
     const [clearPayment, setClearPayment] = useState('CASH');
@@ -420,7 +450,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const [newGuestLn, setNewGuestLn] = useState('');
     const [newGuestPhone, setNewGuestPhone] = useState('');
     const [newGuestEmail, setNewGuestEmail] = useState('');
-    const [newGuestBrand, setNewGuestBrand] = useState('All');
+    const [newGuestBrand, setNewGuestBrand] = useState('POT OF JOLLOF');
     const [newGuestChannel, setNewGuestChannel] = useState('Walk-in');
     const [newGuestNotes, setNewGuestNotes] = useState('');
     const [savingGuest, setSavingGuest] = useState(false);
@@ -440,7 +470,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         }
         setSavingGuest(true);
         try {
-            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : 'All');
+            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : 'POT OF JOLLOF');
             const channelVal = newGuestChannel || orderChannel || 'Walk-in';
             const userNotes = newGuestNotes.trim();
             const noteDetails = userNotes 
@@ -535,7 +565,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const firstName = nameParts[0];
             const lastName = nameParts.slice(1).join(' ');
 
-            const brandVal = order.brand || selectedBrand || 'All';
+            const brandVal = order.brand || selectedBrand || 'POT OF JOLLOF';
             const channelVal = order.order_channel || orderChannel || 'Walk-in';
             const orderSpend = parseFloat(order.total_amount || 0);
 
@@ -2979,16 +3009,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     }, [orderChannel, selectedBrand, activeBrand]);
 
     // Cart operations
-    const tenantBrands = useMemo(() => {
-        const brands = new Set();
-        (menu || []).forEach(item => {
-            if (item.brand && item.brand !== 'All' && item.brand !== 'ManiPOS') {
-                brands.add(item.brand);
-            }
-        });
-        return Array.from(brands);
-    }, [menu]);
-
     const addToCart = (item) => {
         setCartOpen(true);
         const currentBrand = (selectedBrand && selectedBrand !== 'All') ? selectedBrand : activeBrand;
@@ -3119,11 +3139,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         try {
             let orderData;
             const finalCustName = (diningOption === 'Dine-in' || diningOption === 'Dine Inn') ? selectedTable : (customerNameText.trim() || 'Walk-in Guest');
+            const typeNotesPart = `[Guest Tag: ${customerType === 'Returning' ? 'Returning Customer' : 'New Customer'}]`;
             const guestNotesPart = customerNameText.trim() ? `Customer: ${customerNameText.trim()}` : '';
             const splitNotesPart = paymentMethod === 'Split' 
                 ? `Split Pay: Cash (KES ${splitCash || 0}), M-Pesa (KES ${splitMpesa || 0}), Card (KES ${splitCard || 0})`
                 : '';
-            const typeNotesPart = `[Guest Tag: ${customerType === 'Returning' ? 'Returning Customer' : 'New Customer'}]`;
             const finalNotes = [typeNotesPart, guestNotesPart, splitNotesPart].filter(Boolean).join(', ');
 
             // Build the created_at timestamp.
@@ -3139,12 +3159,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 finalCreatedAt = new Date(localISO).toISOString();
             }
 
-            const idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-                ? crypto.randomUUID() 
-                : 'idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
-
             const orderPayload = {
-                idempotency_key: idempotencyKey,
                 customer_name: finalCustName,
                 customer_type: customerType,
                 dining_option: diningOption,
@@ -3165,10 +3180,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             let isEditOfOnlineOrder = false;
 
             if (isOffline) {
-                orderData = queueOfflineOrder(orderPayload);
+                orderData = createOfflineOrderData(orderPayload);
             } else {
                 if (editingOrderId && !String(editingOrderId).startsWith('offline-')) {
                     // ── EDIT EXISTING ONLINE ORDER ──────────────────────────────────────
+                    // Keep edit and new-order paths strictly separate so a delete failure
+                    // never silently falls back to offline and double-inserts items.
                     isEditOfOnlineOrder = true;
                     const { data: updData, error: updErr } = await supabase
                         .from('pos_orders')
@@ -3180,6 +3197,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     if (updErr) throw updErr;
                     orderData = updData;
 
+                    // Delete ALL old line items before inserting new ones.
+                    // If this fails we throw — never fall back to offline for an edit
+                    // because that would create a second order and leave the original
+                    // items untouched, causing doubled rows on the next fetch.
                     const { error: deleteError } = await supabase
                         .from('pos_order_items')
                         .delete()
@@ -3187,12 +3208,32 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
                     if (deleteError) throw deleteError;
                 } else {
-                    // ── NEW LOCAL-FIRST ORDER ────────────────────────────────────────────────
+                    // ── NEW ORDER ────────────────────────────────────────────────────────
                     try {
-                        orderData = await createPosOrder(orderPayload);
+                        const { data, error } = await supabase
+                            .from('pos_orders')
+                            .insert([orderPayload])
+                            .select()
+                            .single();
+
+                        if (error) throw error;
+                        orderData = data;
                     } catch (netErr) {
-                        console.warn('[PosTerminal] Order service fallback:', netErr);
-                        orderData = queueOfflineOrder(orderPayload);
+                        const isTrueNetworkError = !navigator.onLine || 
+                            netErr?.name === 'TypeError' || 
+                            String(netErr?.message || '').toLowerCase().includes('failed to fetch') || 
+                            String(netErr?.message || '').toLowerCase().includes('networkerror') ||
+                            String(netErr?.message || '').toLowerCase().includes('network error');
+
+                        if (isTrueNetworkError) {
+                            console.warn('Supabase insert failed due to network offline, creating local offline order:', netErr);
+                            orderData = createOfflineOrderData(orderPayload);
+                        } else {
+                            console.error('Database insertion error for order:', netErr);
+                            alert(`Order submission failed: ${netErr.message || netErr.details || 'Database error'}`);
+                            setSubmitting(false);
+                            return;
+                        }
                     }
                 }
             }
@@ -3458,24 +3499,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             <header className="bg-white border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4 flex flex-col lg:flex-row gap-3 lg:justify-between lg:items-center shrink-0 shadow-sm relative z-10">
                 <div className="flex items-center justify-between lg:justify-start gap-3 w-full lg:w-auto">
                     <div className="flex items-center gap-3">
-                        {onOpenDashboard && (
-                            <button
-                                onClick={onOpenDashboard}
-                                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-                            >
-                                <span>Management Dashboard</span>
-                            </button>
-                        )}
-                        {onOpenAppHome && (
-                            <button
-                                onClick={onOpenAppHome}
-                                className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-                            >
-                                <span>ManiPOS Home</span>
-                            </button>
-                        )}
+                        <button onClick={onSignOut} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                            <ArrowLeft size={20} />
+                        </button>
                         <div>
-                            <h1 className="text-base sm:text-lg font-black text-gray-900 leading-tight">POS Register</h1>
+                            <h1 className="text-base sm:text-lg font-black text-gray-900 leading-tight">POS Terminal</h1>
                             <p className="text-[9px] sm:text-[10px] font-bold text-primary uppercase tracking-wider">Operator: {staffName || 'Cashier'}</p>
                         </div>
                     </div>
@@ -3559,6 +3587,20 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                         >
                             📢 Campaigns
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveView('feedback')}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all relative flex items-center gap-1.5 ${
+                                activeView === 'feedback'
+                                    ? 'bg-emerald-600 text-white font-black shadow-sm'
+                                    : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                        >
+                            <span>💬 Customer Feedback</span>
+                            <span className="px-1.5 py-0.2 bg-red-600 text-white text-[9px] font-black rounded-full animate-pulse shadow-sm">
+                                +1
+                            </span>
+                        </button>
                         {isSystemAdmin && (
                             <button
                                 type="button"
@@ -3572,17 +3614,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 Staff & Terminals
                             </button>
                         )}
-                        <button
-                            type="button"
-                            onClick={() => setActiveView('feedback')}
-                            className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                                activeView === 'feedback'
-                                    ? 'bg-emerald-600 text-white font-black shadow-sm'
-                                    : 'text-gray-400 hover:text-gray-600'
-                            }`}
-                        >
-                            💬 Customer Feedback
-                        </button>
                     </div>
 
                     <button
@@ -3606,9 +3637,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     <button
                         type="button"
                         onClick={onSignOut}
-                        className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-gray-200 shadow-sm cursor-pointer"
+                        className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-gray-200 shadow-sm"
                     >
-                        Sign Out
+                        Exit (Keep Shift)
                     </button>
 
                     {/* QZ Tray connection status indicator */}
@@ -3708,7 +3739,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             {/* Main Terminal Split Screen */}
             <div className="flex-1 flex overflow-hidden relative">
                 {/* Left Panel: Menu Item Selector / Order History View */}
-                {activeView === 'menu' && (!activeBrand || activeBrand === 'All') && BRAND_OPTIONS.length > 0 ? (
+                {activeView === 'menu' && !activeBrand ? (
                     <div className={`flex-1 flex flex-col items-center justify-center p-6 md:p-10 bg-slate-950 text-white overflow-y-auto ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200 relative`}>
                         {/* Background ambient lighting */}
                         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -3806,23 +3837,15 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                             </span>
                                         </div>
                                     )}
-                                    {/* Switch brand button — ONLY visible for multi-brand tenants (2+ brands) */}
-                                    {tenantBrands.length >= 2 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const currentIdx = tenantBrands.indexOf(activeBrand);
-                                                const nextIdx = currentIdx < 0 ? 0 : (currentIdx + 1) % tenantBrands.length;
-                                                const nextBrand = tenantBrands[nextIdx] || 'All';
-                                                setActiveBrand(nextBrand);
-                                                setSelectedBrand(nextBrand);
-                                            }}
-                                            className="flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700 px-3.5 py-2 rounded-2xl font-bold text-xs shadow-sm transition-all cursor-pointer"
-                                        >
-                                            <ArrowLeft size={13} />
-                                            <span>Switch Brand ({activeBrand || 'All'})</span>
-                                        </button>
-                                    )}
+                                    {/* Switch brand button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveBrand(null)}
+                                        className="flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700 px-3.5 py-2 rounded-2xl font-bold text-xs shadow-sm transition-all"
+                                    >
+                                        <ArrowLeft size={13} />
+                                        <span>Switch Brand</span>
+                                    </button>
                                 </div>
                             );
                         })()}
@@ -9700,7 +9723,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     );
 }
 
-const FEEDBACK_URL = getFeedbackUrl(typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('tenant') || 'demo') : 'demo');
+const FEEDBACK_URL = "https://potofjollof.manipos.com/feedback";
 const FEEDBACK_QR_CODE = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(FEEDBACK_URL)}`;
 
 
@@ -9781,7 +9804,7 @@ function printCashierSlips(receipt) {
           <p class="sub">Tel: 0795384140 / 0799034617</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -9814,7 +9837,7 @@ function printCashierSlips(receipt) {
             <p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -9888,7 +9911,7 @@ function printCashierSlips(receipt) {
         <div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div>
         <div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -9989,7 +10012,7 @@ function printKitchenSlips(receipt) {
           <p class="sub">Tel: 0795384140 / 0799034617</p>
         </div>
         <div class="divider"></div>
-        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
+        <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
@@ -10106,7 +10129,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
 
     const itemRowsFull = dedupedItems.map(item => `<tr><td style="width:50%;max-width:50%;word-break:break-word;padding:2px 0;">${item.item_name}${item.instructions ? `<br><span style="font-size:9px;font-weight:700;">* ${item.instructions}</span>` : ''}</td><td class="c" style="width:10%;text-align:center;padding:2px 0;">${item.quantity}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${item.price.toLocaleString()}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('');
     const itemRowsPack = dedupedItems.map(item => `<tr><td class="c" style="font-size:12px;font-weight:900;padding:3px 0;width:15%;vertical-align:top;">[ &nbsp; ]</td><td style="font-size:12px;font-weight:900;padding:3px 0;word-break:break-word;width:70%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">➜ ${item.instructions}</span>` : ''}</td><td class="c" style="font-size:14px;font-weight:900;padding:3px 0;vertical-align:top;width:15%;">${item.quantity}</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
     const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p><p class="sub">Tel: 0795384140 / 0799034617</p><p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;"><div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div><div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div><div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div></div>`}<div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
     const slip3 = `<div class="page"><div class="center"><div class="badge">PACKER / DISPATCH SLIP</div></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:25%;text-align:center;">PACKED</th><th style="font-size:12px;width:60%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:15%;text-align:center;">QTY</th></tr></thead><tbody><tr><td colspan="3"><div class="divider"></div></td></tr>${itemRowsPack}</tbody></table><div class="divider-solid"></div><div class="footer">PACKER SIGN: _______________</div></div>`;
     const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
@@ -10116,7 +10139,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
 function _buildKitchenHTML(receipt, dateFormatted) {
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
     const rows = receipt.items.map(item => `<tr><td style="font-size:13px;font-weight:900;padding:3px 0;word-break:break-word;width:80%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">[ ${item.instructions} ]</span>` : ''}</td><td class="c" style="font-size:16px;font-weight:900;padding:3px 0;vertical-align:top;width:20%;text-align:right;">${item.quantity}x</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
     const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">Tel: 0795384140 / 0799034617</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
 }
@@ -10254,7 +10277,7 @@ function ReceiptPrintModal({ receipt: rawReceipt, onClose, onCloseAndExit, front
 </div>
 <div class="divider"></div>
 
-<div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
+<div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
 <div class="meta-row"><span class="meta-label">TICKET NO:</span><span class="meta-value">#${obfuscateTicket(receipt.ticket_number)}</span></div>
 <div class="meta-row"><span class="meta-label">TIME IN:</span><span class="meta-value">${dateFormatted}</span></div>
 <div class="meta-row"><span class="meta-label">TIME OUT:</span><span class="meta-value">___________________</span></div>
@@ -10368,7 +10391,7 @@ ${splitNote}
                     </div>
 
                     <div className="space-y-1 text-[10px] mb-4">
-                        <div className="flex justify-between"><span className="font-black">BRAND:</span><span className="font-bold">{(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? (receipt.restaurant_name || 'POS TERMINAL') : receipt.brand).toUpperCase()}</span></div>
+                        <div className="flex justify-between"><span className="font-black">BRAND:</span><span className="font-bold">{(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div>
                         <div className="flex justify-between"><span className="font-black">TICKET NO:</span><span className="font-black">#{obfuscateTicket(receipt.ticket_number)}</span></div>
                         <div className="flex justify-between"><span className="font-black">TIME IN:</span><span className="font-bold">{dateFormatted}</span></div>
                         <div className="flex justify-between"><span className="font-black">TIME OUT:</span><span className="font-bold">___________________</span></div>
