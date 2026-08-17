@@ -64,40 +64,61 @@ export function LandingPage({ onProceedToLogin }) {
   const [signInPassword, setSignInPassword] = useState('');
   const [signInLoading, setSignInLoading] = useState(false);
   const [signInError, setSignInError] = useState('');
-  const [onboardData, setOnboardData] = useState({ name: '', slug: '', managerName: '', email: '', pin: '1234', phone: '' });
+  const [onboardData, setOnboardData] = useState({ 
+    name: '', 
+    slug: '', 
+    email: '', 
+    password: '', 
+    managerName: '', 
+    locationsCount: '1 Location', 
+    brandsCount: 'Single Brand (1)', 
+    phone: '' 
+  });
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardError, setOnboardError] = useState('');
   const [onboardSuccess, setOnboardSuccess] = useState(null);
 
   const handleSelfServiceOnboard = async (e) => {
     e.preventDefault();
-    if (!onboardData.name || !onboardData.slug || !onboardData.pin) {
-      setOnboardError('Please enter Store Name, Subdomain Code, and 4-Digit Manager PIN.');
+    if (!onboardData.name || !onboardData.slug || !onboardData.email || !onboardData.password) {
+      setOnboardError('Please fill in Restaurant Name, Subdomain Code, Email Address, and Password.');
+      return;
+    }
+    if (!onboardData.email.includes('@') || !onboardData.email.includes('.')) {
+      setOnboardError('Please enter a valid email address.');
+      return;
+    }
+    if (onboardData.password.length < 8) {
+      setOnboardError('Password must be at least 8 characters long.');
       return;
     }
     setOnboardLoading(true);
     setOnboardError('');
     try {
       const cleanSlug = onboardData.slug.toLowerCase().trim();
-      const managerName = onboardData.managerName || 'Store Manager';
+      const cleanEmail = onboardData.email.toLowerCase().trim();
+      const managerName = onboardData.managerName || 'Store Owner';
       let resultData = null;
 
       try {
         const { data, error } = await supabase.rpc('create_new_restaurant_tenant', {
           p_name: onboardData.name,
           p_slug: cleanSlug,
+          p_email: cleanEmail,
+          p_password: onboardData.password,
           p_manager_name: managerName,
-          p_pin: onboardData.pin,
+          p_locations: onboardData.locationsCount,
+          p_brands: onboardData.brandsCount,
           p_phone: onboardData.phone || null
         });
 
         if (!error && data && data.success) {
           resultData = data;
-        } else if (data && !data.success && data.error && data.error.includes('already taken')) {
+        } else if (data && !data.success && data.error) {
           throw new Error(data.error);
         }
       } catch (rpcErr) {
-        if (rpcErr.message && rpcErr.message.includes('already taken')) {
+        if (rpcErr.message && (rpcErr.message.includes('already taken') || rpcErr.message.includes('already exists') || rpcErr.message.includes('at least 8'))) {
           throw rpcErr;
         }
         console.warn('[Onboarding] RPC notice, using direct table fallback:', rpcErr);
@@ -113,6 +134,16 @@ export function LandingPage({ onProceedToLogin }) {
 
         if (existingStore) {
           throw new Error('Restaurant subdomain slug is already taken. Please choose another name.');
+        }
+
+        const { data: existingStaff } = await supabase
+          .from('staff_access')
+          .select('id')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (existingStaff) {
+          throw new Error('An account with this email address already exists. Please sign in.');
         }
 
         const { data: newStore, error: createStoreErr } = await supabase
@@ -131,17 +162,17 @@ export function LandingPage({ onProceedToLogin }) {
         await supabase.from('staff_access').insert([{
           restaurant_id: newStore.id,
           name: managerName,
-          email: `${cleanSlug}@demostore.com`,
+          email: cleanEmail,
           role: 'admin',
-          pin_code: onboardData.pin
+          pin_code: null
         }]);
 
-        if (onboardData.phone) {
-          await supabase.from('restaurant_settings').insert([{
-            restaurant_id: newStore.id,
-            phone: onboardData.phone
-          }]);
-        }
+        await supabase.from('restaurant_settings').insert([{
+          restaurant_id: newStore.id,
+          phone: onboardData.phone || null,
+          locations_count: onboardData.locationsCount,
+          brands_count: onboardData.brandsCount
+        }]);
 
         resultData = {
           success: true,
@@ -158,12 +189,11 @@ export function LandingPage({ onProceedToLogin }) {
     } catch (err) {
       const errMsg = err.message || 'Error creating store account.';
       if (errMsg.includes('schema cache')) {
-        // Graceful fallback for pending store registration display
         const pendingFallback = {
           success: true,
           restaurant_name: onboardData.name,
           restaurant_slug: onboardData.slug.toLowerCase().trim(),
-          manager_name: onboardData.managerName || 'Store Manager'
+          manager_name: onboardData.managerName || 'Store Owner'
         };
         setOnboardSuccess(pendingFallback);
         localStorage.removeItem('pin_staff_user');
@@ -1004,11 +1034,37 @@ export function LandingPage({ onProceedToLogin }) {
                     </div>
                   )}
 
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        placeholder="owner@myrestaurant.com"
+                        value={onboardData.email}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, email: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Owner Account Password</label>
+                      <input
+                        type="password"
+                        minLength={8}
+                        placeholder="Min 8 characters"
+                        value={onboardData.password}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, password: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">Restaurant / Store Name</label>
                     <input
                       type="text"
-                      placeholder="e.g. Swahili Kitchen"
+                      placeholder="e.g. Swahili Pot"
                       value={onboardData.name}
                       onChange={(e) => {
                         const nameVal = e.target.value;
@@ -1025,7 +1081,7 @@ export function LandingPage({ onProceedToLogin }) {
                     <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-400">
                       <input
                         type="text"
-                        placeholder="swahilikitchen"
+                        placeholder="swahilipot"
                         value={onboardData.slug}
                         onChange={(e) => setOnboardData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') }))}
                         className="bg-transparent border-none text-white focus:outline-none w-full font-mono text-xs"
@@ -1037,39 +1093,58 @@ export function LandingPage({ onProceedToLogin }) {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Manager Name</label>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Number of Locations</label>
+                      <select
+                        value={onboardData.locationsCount}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, locationsCount: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
+                      >
+                        <option value="1 Location">1 Location</option>
+                        <option value="2 - 5 Locations">2 - 5 Locations</option>
+                        <option value="6 - 15 Locations">6 - 15 Locations</option>
+                        <option value="16+ Locations">16+ Locations</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Number of Brands</label>
+                      <select
+                        value={onboardData.brandsCount}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, brandsCount: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
+                      >
+                        <option value="Single Brand (1)">Single Brand (1)</option>
+                        <option value="2 - 5 Brands (Virtual Kitchens)">2 - 5 Brands (Virtual Kitchens)</option>
+                        <option value="6+ Brands">6+ Brands (Enterprise)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Owner / Manager Name</label>
                       <input
                         type="text"
-                        placeholder="John Doe"
+                        placeholder="e.g. Mike"
                         value={onboardData.managerName}
                         onChange={(e) => setOnboardData(prev => ({ ...prev, managerName: e.target.value }))}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">4-Digit Security PIN</label>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Contact Phone (Optional)</label>
                       <input
-                        type="password"
-                        maxLength={4}
-                        placeholder="1234"
-                        value={onboardData.pin}
-                        onChange={(e) => setOnboardData(prev => ({ ...prev, pin: e.target.value }))}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-mono text-center font-bold tracking-widest"
-                        required
+                        type="text"
+                        placeholder="+254 700 000 000"
+                        value={onboardData.phone}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, phone: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Contact Phone (Optional)</label>
-                    <input
-                      type="text"
-                      placeholder="+254 700 000 000"
-                      value={onboardData.phone}
-                      onChange={(e) => setOnboardData(prev => ({ ...prev, phone: e.target.value }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 font-medium"
-                    />
-                  </div>
+                  <p className="text-[11px] text-slate-400 bg-slate-950/60 border border-slate-800/80 p-2.5 rounded-xl leading-normal">
+                    🔒 <strong className="text-amber-400">Security Note:</strong> Password must be at least 8 characters. Staff PINs for cashiers and waiters are assigned separately inside the Admin Dashboard after platform account approval.
+                  </p>
 
                   <button
                     type="submit"

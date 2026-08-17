@@ -40,9 +40,30 @@ export function SuperAdminDashboard() {
         .order('created_at', { ascending: false });
 
       if (storesErr) throw storesErr;
-      setRestaurants(stores || []);
 
-      // 2. Fetch total orders across platform
+      // 2. Fetch settings and staff access metadata
+      const { data: settingsList } = await supabase.from('restaurant_settings').select('restaurant_id, phone, locations_count, brands_count');
+      const { data: staffList } = await supabase.from('staff_access').select('restaurant_id, name, email, role');
+
+      const settingsMap = {};
+      (settingsList || []).forEach(s => { settingsMap[s.restaurant_id] = s; });
+
+      const ownerMap = {};
+      (staffList || []).forEach(st => {
+        if (!ownerMap[st.restaurant_id] || st.role === 'admin') {
+          ownerMap[st.restaurant_id] = st;
+        }
+      });
+
+      const enrichedStores = (stores || []).map(st => ({
+        ...st,
+        settings: settingsMap[st.id] || {},
+        owner: ownerMap[st.id] || {}
+      }));
+
+      setRestaurants(enrichedStores);
+
+      // 3. Fetch total orders across platform
       const { count, error: countErr } = await supabase
         .from('pos_orders')
         .select('*', { count: 'exact', head: true });
@@ -262,6 +283,7 @@ export function SuperAdminDashboard() {
                 <tr>
                   <th className="p-4">Restaurant Store</th>
                   <th className="p-4">Tenant Slug</th>
+                  <th className="p-4">Owner & Scale</th>
                   <th className="p-4">Status</th>
                   <th className="p-4">Created Date</th>
                   <th className="p-4">Trial Expiry</th>
@@ -271,14 +293,14 @@ export function SuperAdminDashboard() {
               <tbody className="divide-y divide-slate-900">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-slate-500 font-semibold">
+                    <td colSpan={7} className="p-12 text-center text-slate-500 font-semibold">
                       <Loader2 size={28} className="animate-spin mx-auto mb-2 text-amber-400" />
                       Loading platform restaurant tenants...
                     </td>
                   </tr>
                 ) : filteredStores.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-slate-500 font-semibold">
+                    <td colSpan={7} className="p-12 text-center text-slate-500 font-semibold">
                       No restaurant tenants found matching your filter criteria.
                     </td>
                   </tr>
@@ -296,6 +318,19 @@ export function SuperAdminDashboard() {
 
                         <td className="p-4 font-mono text-xs text-amber-400/90 font-bold">
                           {store.slug}
+                        </td>
+
+                        <td className="p-4 text-xs space-y-1">
+                          <div className="font-semibold text-slate-200">{store.owner?.name || 'Store Owner'}</div>
+                          <div className="font-mono text-[11px] text-slate-400">{store.owner?.email || `${store.slug}@demostore.com`}</div>
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-[10px] font-bold text-emerald-400 rounded-md">
+                              {store.settings?.locations_count || '1 Location'}
+                            </span>
+                            <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-[10px] font-bold text-amber-400 rounded-md">
+                              {store.settings?.brands_count || 'Single Brand'}
+                            </span>
+                          </div>
                         </td>
 
                         <td className="p-4">

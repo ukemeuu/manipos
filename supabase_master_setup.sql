@@ -495,22 +495,44 @@ CREATE POLICY "Allow public insert leads" ON public.leads FOR INSERT TO public W
 DROP POLICY IF EXISTS "Allow authenticated select leads" ON public.leads;
 CREATE POLICY "Allow authenticated select leads" ON public.leads FOR SELECT TO authenticated USING (true);
 
+ALTER TABLE public.restaurant_settings ADD COLUMN IF NOT EXISTS locations_count TEXT DEFAULT '1 Location';
+ALTER TABLE public.restaurant_settings ADD COLUMN IF NOT EXISTS brands_count TEXT DEFAULT 'Single Brand (1)';
+
+-- Grant schema & table permissions to PostgREST roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+
 -- 8. Automated Self-Service Restaurant Onboarding RPC Function
 DROP FUNCTION IF EXISTS public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.create_new_restaurant_tenant(
     p_name TEXT,
     p_slug TEXT,
+    p_email TEXT,
+    p_password TEXT,
     p_manager_name TEXT,
-    p_pin TEXT,
+    p_locations TEXT DEFAULT '1 Location',
+    p_brands TEXT DEFAULT 'Single Brand (1)',
     p_phone TEXT DEFAULT NULL
 ) RETURNS JSONB AS $$
 DECLARE
     v_clean_slug TEXT;
+    v_clean_email TEXT;
     v_restaurant_id UUID;
     v_staff_id UUID;
 BEGIN
     v_clean_slug := lower(trim(p_slug));
+    v_clean_email := lower(trim(p_email));
+
+    IF length(p_password) < 8 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Password must be at least 8 characters long.'
+        );
+    END IF;
 
     -- Check if slug already exists
     IF EXISTS (SELECT 1 FROM public.restaurants WHERE slug = v_clean_slug) THEN
@@ -520,29 +542,42 @@ BEGIN
         );
     END IF;
 
+    -- Check if email already exists in staff_access
+    IF EXISTS (SELECT 1 FROM public.staff_access WHERE lower(email) = v_clean_email) THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'An account with this email address already exists. Please sign in.'
+        );
+    END IF;
+
     -- 1. Create Restaurant Record (Requires Super Admin approval before POS terminal access)
     INSERT INTO public.restaurants (name, slug, status, is_active)
     VALUES (p_name, v_clean_slug, 'pending', true)
     RETURNING id INTO v_restaurant_id;
 
-    -- 2. Create Initial Manager Account with Hashed PIN & Email
+    -- 2. Create Owner Account with Email & Hashed Password (PIN is assigned later in dashboard for staff)
     INSERT INTO public.staff_access (restaurant_id, name, email, role, pin_code, pin_hash)
     VALUES (
         v_restaurant_id,
         p_manager_name,
-        v_clean_slug || '@demostore.com',
+        v_clean_email,
         'admin',
-        p_pin,
-        crypt(p_pin, gen_salt('bf'))
+        NULL,
+        crypt(p_password, gen_salt('bf'))
     )
     RETURNING id INTO v_staff_id;
 
-    -- 3. Create Default Restaurant Settings
-    INSERT INTO public.restaurant_settings (restaurant_id, phone)
+    -- 3. Create Default Restaurant Settings with Locations & Brands Count
+    INSERT INTO public.restaurant_settings (restaurant_id, phone, locations_count, brands_count)
     VALUES (
         v_restaurant_id,
-        p_phone
-    ) ON CONFLICT (restaurant_id) DO NOTHING;
+        p_phone,
+        COALESCE(p_locations, '1 Location'),
+        COALESCE(p_brands, 'Single Brand (1)')
+    ) ON CONFLICT (restaurant_id) DO UPDATE
+    SET phone = EXCLUDED.phone,
+        locations_count = EXCLUDED.locations_count,
+        brands_count = EXCLUDED.brands_count;
 
     RETURN jsonb_build_object(
         'success', true,
@@ -559,18 +594,36 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-GRANT EXECUTE ON FUNCTION public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 
--- Overload signature for PostgREST schema cache compatibility (p_manager_name, p_name, p_phone, p_pin, p_slug)
+-- Overload signature for PostgREST schema cache compatibility
 CREATE OR REPLACE FUNCTION public.create_new_restaurant_tenant(
+    p_brands TEXT,
+    p_email TEXT,
+    p_locations TEXT,
     p_manager_name TEXT,
     p_name TEXT,
+    p_password TEXT,
     p_phone TEXT,
-    p_pin TEXT,
     p_slug TEXT
 ) RETURNS JSONB AS $$
 BEGIN
-    RETURN public.create_new_restaurant_tenant(p_name, p_slug, p_manager_name, p_pin, p_phone);
+    RETURN public.create_new_restaurant_tenant(p_name, p_slug, p_email, p_password, p_manager_name, p_locations, p_brands, p_phone);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.create_new_restaurant_tenant(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- Backward compatibility 5-parameter overload
+CREATE OR REPLACE FUNCTION public.create_new_restaurant_tenant(
+    p_name TEXT,
+    p_slug TEXT,
+    p_manager_name TEXT,
+    p_pin TEXT,
+    p_phone TEXT DEFAULT NULL
+) RETURNS JSONB AS $$
+BEGIN
+    RETURN public.create_new_restaurant_tenant(p_name, p_slug, p_slug || '@demostore.com', p_pin || '0000', p_manager_name, '1 Location', 'Single Brand (1)', p_phone);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
