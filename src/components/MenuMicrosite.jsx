@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Clock, ShoppingCart, Search, Utensils, Award, CheckCircle, ArrowLeft, Loader2, Plus, Minus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { recordQrScan } from '../lib/qrScanService';
 
 export const BRAND_CONFIGS = {
     'POT OF JOLLOF': {
@@ -28,6 +29,23 @@ export const BRAND_CONFIGS = {
         logo: '/lagos_logo.png',
         color: 'from-neutral-900 to-black'
     }
+};
+
+export const hasCustomImage = (item) => {
+    if (!item?.image_url) return false;
+    const url = String(item.image_url).trim();
+    if (url.startsWith("/menu_items") || url.includes("image_") || url.startsWith("/images/")) return false;
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:image/")) {
+        return true;
+    }
+    return false;
+};
+
+export const getItemImage = (item) => {
+    if (hasCustomImage(item)) {
+        return item.image_url.trim();
+    }
+    return "/jollof_logo.png";
 };
 
 export const getBrandForItem = (item) => {
@@ -68,7 +86,8 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
     const [inputMpesaCode, setInputMpesaCode] = useState(orderSuccess?.mpesaCode || '');
     const [isUpdating, setIsUpdating] = useState(false);
 
-    const paybillNo = whatsappSettings?.paybill_number || '4122896';
+    const paybillNo = whatsappSettings?.paybill_number || '542542';
+    const accountNo = whatsappSettings?.account_number || '992422';
     const whatsappPhone = orderSuccess?.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617';
 
     // Realtime WebSockets + 2s Polling Engine to automatically update customer screen when cashier accepts order
@@ -238,12 +257,12 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                             <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
                                 <div>
                                     <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">Account Number</span>
-                                    <span className="text-xl font-black text-black font-mono">#{orderSuccess.ticketNumber}</span>
+                                    <span className="text-xl font-black text-black font-mono">{accountNo}</span>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        navigator.clipboard.writeText(`#${orderSuccess.ticketNumber}`);
+                                        navigator.clipboard.writeText(accountNo);
                                         setCopiedAccount(true);
                                         setTimeout(() => setCopiedAccount(false), 2000);
                                     }}
@@ -419,6 +438,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     
     // Checkout form state
     const [customerName, setCustomerName] = useState('');
+    const [userTypedName, setUserTypedName] = useState(false);
     const [diningOption, setDiningOption] = useState('Dine-in'); // 'Dine-in', 'Takeaway', or 'Delivery'
     const [deliveryAddress, setDeliveryAddress] = useState('');
     const [tableNumber, setTableNumber] = useState('');
@@ -450,6 +470,8 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     // WhatsApp bot & geocoding states
     const [whatsappSettings, setWhatsappSettings] = useState({
+        paybill_number: '542542',
+        account_number: '992422',
         base_delivery_fee: 100,
         base_delivery_distance: 3,
         delivery_fee_per_km: 85, // 85 KES per km
@@ -496,7 +518,18 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     };
 
     useEffect(() => {
+        document.title = "Pot of Jollof | Order Online & Digital Menu";
         fetchMenu();
+
+        // Track QR Code Scan on digital menu landing
+        try {
+            recordQrScan({
+                qr_code_id: 'menu_qr',
+                qr_label: 'Pot of Jollof Digital Menu',
+                destination_url: window.location.href,
+                channel: 'Digital Menu QR'
+            });
+        } catch (e) {}
         
         // Fetch WhatsApp channel delivery configs if available
         const fetchWaSettings = async () => {
@@ -508,6 +541,8 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                     .maybeSingle();
                 if (data) {
                     setWhatsappSettings({
+                        paybill_number: data.paybill_number || '542542',
+                        account_number: data.account_number || '992422',
                         base_delivery_fee: data.base_delivery_fee ?? 100,
                         base_delivery_distance: data.base_delivery_distance ?? 3,
                         delivery_fee_per_km: data.delivery_fee_per_km ?? 50,
@@ -522,11 +557,21 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         };
         fetchWaSettings();
 
-        // Restore guest session or auto login from URL query parameter ?phone=
+        // Restore guest session or auto login from URL query parameter ?phone= or ?table=
         const urlParams = new URLSearchParams(window.location.search);
         const queryPhone = urlParams.get('phone');
+        const queryTable = urlParams.get('table') || urlParams.get('t') || urlParams.get('table_number');
         
-        if (queryPhone) {
+        if (queryTable) {
+            setDiningOption('Dine-in');
+            const cleanTable = queryTable.toLowerCase().startsWith('table') ? queryTable : `Table ${queryTable}`;
+            setTableNumber(cleanTable);
+            // Clear any old delivery guest session so table orders don't inherit another person's name
+            localStorage.removeItem('mute_kitchens_guest');
+            setGuestUser(null);
+            setCustomerName('');
+            setUserTypedName(false);
+        } else if (queryPhone) {
             const cleanPhone = queryPhone.trim().replace('+', '');
             (async () => {
                 try {
@@ -580,7 +625,6 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     setGuestUser(parsed);
-                    setCustomerName(`${parsed.first_name || ''} ${parsed.last_name || ''}`.trim());
                     if (parsed.delivery_address) {
                         setDeliveryAddress(parsed.delivery_address);
                     }
@@ -899,7 +943,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const fetchMenu = async () => {
         // Instant load from localStorage cache for 0ms initial load
         try {
-            const cachedMenu = localStorage.getItem('poj_microsite_menu_cache');
+            const cachedMenu = localStorage.getItem('poj_microsite_menu_cache_v2');
             if (cachedMenu) {
                 const parsed = JSON.parse(cachedMenu);
                 if (parsed && parsed.length > 0) {
@@ -917,10 +961,10 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 .order('name', { ascending: true });
 
             if (error) throw error;
-            const validData = (data || []).filter(item => item.show_on_microsite !== false);
+            const validData = (data || []).filter(item => item.show_on_microsite !== false && !item.name.toUpperCase().includes('DELIVERY FEE'));
             setMenu(validData);
             try {
-                localStorage.setItem('poj_microsite_menu_cache', JSON.stringify(validData));
+                localStorage.setItem('poj_microsite_menu_cache_v2', JSON.stringify(validData));
             } catch(e) {}
 
             // Extract unique categories and respect custom category order
@@ -1206,54 +1250,30 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
         setSubmitting(true);
         try {
-            // Find a vacant table if Dine-in
-            let assignedTable = '';
-            if (diningOption === 'Dine-in') {
-                const { data: openOrders, error: openOrdersError } = await supabase
-                    .from('pos_orders')
-                    .select('customer_name')
-                    .not('status', 'in', '("completed","cancelled","voided","Completed","Cancelled","Voided")')
-                    .in('dining_option', ['Dine Inn', 'Dine-in']);
-                
-                if (openOrdersError) throw openOrdersError;
-                
-                const occupiedTables = new Set(
-                    (openOrders || []).map(o => (o.customer_name || '').trim().toLowerCase())
-                );
-                
-                const allTables = [
-                    'Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5', 'Table 6',
-                    'Table 7', 'Table 8', 'Table 9', 'Table 10', 'Table 11', 'Table 12'
-                ];
-                
-                // Find the first table that is NOT occupied
-                const vacantTable = allTables.find(table => !occupiedTables.has(table.toLowerCase()));
-                
-                if (!vacantTable) {
-                    alert('All tables are currently occupied. Please select Takeaway or consult staff.');
-                    setSubmitting(false);
-                    return;
-                }
-                assignedTable = vacantTable;
-            }
-
-            // Double check availability of cart items before inserting order
-            const { data: latestMenu, error: checkError } = await supabase
-                .from('pos_menu')
-                .select('id, name, is_available')
-                .in('id', cart.map(i => i.id));
-                
-            if (!checkError && latestMenu) {
-                const unavailableItems = cart.filter(cartItem => {
-                    const dbItem = latestMenu.find(db => db.id === cartItem.id);
-                    return !dbItem || !dbItem.is_available;
-                });
-                
-                if (unavailableItems.length > 0) {
-                    alert(`Sorry, the following item(s) just went out of stock: ${unavailableItems.map(i => i.name).join(', ')}. They have been removed from your cart.`);
-                    setCart(prev => prev.filter(cartItem => !unavailableItems.some(ui => ui.id === cartItem.id)));
-                    setSubmitting(false);
-                    return;
+            // Determine active table if Dine-in
+            let assignedTable = tableNumber || '';
+            if (diningOption === 'Dine-in' && !assignedTable) {
+                try {
+                    const { data: openOrders } = await supabase
+                        .from('pos_orders')
+                        .select('customer_name')
+                        .not('status', 'in', '("completed","cancelled","voided","Completed","Cancelled","Voided")')
+                        .in('dining_option', ['Dine Inn', 'Dine-in'])
+                        .limit(20);
+                    
+                    const occupiedTables = new Set(
+                        (openOrders || []).map(o => (o.customer_name || '').trim().toLowerCase())
+                    );
+                    
+                    const allTables = [
+                        'Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5', 'Table 6',
+                        'Table 7', 'Table 8', 'Table 9', 'Table 10', 'Table 11', 'Table 12'
+                    ];
+                    
+                    const vacantTable = allTables.find(table => !occupiedTables.has(table.toLowerCase()));
+                    assignedTable = vacantTable || 'Table 1';
+                } catch (e) {
+                    assignedTable = 'Table 1';
                 }
             }
 
@@ -1263,10 +1283,20 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 ? (notes.trim() ? `Delivery Address: ${deliveryAddress.trim()}\nNotes: ${notes.trim()}${promoNoteText}` : `Delivery Address: ${deliveryAddress.trim()}${promoNoteText}`)
                 : (notes.trim() ? `${notes.trim()}${promoNoteText}` : promoNoteText.trim());
 
+            let finalCustomerName = '';
+            if (diningOption === 'Dine-in') {
+                const activeTable = assignedTable || 'Table 1';
+                finalCustomerName = (userTypedName && customerName.trim()) 
+                    ? `${activeTable} (${customerName.trim()})`
+                    : activeTable;
+            } else {
+                finalCustomerName = (userTypedName && customerName.trim())
+                    ? customerName.trim()
+                    : (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : (customerName.trim() || 'Online Guest'));
+            }
+
             const orderPayload = {
-                customer_name: diningOption === 'Dine-in' 
-                    ? (customerName.trim() ? `${assignedTable} (${customerName.trim()})` : assignedTable)
-                    : (customerName.trim() || 'Online Guest'),
+                customer_name: finalCustomerName,
                 dining_option: diningOption,
                 payment_method: 'Paid to App',
                 payment_status: 'Pending',
@@ -1286,8 +1316,6 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 .single();
 
             if (orderError) throw orderError;
-
-
 
             // 2. Insert order items
             const itemPayloads = cart.map(item => ({
@@ -1312,12 +1340,12 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             }
 
             // Automatically append packaging fee line item
-            if ((diningOption === 'Takeaway' || diningOption === 'Delivery') && whatsappSettings.packaging_fee > 0) {
+            if ((diningOption === 'Takeaway' || diningOption === 'Delivery') && (whatsappSettings?.packaging_fee || 50) > 0) {
                 itemPayloads.push({
                     order_id: orderData.id,
                     item_name: 'Package Fee',
                     quantity: 1,
-                    price: whatsappSettings.packaging_fee,
+                    price: whatsappSettings?.packaging_fee || 50,
                     instructions: 'Packaging Fee',
                     status: 'Pending'
                 });
@@ -1329,49 +1357,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
             if (itemsError) throw itemsError;
 
-            // Complete order process
-            if (guestUser) {
-                try {
-                    const newVisits = (guestUser.visit_count || 0) + 1;
-                    const newSpend = parseFloat(guestUser.lifetime_spend || 0) + finalTotal;
-                    
-                    await supabase
-                        .from('guests')
-                        .update({
-                            visit_count: newVisits,
-                            lifetime_spend: newSpend,
-                            delivery_address: deliveryAddress.trim() || guestUser.delivery_address
-                        })
-                        .eq('id', guestUser.id);
-                    
-                    try {
-                        await supabase
-                            .from('guest_visits')
-                            .insert([{
-                                guest_id: guestUser.id,
-                                spend: cartTotal,
-                                table_number: diningOption === 'Dine-in' ? assignedTable : '',
-                                notes: `Order #${orderData.ticket_number} via Microsite`
-                            }]);
-                    } catch (e) {
-                        console.warn("Could not insert guest_visit:", e);
-                    }
-
-                    
-                    const updatedGuest = {
-                        ...guestUser,
-                        visit_count: newVisits,
-                        lifetime_spend: newSpend,
-                        delivery_address: deliveryAddress.trim() || guestUser.delivery_address
-                    };
-                    localStorage.setItem('mute_kitchens_guest', JSON.stringify(updatedGuest));
-                    setGuestUser(updatedGuest);
-                    fetchPastOrders(updatedGuest.id);
-                } catch (e) {
-                    console.error('Error updating CRM metrics:', e);
-                }
-            }
-
+            // 3. Immediately display success modal to user (sub-second feedback)
             setOrderSuccess({
                 orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
@@ -1396,7 +1382,46 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             }
             setTableNumber('');
             setNotes('');
-        } catch (err) {
+
+            // 4. Non-blocking Background CRM & Analytics Update
+            if (guestUser) {
+                (async () => {
+                    try {
+                        const newVisits = (guestUser.visit_count || 0) + 1;
+                        const newSpend = parseFloat(guestUser.lifetime_spend || 0) + finalTotal;
+                        
+                        await supabase
+                            .from('guests')
+                            .update({
+                                visit_count: newVisits,
+                                lifetime_spend: newSpend,
+                                delivery_address: deliveryAddress.trim() || guestUser.delivery_address
+                            })
+                            .eq('id', guestUser.id);
+                        
+                        await supabase
+                            .from('guest_visits')
+                            .insert([{
+                                guest_id: guestUser.id,
+                                spend: cartTotal,
+                                table_number: diningOption === 'Dine-in' ? (tableNumber || 'Table 1') : '',
+                                notes: `Order #${orderData.ticket_number} via Microsite`
+                            }]);
+                        
+                        const updatedGuest = {
+                            ...guestUser,
+                            visit_count: newVisits,
+                            lifetime_spend: newSpend,
+                            delivery_address: deliveryAddress.trim() || guestUser.delivery_address
+                        };
+                        localStorage.setItem('mute_kitchens_guest', JSON.stringify(updatedGuest));
+                        setGuestUser(updatedGuest);
+                    } catch (e) {
+                        console.warn('Background CRM sync note:', e);
+                    }
+                })();
+            }
+         } catch (err) {
             alert('Failed to place order: ' + err.message);
         } finally {
             setSubmitting(false);
@@ -1660,7 +1685,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                                         </div>
                                                                     </div>
                                                                     <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
-                                                                        <img src={item.image_url || '/logo.png'} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-white" onError={(e) => { e.target.src = '/logo.png'; }} />
+                                                                        <img src={getItemImage(item)} alt={item.name} className={`w-full h-full ${hasCustomImage(item) ? "object-cover group-hover:scale-105" : "object-contain p-3.5"} transition-transform duration-300 bg-white`} onError={(e) => { e.target.onerror = null; e.target.src = "/jollof_logo.png"; e.target.className = "w-full h-full object-contain p-3.5 bg-white"; }} />
                                                                         {!cartItem ? (
                                                                             <button onClick={() => addToCart(item)} className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50">
                                                                                 <Plus size={16} />
@@ -1718,7 +1743,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                         </div>
                                                     </div>
                                                     <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
-                                                        <img src={item.image_url || '/logo.png'} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-white" onError={(e) => { e.target.src = '/logo.png'; }} />
+                                                        <img src={getItemImage(item)} alt={item.name} className={`w-full h-full ${hasCustomImage(item) ? "object-cover group-hover:scale-105" : "object-contain p-3.5"} transition-transform duration-300 bg-white`} onError={(e) => { e.target.onerror = null; e.target.src = "/jollof_logo.png"; e.target.className = "w-full h-full object-contain p-3.5 bg-white"; }} />
                                                         {!cartItem ? (
                                                             <button onClick={() => addToCart(item)} className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50">
                                                                 <Plus size={16} />
@@ -1839,19 +1864,45 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                     {/* Checkout Options & Form Inputs Container */}
                                     <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-4 text-left shadow-xs">
                                         {/* Guest Account Panel Summary */}
-                                        {guestUser ? (
+                                        {diningOption === 'Dine-in' ? (
+                                            <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
+                                                <div className="flex flex-col text-left">
+                                                    <span className="font-bold text-gray-900">🍽️ Dine-In Order {tableNumber ? `(${tableNumber})` : ''}</span>
+                                                    <span className="text-[9px] text-gray-400 mt-0.5">Order will be delivered to your table.</span>
+                                                </div>
+                                                {guestUser && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleGuestLogout}
+                                                        className="text-[9px] font-black text-rose-600 hover:underline uppercase tracking-wider"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : guestUser ? (
                                             <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
                                                 <div className="flex flex-col text-left">
                                                     <span className="font-bold text-gray-900">👤 Placing order as {guestUser.first_name}</span>
                                                     <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">{guestUser.phone}</span>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setAccountOpen(true)}
-                                                    className="text-[9px] font-black text-black hover:underline uppercase tracking-wider"
-                                                >
-                                                    Switch
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setAccountOpen(true)}
+                                                        className="text-[9px] font-black text-black hover:underline uppercase tracking-wider"
+                                                    >
+                                                        Switch
+                                                    </button>
+                                                    <span className="text-gray-300">|</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleGuestLogout}
+                                                        className="text-[9px] font-bold text-rose-500 hover:underline uppercase tracking-wider"
+                                                    >
+                                                        Log Out
+                                                    </button>
+                                                </div>
                                             </div>
                                         ) : (
                                             <div className="bg-white border border-gray-200 rounded-xl p-3 flex justify-between items-center text-xs shadow-sm">
@@ -1912,10 +1963,13 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                         <div className="space-y-3">
                                             <input
                                                 type="text"
-                                                placeholder="Your Name (Optional)"
+                                                placeholder={diningOption === 'Dine-in' ? "Diner Name (Optional)" : "Your Name (Optional)"}
                                                 value={customerName}
                                                 disabled={submitting}
-                                                onChange={(e) => setCustomerName(e.target.value)}
+                                                onChange={(e) => {
+                                                    setCustomerName(e.target.value);
+                                                    setUserTypedName(true);
+                                                }}
                                                 className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
                                             />
                                             {diningOption === 'Delivery' && (
