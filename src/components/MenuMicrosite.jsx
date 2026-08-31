@@ -266,6 +266,19 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                             </span>
                         </div>
 
+                        {/* Delivery Destination Badge */}
+                        {orderSuccess.diningOption === "Delivery" && (orderSuccess.deliveryAddress || orderSuccess.notes) && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left space-y-1 shadow-xs">
+                                <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-amber-900 tracking-wider">
+                                    <span>🛵</span>
+                                    <span>Delivery Destination:</span>
+                                </div>
+                                <p className="text-xs font-bold text-gray-900 leading-snug">
+                                    {orderSuccess.deliveryAddress || (orderSuccess.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) || "Delivery order"}
+                                </p>
+                            </div>
+                        )}
+
                         {/* Paybill & Account Number Card */}
                         <div className="bg-amber-50/70 border-2 border-amber-300/50 rounded-2xl p-4 text-left space-y-3">
                             <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
@@ -372,6 +385,14 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                                     <span className="font-mono font-black text-black bg-amber-100 px-2 py-0.5 rounded text-xs">{orderSuccess.mpesaCode}</span>
                                 </div>
                             )}
+                            {orderSuccess.diningOption === "Delivery" && (orderSuccess.deliveryAddress || orderSuccess.notes) && (
+                                <div className="text-xs pt-2 border-t border-gray-200 text-left">
+                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-wider">🛵 Delivery Address</span>
+                                    <span className="font-bold text-gray-900 leading-snug block mt-0.5">
+                                        {orderSuccess.deliveryAddress || (orderSuccess.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) || "Delivery order"}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Share Confirmation Code to WhatsApp Button */}
@@ -409,6 +430,15 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                                 Payment verified by cashier! Your order is accepted & sent to the kitchen.
                             </p>
                         </div>
+
+                        {orderSuccess.diningOption === "Delivery" && (orderSuccess.deliveryAddress || orderSuccess.notes) && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left shadow-xs">
+                                <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider block">🛵 Delivering to:</span>
+                                <span className="text-xs font-bold text-gray-900 mt-0.5 block">
+                                    {orderSuccess.deliveryAddress || (orderSuccess.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1])}
+                                </span>
+                            </div>
+                        )}
 
                         <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 text-left space-y-3">
                             <span className="text-[10px] font-black uppercase text-emerald-800 tracking-widest block text-center">Live Order Status</span>
@@ -1283,8 +1313,15 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
         if (cart.length === 0) return;
-        if (diningOption === 'Delivery' && !deliveryAddress.trim()) {
-            alert('Please specify your Delivery Address.');
+
+        let activeDeliveryAddress = (deliveryAddress || "").trim();
+        // Smart fallback: if Delivery is selected and user typed location in the top box
+        if (diningOption === "Delivery" && !activeDeliveryAddress && customerName.trim()) {
+            activeDeliveryAddress = customerName.trim();
+        }
+
+        if (diningOption === "Delivery" && !activeDeliveryAddress) {
+            alert("Please specify your Delivery Address.");
             return;
         }
 
@@ -1319,9 +1356,6 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
             // Build order payload
             const promoNoteText = appliedDiscount ? `\n[Promo Applied: ${appliedDiscount.code} (-KES ${discountAmount.toLocaleString()})]` : '';
-            const finalNotes = diningOption === 'Delivery'
-                ? (notes.trim() ? `Delivery Address: ${deliveryAddress.trim()}\nNotes: ${notes.trim()}${promoNoteText}` : `Delivery Address: ${deliveryAddress.trim()}${promoNoteText}`)
-                : (notes.trim() ? `${notes.trim()}${promoNoteText}` : promoNoteText.trim());
 
             let finalCustomerName = '';
             if (diningOption === 'Dine-in') {
@@ -1335,16 +1369,21 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                     : (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : (customerName.trim() || 'Online Guest'));
             }
 
+            const finalNotes = diningOption === "Delivery"
+                ? (notes.trim() ? `Delivery Address: ${activeDeliveryAddress}\nNotes: ${notes.trim()}${promoNoteText}` : `Delivery Address: ${activeDeliveryAddress}${promoNoteText}`)
+                : (notes.trim() ? `${notes.trim()}${promoNoteText}` : promoNoteText.trim());
+
             const orderPayload = {
                 customer_name: finalCustomerName,
                 dining_option: diningOption,
-                payment_method: 'Paid to App',
-                payment_status: 'Pending',
-                status: 'Pending',
+                payment_method: "Paid to App",
+                payment_status: "Pending",
+                status: "Pending",
                 total_amount: finalTotal,
                 discount: discountAmount,
-                cashier_name: 'Self-Service Microsite',
-                brand: activeBrand === 'All' ? (cart.length > 0 ? getBrandForItem(cart[0]) : 'POT OF JOLLOF') : activeBrand,
+                cashier_name: "Self-Service Microsite",
+                brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0]) : "POT OF JOLLOF") : activeBrand,
+                delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
                 notes: finalNotes
             };
 
@@ -2001,112 +2040,176 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
                                         {/* Dynamic inputs */}
                                         <div className="space-y-3">
-                                            <input
-                                                type="text"
-                                                placeholder={diningOption === 'Dine-in' ? "Diner Name (Optional)" : "Your Name (Optional)"}
-                                                value={customerName}
-                                                disabled={submitting}
-                                                onChange={(e) => {
-                                                    setCustomerName(e.target.value);
-                                                    setUserTypedName(true);
-                                                }}
-                                                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
-                                            />
-                                            {diningOption === 'Delivery' && (
-                                                <div className="space-y-2 text-left">
-                                                    {guestUser && savedAddresses.length > 0 && (
-                                                        <div className="space-y-1.5">
-                                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Select Delivery Address</span>
-                                                            <div className="flex flex-col gap-1.5">
-                                                                {savedAddresses.map((addr, idx) => (
-                                                                    <button
-                                                                        key={idx}
-                                                                        type="button"
-                                                                        onClick={() => setDeliveryAddress(addr)}
-                                                                        className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
-                                                                            deliveryAddress === addr
-                                                                                ? 'bg-black border-black text-white font-bold'
-                                                                                : 'bg-white border-gray-255 text-gray-700 hover:border-gray-300'
-                                                                        }`}
-                                                                    >
-                                                                        📍 {addr}
-                                                                    </button>
-                                                                ))}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (savedAddresses.includes(deliveryAddress)) {
-                                                                            setDeliveryAddress('');
-                                                                        }
-                                                                    }}
-                                                                    className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
-                                                                        !savedAddresses.includes(deliveryAddress)
-                                                                            ? 'bg-black border-black text-white font-bold'
-                                                                            : 'bg-white border-gray-250 text-gray-800 hover:bg-gray-100 font-bold border-dashed'
-                                                                    }`}
-                                                                >
-                                                                    ➕ Add New Address
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
-                                                        <div className="relative">
-                                                            <div className="relative flex items-center">
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder="Delivery Address (e.g. Kilimani, Westlands, Purple Tower) *"
-                                                                    required
-                                                                    value={deliveryAddress}
-                                                                    disabled={submitting}
-                                                                    onChange={(e) => {
-                                                                        selectedAddressRef.current = false;
-                                                                        setDeliveryAddress(e.target.value);
-                                                                    }}
-                                                                    onFocus={() => setShowSuggestions(true)}
-                                                                    className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-semibold shadow-xs"
-                                                                />
-                                                                {isSearchingAddress && (
-                                                                    <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
-                                                                        🔍 Searching...
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            
-                                                            {/* Real-time Address Autocomplete Floating Dropdown */}
-                                                            {showSuggestions && addressSuggestions.length > 0 && (
-                                                                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
-                                                                    <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
-                                                                        <span>📍 Select Matching Location:</span>
-                                                                        <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
-                                                                    </div>
-                                                                    {addressSuggestions.map((s, idx) => (
+                                            {diningOption === "Delivery" ? (
+                                                <div className="space-y-3 text-left">
+                                                    {/* 1. Delivery Address Field */}
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            📍 Delivery Address / Location <span className="text-red-500">*</span>
+                                                        </label>
+
+                                                        {guestUser && savedAddresses.length > 0 && (
+                                                            <div className="space-y-1.5 mb-2">
+                                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Saved Addresses</span>
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    {savedAddresses.map((addr, idx) => (
                                                                         <button
                                                                             key={idx}
                                                                             type="button"
-                                                                            onClick={() => handleSelectAddressSuggestion(s)}
-                                                                            className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                            onClick={() => setDeliveryAddress(addr)}
+                                                                            className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
+                                                                                deliveryAddress === addr
+                                                                                    ? "bg-black border-black text-white font-bold"
+                                                                                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                                                                            }`}
                                                                         >
-                                                                            <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
-                                                                            <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                            📍 {addr}
                                                                         </button>
                                                                     ))}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            if (savedAddresses.includes(deliveryAddress)) {
+                                                                                setDeliveryAddress("");
+                                                                            }
+                                                                        }}
+                                                                        className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
+                                                                            !savedAddresses.includes(deliveryAddress)
+                                                                                ? "bg-black border-black text-white font-bold"
+                                                                                : "bg-white border-gray-250 text-gray-800 hover:bg-gray-100 font-bold border-dashed"
+                                                                        }`}
+                                                                    >
+                                                                        ➕ Add New Address
+                                                                    </button>
                                                                 </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
+                                                            <div className="relative">
+                                                                <div className="relative flex items-center">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Building, street, estate (e.g. Westgate, Kilimani, Westlands) *"
+                                                                        required
+                                                                        value={deliveryAddress}
+                                                                        disabled={submitting}
+                                                                        onChange={(e) => {
+                                                                            selectedAddressRef.current = false;
+                                                                            setDeliveryAddress(e.target.value);
+                                                                        }}
+                                                                        onFocus={() => setShowSuggestions(true)}
+                                                                        className="w-full bg-white border-2 border-gray-300 focus:border-black rounded-xl py-2.5 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none font-semibold shadow-xs"
+                                                                    />
+                                                                    {isSearchingAddress && (
+                                                                        <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
+                                                                            🔍 Searching...
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {/* Real-time Address Autocomplete Floating Dropdown */}
+                                                                {showSuggestions && addressSuggestions.length > 0 && (
+                                                                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
+                                                                        <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
+                                                                            <span>📍 Select Matching Location:</span>
+                                                                            <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
+                                                                        </div>
+                                                                        {addressSuggestions.map((s, idx) => (
+                                                                            <button
+                                                                                key={idx}
+                                                                                type="button"
+                                                                                onClick={() => handleSelectAddressSuggestion(s)}
+                                                                                className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                            >
+                                                                                <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
+                                                                                <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
 
-                                                    )}
+                                                        {/* Confirmed Delivery Location Banner */}
+                                                        {deliveryAddress && (
+                                                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-bold p-2.5 rounded-xl flex items-center justify-between shadow-2xs mt-1">
+                                                                <span className="truncate mr-2">📍 {deliveryAddress}</span>
+                                                                {calculatedDistance ? (
+                                                                    <span className="shrink-0 text-[10px] bg-emerald-200 text-emerald-950 px-1.5 py-0.5 rounded font-mono font-black">
+                                                                        {calculatedDistance.toFixed(1)} km
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 2. Customer Name & Phone Field */}
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            👤 Recipient Name & Phone (Optional)
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. John Doe - 0712345678"
+                                                            value={customerName}
+                                                            disabled={submitting}
+                                                            onChange={(e) => {
+                                                                setCustomerName(e.target.value);
+                                                                setUserTypedName(true);
+                                                            }}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
+
+                                                    {/* 3. Delivery Notes */}
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            📝 Apt / Floor / Gate Instructions
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. 3rd Floor Apt 4B, call at gate"
+                                                            value={notes}
+                                                            disabled={submitting}
+                                                            onChange={(e) => setNotes(e.target.value)}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3 text-left">
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            {diningOption === "Dine-in" ? "👤 Diner Name / Table" : "👤 Pickup Customer Name"}
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder={diningOption === "Dine-in" ? "Diner Name (Optional)" : "Your Name (Optional)"}
+                                                            value={customerName}
+                                                            disabled={submitting}
+                                                            onChange={(e) => {
+                                                                setCustomerName(e.target.value);
+                                                                setUserTypedName(true);
+                                                            }}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            📝 Special Prep Instructions
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Special kitchen prep instructions"
+                                                            value={notes}
+                                                            disabled={submitting}
+                                                            onChange={(e) => setNotes(e.target.value)}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
                                                 </div>
                                             )}
-                                            <input
-                                                type="text"
-                                                placeholder="Order notes / delivery specs / special request"
-                                                value={notes}
-                                                disabled={submitting}
-                                                onChange={(e) => setNotes(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
-                                            />
                                         </div>
 
                                         {/* Promo Code Input Block */}
