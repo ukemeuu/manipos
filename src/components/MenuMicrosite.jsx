@@ -527,6 +527,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const [appliedDiscount, setAppliedDiscount] = useState(null); // { code, type, value, min_order_amount }
     const [promoError, setPromoError] = useState('');
     const [promoSuccess, setPromoSuccess] = useState('');
+    const [redeemLoyaltyPoints, setRedeemLoyaltyPoints] = useState(false);
     
     // Order success state
     const [orderSuccess, setOrderSuccess] = useState(null); // Will hold { ticketNumber, total, brand, items, diningOption, deliveryAddress }
