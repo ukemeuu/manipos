@@ -31,20 +31,50 @@ export const BRAND_CONFIGS = {
     }
 };
 
+export const isBrandLogoUrl = (url) => {
+    if (!url) return false;
+    const lower = String(url).toLowerCase().trim();
+    return (
+        lower.includes('lagos_logo') ||
+        lower.includes('swahili_logo') ||
+        lower.includes('samaki_logo') ||
+        lower.includes('jollof_logo') ||
+        lower.includes('/logo.png') ||
+        lower.endsWith('logo.png') ||
+        lower.includes('little_lagos') ||
+        lower.includes('littlelagos') ||
+        lower.includes('cafe_swahili') ||
+        lower.includes('cafeswahili') ||
+        lower.includes('samaki_street') ||
+        lower.startsWith('/menu_items') ||
+        lower.includes('image_') ||
+        lower.startsWith('/images/')
+    );
+};
+
 export const hasCustomImage = (item) => {
     if (!item?.image_url) return false;
     const url = String(item.image_url).trim();
-    if (url.startsWith("/menu_items") || url.includes("image_") || url.startsWith("/images/")) return false;
+    if (isBrandLogoUrl(url)) return false;
     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:image/")) {
         return true;
     }
     return false;
 };
 
-export const getItemImage = (item) => {
+export const getItemImage = (item, currentBrand = 'POT OF JOLLOF') => {
     if (hasCustomImage(item)) {
         return item.image_url.trim();
     }
+    // On Pot of Jollof domain or single-brand mode, always strictly use Pot of Jollof logo
+    const isPoj = typeof window !== 'undefined' && (window.location.hostname.includes('potofjollof') || !window.location.hostname.includes('manipos.com'));
+    if (isPoj) {
+        return "/jollof_logo.png";
+    }
+    const brandKey = (currentBrand && currentBrand !== 'All') ? currentBrand.toUpperCase() : 'POT OF JOLLOF';
+    if (brandKey.includes('LAGOS')) return '/lagos_logo.png';
+    if (brandKey.includes('SWAHILI')) return '/swahili_logo.png';
+    if (brandKey.includes('SAMAKI')) return '/samaki_logo.jpg';
     return "/jollof_logo.png";
 };
 
@@ -86,8 +116,10 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
     const [inputMpesaCode, setInputMpesaCode] = useState(orderSuccess?.mpesaCode || '');
     const [isUpdating, setIsUpdating] = useState(false);
 
-    const paybillNo = whatsappSettings?.paybill_number || '542542';
-    const accountNo = whatsappSettings?.account_number || '992422';
+    const rawPaybill = whatsappSettings?.paybill_number;
+    const paybillNo = (rawPaybill && rawPaybill !== '4122896' && rawPaybill !== '400200') ? rawPaybill : '542542';
+    const rawAccount = whatsappSettings?.account_number;
+    const accountNo = (rawAccount && rawAccount !== '123456') ? rawAccount : '992422';
     const whatsappPhone = orderSuccess?.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617';
 
     // Realtime WebSockets + 2s Polling Engine to automatically update customer screen when cashier accepts order
@@ -540,9 +572,17 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                     .eq('name', 'whatsapp')
                     .maybeSingle();
                 if (data) {
+                    const cleanPaybill = (data.paybill_number && data.paybill_number !== '4122896' && data.paybill_number !== '400200') ? data.paybill_number : '542542';
+                    const cleanAccount = (data.account_number && data.account_number !== '123456') ? data.account_number : '992422';
+
+                    // If DB row still holds legacy paybill numbers, auto-repair it asynchronously
+                    if (data.paybill_number === '4122896' || data.paybill_number === '400200' || !data.paybill_number) {
+                        supabase.from('pos_channels').update({ paybill_number: '542542', account_number: '992422' }).eq('name', 'whatsapp').then(() => {}).catch(() => {});
+                    }
+
                     setWhatsappSettings({
-                        paybill_number: data.paybill_number || '542542',
-                        account_number: data.account_number || '992422',
+                        paybill_number: cleanPaybill,
+                        account_number: cleanAccount,
                         base_delivery_fee: data.base_delivery_fee ?? 100,
                         base_delivery_distance: data.base_delivery_distance ?? 3,
                         delivery_fee_per_km: data.delivery_fee_per_km ?? 50,
@@ -1685,7 +1725,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                                         </div>
                                                                     </div>
                                                                     <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
-                                                                        <img src={getItemImage(item)} alt={item.name} className={`w-full h-full ${hasCustomImage(item) ? "object-cover group-hover:scale-105" : "object-contain p-3.5"} transition-transform duration-300 bg-white`} onError={(e) => { e.target.onerror = null; e.target.src = "/jollof_logo.png"; e.target.className = "w-full h-full object-contain p-3.5 bg-white"; }} />
+                                                                        <img src={getItemImage(item, activeBrand)} alt={item.name} className={`w-full h-full ${hasCustomImage(item) ? "object-cover group-hover:scale-105" : "object-contain p-3.5"} transition-transform duration-300 bg-white`} onError={(e) => { e.target.onerror = null; e.target.src = "/jollof_logo.png"; e.target.className = "w-full h-full object-contain p-3.5 bg-white"; }} />
                                                                         {!cartItem ? (
                                                                             <button onClick={() => addToCart(item)} className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50">
                                                                                 <Plus size={16} />
@@ -1743,7 +1783,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                         </div>
                                                     </div>
                                                     <div className="w-28 h-28 md:w-32 md:h-32 shrink-0 rounded-2xl overflow-hidden relative bg-gray-50 border border-gray-150 flex items-center justify-center shadow-sm">
-                                                        <img src={getItemImage(item)} alt={item.name} className={`w-full h-full ${hasCustomImage(item) ? "object-cover group-hover:scale-105" : "object-contain p-3.5"} transition-transform duration-300 bg-white`} onError={(e) => { e.target.onerror = null; e.target.src = "/jollof_logo.png"; e.target.className = "w-full h-full object-contain p-3.5 bg-white"; }} />
+                                                        <img src={getItemImage(item, activeBrand)} alt={item.name} className={`w-full h-full ${hasCustomImage(item) ? "object-cover group-hover:scale-105" : "object-contain p-3.5"} transition-transform duration-300 bg-white`} onError={(e) => { e.target.onerror = null; e.target.src = "/jollof_logo.png"; e.target.className = "w-full h-full object-contain p-3.5 bg-white"; }} />
                                                         {!cartItem ? (
                                                             <button onClick={() => addToCart(item)} className="absolute bottom-2 right-2 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all text-black hover:bg-gray-50">
                                                                 <Plus size={16} />

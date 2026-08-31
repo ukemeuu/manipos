@@ -165,8 +165,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
             restaurant_id: currentRestaurantId,
             address: '123 Main Street',
             phone: '+254700000000',
-            mpesa_paybill: '400200',
-            mpesa_account: '123456',
+            mpesa_paybill: '542542',
+            mpesa_account: '992422',
             setup_completed: false
           }])
           .select()
@@ -1089,7 +1089,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                       <input
                         type="text"
                         required
-                        placeholder="e.g. 400200"
+                        placeholder="e.g. 542542"
                         value={settings.mpesa_paybill || ''}
                         onChange={(e) => setSettings({ ...settings, mpesa_paybill: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
@@ -1101,7 +1101,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                       <input
                         type="text"
                         required
-                        placeholder="e.g. 123456"
+                        placeholder="e.g. 992422"
                         value={settings.mpesa_account || ''}
                         onChange={(e) => setSettings({ ...settings, mpesa_account: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"

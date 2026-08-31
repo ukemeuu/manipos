@@ -43,7 +43,7 @@ const stagger = {
   visible: { transition: { staggerChildren: 0.12 } },
 };
 
-export function LandingPage({ onProceedToLogin }) {
+export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
   const [formData, setFormData] = useState({
     restaurantName: '',
     email: '',
@@ -949,7 +949,18 @@ export function LandingPage({ onProceedToLogin }) {
             <span className="font-extrabold text-white">ManiPOS</span>
             <span className="text-white/30">• Cloud Restaurant POS & Management System</span>
           </div>
-          <p className="text-white/30 font-semibold">© {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => {
+                if (onSwitchToRetail) onSwitchToRetail();
+                else window.location.href = '/?mode=retail';
+              }}
+              className="text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Looking for Retail POS (Supermarkets & Shops)? &rarr;</span>
+            </button>
+            <p className="text-white/30 font-semibold text-xs">© {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
+          </div>
         </div>
       </footer>
 

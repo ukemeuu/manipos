@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Share2
 } from 'lucide-react';
+import { getItemImage, hasCustomImage } from './MenuMicrosite';
 
 export function GuestMenuMicrosite({ tenantSlug = 'demostore' }) {
   const [menuItems, setMenuItems] = useState([]);
@@ -276,16 +277,19 @@ export function GuestMenuMicrosite({ tenantSlug = 'demostore' }) {
                     </div>
                   </div>
 
-                  {item.image_url && (
-                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex-shrink-0">
-                      <img
-                        src={item.image_url}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                  )}
+                  <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex-shrink-0 flex items-center justify-center">
+                    <img
+                      src={getItemImage(item, brandDisplayName)}
+                      alt={item.name}
+                      className={`w-full h-full ${hasCustomImage(item) ? 'object-cover' : 'object-contain p-2 bg-white'}`}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '/jollof_logo.png';
+                        e.target.className = 'w-full h-full object-contain p-2 bg-white';
+                      }}
+                    />
+                  </div>
                 </motion.div>
               );
             })

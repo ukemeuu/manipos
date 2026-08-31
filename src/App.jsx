@@ -3,13 +3,15 @@ import { supabase } from './lib/supabase';
 import { PosTerminal } from './components/PosTerminal';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
+import { RetailLandingPage } from './components/RetailLandingPage';
+import { RetailPosTerminal } from './components/RetailPosTerminal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MenuMicrosite } from './components/MenuMicrosite';
 import { FeedbackForm } from './components/FeedbackForm';
 import { RestaurantLinkHub } from './components/RestaurantLinkHub';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { AuthenticatedHome } from './components/AuthenticatedHome';
-import { getTenantInfo, getPosLoginUrl, getMarketingUrl } from './lib/tenant';
+import { getTenantInfo, getPosLoginUrl, getMarketingUrl, getRetailMarketingUrl, getRetailPosLoginUrl } from './lib/tenant';
 
 function App() {
   const [session, setSession] = useState(() => {
@@ -27,6 +29,8 @@ function App() {
   const [currentRoute, setCurrentRoute] = useState(() => {
     const info = getTenantInfo();
     const queryPage = new URLSearchParams(window.location.search).get('page');
+    const queryMode = new URLSearchParams(window.location.search).get('mode') || new URLSearchParams(window.location.search).get('type');
+    
     if (queryPage === 'superadmin' || window.location.pathname === '/superadmin' || window.location.hash === '#/superadmin') {
       return 'superadmin';
     }
@@ -42,6 +46,12 @@ function App() {
     if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
       return 'feedback';
     }
+    if (info.isRetailPosDomain || queryPage === 'retail-terminal' || window.location.pathname === '/retail-terminal' || window.location.hash === '#/retail-terminal') {
+      return 'retail-terminal';
+    }
+    if (info.isRetailMarketingDomain || queryMode === 'retail' || queryPage === 'retail' || window.location.pathname === '/retail' || window.location.hash === '#/retail') {
+      return 'retail-home';
+    }
     if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
       return 'terminal';
     }
@@ -52,6 +62,7 @@ function App() {
   });
 
   const [storeStatus, setStoreStatus] = useState('approved');
+  const [businessType, setBusinessType] = useState('restaurant');
 
   useEffect(() => {
     const fetchStoreStatus = async () => {
@@ -61,13 +72,13 @@ function App() {
         const storeId = pinUser.restaurantId || pinUser.restaurant_id;
 
         if (!storeSlug && !storeId) {
-          if (session && currentRoute !== 'home' && currentRoute !== 'superadmin' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite') {
+          if (session && currentRoute !== 'home' && currentRoute !== 'retail-home' && currentRoute !== 'superadmin' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite') {
             handleGlobalSignOut();
           }
           return;
         }
 
-        let query = supabase.from('restaurants').select('id, name, slug, status, is_active');
+        let query = supabase.from('restaurants').select('id, name, slug, status, is_active, business_type');
         if (storeId) {
           query = query.eq('id', storeId);
         } else {
@@ -87,6 +98,9 @@ function App() {
 
         const activeStatus = (data.is_active === false) ? 'suspended' : (data.status || 'pending');
         setStoreStatus(activeStatus);
+        if (data.business_type) {
+          setBusinessType(data.business_type);
+        }
 
         // SERVER-SIDE APPROVAL GUARD: Revoke session immediately if store is not approved or is inactive
         if (activeStatus !== 'approved') {
@@ -139,7 +153,9 @@ function App() {
     const handleLocationChange = () => {
       const info = getTenantInfo();
       const queryPage = new URLSearchParams(window.location.search).get('page');
+      const queryMode = new URLSearchParams(window.location.search).get('mode') || new URLSearchParams(window.location.search).get('type');
       setTenantInfo(info);
+      
       if (queryPage === 'superadmin' || window.location.pathname === '/superadmin' || window.location.hash === '#/superadmin') {
         setCurrentRoute('superadmin');
       } else if (queryPage === 'app' || window.location.pathname === '/app' || window.location.hash === '#/app') {
@@ -150,6 +166,10 @@ function App() {
         setCurrentRoute('dashboard');
       } else if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
         setCurrentRoute('feedback');
+      } else if (info.isRetailPosDomain || queryPage === 'retail-terminal' || window.location.pathname === '/retail-terminal' || window.location.hash === '#/retail-terminal') {
+        setCurrentRoute('retail-terminal');
+      } else if (info.isRetailMarketingDomain || queryMode === 'retail' || queryPage === 'retail' || window.location.pathname === '/retail' || window.location.hash === '#/retail') {
+        setCurrentRoute('retail-home');
       } else if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
         setCurrentRoute('terminal');
       } else if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu' || queryPage === 'menu') {
@@ -168,8 +188,18 @@ function App() {
     window.history.pushState({}, '', '/');
   };
 
+  const navigateToRetailHome = () => {
+    setCurrentRoute('retail-home');
+    window.history.pushState({}, '', '/?mode=retail');
+  };
+
   const navigateToLogin = (slug = null) => {
     const url = getPosLoginUrl(slug);
+    window.location.href = url;
+  };
+
+  const navigateToRetailLogin = (slug = null) => {
+    const url = getRetailPosLoginUrl(slug);
     window.location.href = url;
   };
 
@@ -187,7 +217,7 @@ function App() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-400"></div>
       </div>
     );
   }
@@ -212,10 +242,39 @@ function App() {
     return <MenuMicrosite onBack={navigateToHome} tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
   }
 
+  // ROUTE 1.5: Standalone Retail POS Register Terminal
+  if (currentRoute === 'retail-terminal') {
+    const staffUser = session?.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    return (
+      <RetailPosTerminal
+        staffName={staffUser.name || 'Cashier'}
+        staffRole={staffUser.role || 'cashier'}
+        tenantSlug={tenantInfo.tenantSlug || 'demo'}
+        onSignOut={handleGlobalSignOut}
+        onOpenDashboard={() => setCurrentRoute('dashboard')}
+        onOpenAppHome={() => setCurrentRoute('app')}
+      />
+    );
+  }
+
   // AUTHENTICATED SESSION ROUTING ENGINE
   if (session) {
     const staffUser = session.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
     const isAdmin = staffUser.role === 'admin' || staffUser.role === 'manager';
+
+    // If store is retail, route to retail terminal by default
+    if (businessType === 'retail' && currentRoute === 'terminal') {
+      return (
+        <RetailPosTerminal
+          staffName={staffUser.name}
+          staffRole={staffUser.role}
+          tenantSlug={tenantInfo.tenantSlug}
+          onSignOut={handleGlobalSignOut}
+          onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
+          onOpenAppHome={isAdmin ? () => setCurrentRoute('app') : null}
+        />
+      );
+    }
 
     // RBAC Security Check: Cashier attempting dashboard / app selector is redirected to terminal
     if (!isAdmin && (currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding')) {
@@ -237,7 +296,7 @@ function App() {
       if (!isSetupCompleted) {
         return (
           <AdminDashboard 
-            onBackToTerminal={() => setCurrentRoute('terminal')}
+            onBackToTerminal={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
             onOpenAppHome={() => setCurrentRoute('app')}
             onSignOut={handleGlobalSignOut}
             tenantSlug={tenantInfo.tenantSlug} 
@@ -251,7 +310,7 @@ function App() {
           tenantSlug={tenantInfo.tenantSlug}
           staffName={staffUser.name}
           onOpenDashboard={() => setCurrentRoute('dashboard')}
-          onOpenPOS={() => setCurrentRoute('terminal')}
+          onOpenPOS={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
           onSignOut={handleGlobalSignOut}
         />
       );
@@ -261,7 +320,7 @@ function App() {
     if (currentRoute === 'dashboard' || currentRoute === 'onboarding') {
       return (
         <AdminDashboard 
-          onBackToTerminal={() => setCurrentRoute('terminal')}
+          onBackToTerminal={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
           onOpenAppHome={() => setCurrentRoute('app')}
           onSignOut={handleGlobalSignOut}
           tenantSlug={tenantInfo.tenantSlug} 
@@ -272,7 +331,7 @@ function App() {
     // Operational Live POS Register
     if (currentRoute === 'terminal') {
       if (storeStatus === 'pending') {
-        const storeName = staffUser.restaurantName || 'Your Restaurant';
+        const storeName = staffUser.restaurantName || 'Your Store';
         return (
           <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center font-sans">
             <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
@@ -285,7 +344,7 @@ function App() {
                 </span>
                 <h2 className="text-2xl font-black text-white">{storeName} POS Locked</h2>
                 <p className="text-slate-400 text-xs leading-relaxed">
-                  Your restaurant registration is complete! As a multi-tenant SaaS safety policy, POS operational access requires approval by a ManiPOS Super Admin.
+                  Your store registration is complete! As a multi-tenant SaaS safety policy, POS operational access requires approval by a ManiPOS Super Admin.
                 </p>
               </div>
 
@@ -324,7 +383,7 @@ function App() {
           <PosTerminal 
             staffName={staffUser.name} 
             staffRole={staffUser.role} 
-            onSignOut={handleGlobalSignOut}
+            onSignOut={handleGlobalSignOut} 
             onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
             onOpenAppHome={isAdmin ? () => setCurrentRoute('app') : null}
             tenantSlug={tenantInfo.tenantSlug}
@@ -372,8 +431,24 @@ function App() {
     );
   }
 
-  // ROUTE 3: Public Marketing / Product Landing Page
-  return <LandingPage onProceedToLogin={(slug) => navigateToLogin(slug)} />;
+  // ROUTE 3: Retail Marketing Portal (retail.manipos.com or ?mode=retail)
+  if (currentRoute === 'retail-home' || tenantInfo.isRetailMarketingDomain) {
+    return (
+      <RetailLandingPage
+        onProceedToLogin={(slug) => navigateToRetailLogin(slug)}
+        onLaunchRetailDemo={() => setCurrentRoute('retail-terminal')}
+        onSwitchToRestaurant={navigateToHome}
+      />
+    );
+  }
+
+  // ROUTE 4: Public Marketing / Product Landing Page (manipos.com)
+  return (
+    <LandingPage 
+      onProceedToLogin={(slug) => navigateToLogin(slug)} 
+      onSwitchToRetail={navigateToRetailHome}
+    />
+  );
 }
 
 export default App;
