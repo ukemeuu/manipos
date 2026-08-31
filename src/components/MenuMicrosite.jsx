@@ -1367,6 +1367,20 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         }
     };
 
+    // Loyalty points & 15-order milestone rewards engine
+    const totalGuestOrders = (guestUser?.visit_count || pastOrders.length || 0);
+    const redeemedRewardsAmount = React.useMemo(() => {
+        if (!guestUser?.notes) return 0;
+        const match = guestUser.notes.match(/\[RedeemedRewards:(\d+)\]/);
+        return match ? parseInt(match[1]) : 0;
+    }, [guestUser]);
+
+    const earnedRewardsTotal = Math.floor(totalGuestOrders / 15) * 50;
+    const availableLoyaltyBalance = Math.max(0, earnedRewardsTotal - redeemedRewardsAmount);
+    const ordersUntilNextReward = 15 - (totalGuestOrders % 15);
+    const loyaltyProgressPercent = Math.round(((totalGuestOrders % 15) / 15) * 100);
+    const loyaltyDiscountAmount = (redeemLoyaltyPoints && availableLoyaltyBalance >= 50) ? Math.min(cartTotal, 50) : 0;
+
     const discountAmount = React.useMemo(() => {
         if (!appliedDiscount) return 0;
         if (appliedDiscount.type === "percentage") {
@@ -1392,7 +1406,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const packagingFeeAmount = (diningOption === "Takeaway" || diningOption === "Delivery") 
         ? (whatsappSettings?.packaging_fee || 50)
         : 0;
-    const finalTotal = Math.max(0, cartTotal - discountAmount + packagingFeeAmount + deliveryFeeAmount);
+    const finalTotal = Math.max(0, cartTotal - discountAmount - loyaltyDiscountAmount + packagingFeeAmount + deliveryFeeAmount);
 
     // Cart operations
     const addToCart = (item) => {
@@ -1470,7 +1484,8 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             }
 
             // Build order payload
-            const promoNoteText = appliedDiscount ? `\n[Promo Applied: ${appliedDiscount.code} (-KES ${discountAmount.toLocaleString()})]` : '';
+            const promoNoteText = appliedDiscount ? `\n[Promo Applied: ${appliedDiscount.code} (-KES ${discountAmount.toLocaleString()})]` : "";
+            const loyaltyNoteText = loyaltyDiscountAmount > 0 ? `\n[Loyalty Reward: -KES ${loyaltyDiscountAmount} (15-Order Milestone)]` : "";
 
             let finalCustomerName = '';
             if (diningOption === 'Dine-in') {
@@ -1485,8 +1500,8 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             }
 
             const finalNotes = diningOption === "Delivery"
-                ? (notes.trim() ? `Delivery Address: ${activeDeliveryAddress}\nNotes: ${notes.trim()}${promoNoteText}` : `Delivery Address: ${activeDeliveryAddress}${promoNoteText}`)
-                : (notes.trim() ? `${notes.trim()}${promoNoteText}` : promoNoteText.trim());
+                ? (notes.trim() ? `Delivery Address: ${activeDeliveryAddress}\nNotes: ${notes.trim()}${promoNoteText}${loyaltyNoteText}` : `Delivery Address: ${activeDeliveryAddress}${promoNoteText}${loyaltyNoteText}`)
+                : (notes.trim() ? `${notes.trim()}${promoNoteText}` : (promoNoteText + loyaltyNoteText).trim());
 
             const orderPayload = {
                 customer_name: finalCustomerName,
@@ -1495,7 +1510,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 payment_status: "Pending",
                 status: "Pending",
                 total_amount: finalTotal,
-                discount: discountAmount,
+                discount: discountAmount + loyaltyDiscountAmount,
                 cashier_name: "Self-Service Microsite",
                 brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0]) : "POT OF JOLLOF") : activeBrand,
                 delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
@@ -2371,6 +2386,47 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                             </div>
                                         )}
 
+                                        {/* Loyalty Reward Balance & Redemption */}
+                                        {guestUser && (
+                                            <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 space-y-2 text-left shadow-2xs">
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-base">⭐</span>
+                                                        <div>
+                                                            <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">Loyalty Points & Rewards</span>
+                                                            <span className="text-[9px] text-amber-800 font-medium">
+                                                                {availableLoyaltyBalance >= 50 ? `KES ${availableLoyaltyBalance} reward balance ready!` : `${ordersUntilNextReward} more orders until your next KES 50 reward!`}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {availableLoyaltyBalance >= 50 ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRedeemLoyaltyPoints(!redeemLoyaltyPoints)}
+                                                            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs ${
+                                                                redeemLoyaltyPoints
+                                                                    ? "bg-emerald-600 text-white"
+                                                                    : "bg-amber-400 hover:bg-amber-300 text-amber-950 font-black"
+                                                            }`}
+                                                        >
+                                                            {redeemLoyaltyPoints ? "✓ Redeemed KES 50" : "Redeem KES 50"}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-[10px] font-mono font-black text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-lg">
+                                                            {totalGuestOrders % 15}/15
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {/* Mini progress bar */}
+                                                <div className="w-full bg-amber-200/60 h-1.5 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="bg-amber-500 h-full transition-all duration-500 rounded-full"
+                                                        style={{ width: `${loyaltyProgressPercent}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Promo Code Input Block */}
                                         <div className="pt-2 border-t border-gray-100 text-left space-y-1.5">
                                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo / Discount Code</span>
@@ -2428,6 +2484,12 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                 <div className="flex justify-between items-center text-emerald-600">
                                                     <span>Discount Applied:</span>
                                                     <span>- KES {discountAmount.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            {loyaltyDiscountAmount > 0 && (
+                                                <div className="flex justify-between items-center text-amber-700 bg-amber-50/80 p-1.5 rounded-lg border border-amber-200/60">
+                                                    <span className="flex items-center gap-1">⭐ Loyalty Milestone (15 Orders):</span>
+                                                    <span className="font-mono font-black">- KES {loyaltyDiscountAmount.toLocaleString()}</span>
                                                 </div>
                                             )}
                                             {packagingFeeAmount > 0 && (
@@ -2552,14 +2614,47 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
                                             <div className="h-px bg-gray-100"></div>
 
+                                            {/* Loyalty Rewards Milestone Tier Card */}
+                                            <div className="bg-gradient-to-br from-amber-400 to-amber-500 rounded-3xl p-5 text-slate-950 space-y-3 shadow-lg shadow-amber-400/15 text-left">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-950/70 block">Loyalty Rewards</span>
+                                                        <h4 className="text-base font-black tracking-tight leading-tight mt-0.5">15 Orders = KES 50 Reward</h4>
+                                                    </div>
+                                                    <div className="p-2 bg-slate-950 text-amber-400 rounded-2xl font-black text-xs font-mono">
+                                                        ⭐ {totalGuestOrders % 15}/15
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between text-[10px] font-black text-amber-950 uppercase">
+                                                        <span>Progress to Next KES 50</span>
+                                                        <span>{ordersUntilNextReward} Orders Left</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-950/20 h-2.5 rounded-full overflow-hidden p-0.5">
+                                                        <div
+                                                            className="bg-slate-950 h-full rounded-full transition-all duration-500"
+                                                            style={{ width: `${loyaltyProgressPercent}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="pt-2 border-t border-amber-950/15 flex justify-between items-center text-xs font-black">
+                                                    <span className="text-[10px] uppercase text-amber-950/80">Available Reward Wallet:</span>
+                                                    <span className="text-sm font-mono bg-slate-950 text-white px-2.5 py-1 rounded-xl">
+                                                        KES {availableLoyaltyBalance.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+
                                             {/* CRM Stats */}
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="bg-gray-50 rounded-2xl p-4 border border-gray-150 text-center">
-                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Visits</span>
-                                                    <span className="text-xl font-black text-black font-mono mt-1 block">{guestUser.visit_count || 0}</span>
+                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Total Orders</span>
+                                                    <span className="text-xl font-black text-black font-mono mt-1 block">{totalGuestOrders}</span>
                                                 </div>
                                                 <div className="bg-gray-50 rounded-2xl p-4 border border-gray-150 text-center">
-                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Total Spend</span>
+                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Lifetime Spend</span>
                                                     <span className="text-sm font-black text-black font-mono mt-2 block">KES {Math.round(guestUser.lifetime_spend || 0).toLocaleString()}</span>
                                                 </div>
                                             </div>
