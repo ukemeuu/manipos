@@ -518,6 +518,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const [isRegistering, setIsRegistering] = useState(false);
     const [guestLoading, setGuestLoading] = useState(false);
     const [pastOrders, setPastOrders] = useState([]);
+    const [availableDiscounts, setAvailableDiscounts] = useState([]);
     const [showHistory, setShowHistory] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
     
@@ -551,37 +552,109 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
     const selectedAddressRef = useRef(false);
 
 
-    const fetchPastOrders = async (guestId) => {
+    const fetchDiscounts = async () => {
         try {
             const { data, error } = await supabase
-                .from('pos_orders')
-                .select(`
-                    id,
-                    ticket_number,
-                    created_at,
-                    dining_option,
-                    total_amount,
-                    notes,
-                    pos_order_items (
-                        id,
-                        item_name,
-                        quantity,
-                        price,
-                        instructions
-                    )
-                `)
-                .eq('guest_id', guestId)
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setPastOrders(data || []);
+                .from("pos_discounts")
+                .select("*")
+                .eq("is_active", true)
+                .order("created_at", { ascending: false });
+            if (!error && data) {
+                setAvailableDiscounts(data);
+            }
         } catch (e) {
-            console.error('Error fetching past orders:', e);
+            console.warn("Discounts load notice:", e);
+        }
+    };
+
+    const fetchPastOrders = async (guestId, currentGuest) => {
+        try {
+            let orders = [];
+            const targetGuest = currentGuest || guestUser;
+            const gid = guestId || targetGuest?.id;
+
+            // 1. Query by guest_id if present
+            if (gid) {
+                const { data: byGuestId } = await supabase
+                    .from("pos_orders")
+                    .select(`
+                        id,
+                        ticket_number,
+                        created_at,
+                        dining_option,
+                        total_amount,
+                        delivery_address,
+                        status,
+                        payment_status,
+                        payment_method,
+                        notes,
+                        pos_order_items (
+                            id,
+                            item_name,
+                            quantity,
+                            price,
+                            instructions
+                        )
+                    `)
+                    .eq("guest_id", gid)
+                    .order("created_at", { ascending: false });
+                if (byGuestId) orders = [...orders, ...byGuestId];
+            }
+
+            // 2. Query by phone or name to link any previous orders
+            const phone = targetGuest?.phone;
+            const firstName = targetGuest?.first_name;
+            if (phone || (firstName && firstName.length > 1)) {
+                let nameQuery = supabase
+                    .from("pos_orders")
+                    .select(`
+                        id,
+                        ticket_number,
+                        created_at,
+                        dining_option,
+                        total_amount,
+                        delivery_address,
+                        status,
+                        payment_status,
+                        payment_method,
+                        notes,
+                        pos_order_items (
+                            id,
+                            item_name,
+                            quantity,
+                            price,
+                            instructions
+                        )
+                    `)
+                    .order("created_at", { ascending: false })
+                    .limit(25);
+
+                if (firstName) {
+                    nameQuery = nameQuery.ilike("customer_name", `%${firstName}%`);
+                }
+                const { data: byName } = await nameQuery;
+                if (byName) {
+                    const existingIds = new Set(orders.map(o => o.id));
+                    byName.forEach(o => {
+                        if (!existingIds.has(o.id)) {
+                            orders.push(o);
+                            existingIds.add(o.id);
+                        }
+                    });
+                }
+            }
+
+            orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            setPastOrders(orders);
+        } catch (e) {
+            console.error("Error fetching past orders:", e);
         }
     };
 
     useEffect(() => {
         document.title = "Pot of Jollof | Order Online & Digital Menu";
         fetchMenu();
+        fetchDiscounts();
 
         // Track QR Code Scan on digital menu landing
         try {
@@ -1226,57 +1299,99 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         return Array.from(addresses);
     }, [pastOrders, guestUser]);
 
+    // Active Free Delivery Offer Auto-Evaluator
+    const activeFreeDeliveryOffer = React.useMemo(() => {
+        return availableDiscounts.find(d => d.type === "free_delivery" && d.is_active);
+    }, [availableDiscounts]);
+
+    const freeDeliveryThreshold = activeFreeDeliveryOffer?.min_order_amount || 0;
+    const freeDeliveryMaxRadius = activeFreeDeliveryOffer?.value || 0;
+
+    const isFreeDeliveryEligible = React.useMemo(() => {
+        if (!activeFreeDeliveryOffer) return false;
+        const meetsSpend = cartTotal >= freeDeliveryThreshold;
+        const meetsRadius = !freeDeliveryMaxRadius || freeDeliveryMaxRadius <= 0 || (calculatedDistance === null || calculatedDistance <= freeDeliveryMaxRadius);
+        return meetsSpend && meetsRadius;
+    }, [activeFreeDeliveryOffer, cartTotal, freeDeliveryThreshold, freeDeliveryMaxRadius, calculatedDistance]);
+
     const handleApplyPromoCode = async (e) => {
         if (e) e.preventDefault();
         if (!promoCode.trim()) return;
-        setPromoError('');
-        setPromoSuccess('');
+        setPromoError("");
+        setPromoSuccess("");
         try {
             const { data, error } = await supabase
-                .from('pos_discounts')
-                .select('*')
-                .eq('code', promoCode.trim().toUpperCase())
-                .eq('is_active', true)
+                .from("pos_discounts")
+                .select("*")
+                .eq("code", promoCode.trim().toUpperCase())
+                .eq("is_active", true)
                 .maybeSingle();
                 
             if (error) throw error;
             
             if (!data) {
-                setPromoError('Invalid or expired discount code.');
+                setPromoError("Invalid or expired promo code.");
                 setAppliedDiscount(null);
                 return;
             }
             
             if (cartTotal < (data.min_order_amount || 0)) {
-                setPromoError(`Minimum order amount for this code is KES ${data.min_order_amount.toLocaleString()}`);
+                setPromoError(`Minimum spend for this code is KES ${data.min_order_amount.toLocaleString()}`);
+                setAppliedDiscount(null);
+                return;
+            }
+
+            if (data.type === "free_delivery" && data.value > 0 && calculatedDistance && calculatedDistance > data.value) {
+                setPromoError(`Free delivery promo is capped at ${data.value} km radius (your distance is ${calculatedDistance.toFixed(1)} km)`);
+                setAppliedDiscount(null);
+                return;
+            }
+
+            if (data.type === "bogof" && cart.length === 0) {
+                setPromoError("Please add items to your cart to activate Buy 1 Get 1 Free!");
                 setAppliedDiscount(null);
                 return;
             }
             
             setAppliedDiscount(data);
-            const successMsg = data.type === 'percentage' 
-                ? `${data.value}% discount applied!` 
-                : `KES ${data.value.toLocaleString()} discount applied!`;
+            let successMsg = "";
+            if (data.type === "percentage") successMsg = `${data.value}% discount applied!`;
+            else if (data.type === "fixed") successMsg = `KES ${data.value.toLocaleString()} discount applied!`;
+            else if (data.type === "bogof") successMsg = "🎉 Buy 1 Get 1 Free (BOGOF) applied!";
+            else if (data.type === "free_delivery") successMsg = "🚚 Free Delivery promo applied!";
+            else successMsg = "Promo code applied successfully!";
             setPromoSuccess(successMsg);
         } catch (err) {
-            setPromoError('Failed to validate code: ' + err.message);
+            setPromoError("Failed to validate code: " + err.message);
             setAppliedDiscount(null);
         }
     };
 
     const discountAmount = React.useMemo(() => {
         if (!appliedDiscount) return 0;
-        if (appliedDiscount.type === 'percentage') {
+        if (appliedDiscount.type === "percentage") {
             return Math.round((cartTotal * appliedDiscount.value) / 100);
-        } else {
+        } else if (appliedDiscount.type === "fixed") {
             return Math.min(cartTotal, appliedDiscount.value);
+        } else if (appliedDiscount.type === "bogof") {
+            if (cart.length === 0) return 0;
+            const cheapest = cart.slice().sort((a, b) => a.price - b.price)[0];
+            return cheapest ? cheapest.price : 0;
+        } else if (appliedDiscount.type === "free_delivery") {
+            return 0; // Handled directly in deliveryFeeAmount
         }
-    }, [cartTotal, appliedDiscount]);
+        return 0;
+    }, [cartTotal, appliedDiscount, cart]);
 
-    const packagingFeeAmount = (diningOption === 'Takeaway' || diningOption === 'Delivery') 
-        ? whatsappSettings.packaging_fee 
+    const deliveryFeeAmount = React.useMemo(() => {
+        if (diningOption !== "Delivery") return 0;
+        if (isFreeDeliveryEligible || appliedDiscount?.type === "free_delivery") return 0;
+        return calculatedDeliveryFee;
+    }, [diningOption, isFreeDeliveryEligible, appliedDiscount, calculatedDeliveryFee]);
+
+    const packagingFeeAmount = (diningOption === "Takeaway" || diningOption === "Delivery") 
+        ? (whatsappSettings?.packaging_fee || 50)
         : 0;
-    const deliveryFeeAmount = diningOption === 'Delivery' ? calculatedDeliveryFee : 0;
     const finalTotal = Math.max(0, cartTotal - discountAmount + packagingFeeAmount + deliveryFeeAmount);
 
     // Cart operations
@@ -1384,6 +1499,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 cashier_name: "Self-Service Microsite",
                 brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0]) : "POT OF JOLLOF") : activeBrand,
                 delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
+                guest_id: guestUser ? guestUser.id : null,
                 notes: finalNotes
             };
 
@@ -1437,6 +1553,9 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             if (itemsError) throw itemsError;
 
             // 3. Immediately display success modal to user (sub-second feedback)
+            if (guestUser) {
+                fetchPastOrders(guestUser.id, guestUser);
+            }
             setOrderSuccess({
                 orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
@@ -1526,6 +1645,26 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col font-sans select-none">
+            {/* Top Deals Announcement Bar */}
+            {availableDiscounts.length > 0 && (
+                <div className="bg-amber-400 text-slate-950 px-4 py-2 text-xs font-black flex items-center justify-between shadow-sm z-30 shrink-0">
+                    <div className="flex items-center gap-2 mx-auto tracking-tight">
+                        <span className="animate-bounce">🎁</span>
+                        <span>
+                            {availableDiscounts.find(d => d.type === "free_delivery") ? (
+                                <>FREE Delivery on orders over KES ${(availableDiscounts.find(d => d.type === "free_delivery").min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts.find(d => d.type === "free_delivery").code}</strong></>
+                            ) : availableDiscounts[0].type === "percentage" ? (
+                                <>${availableDiscounts[0].value}% OFF! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts[0].code}</strong></>
+                            ) : availableDiscounts[0].type === "bogof" ? (
+                                <>Buy 1 Get 1 Free (BOGOF)! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts[0].code}</strong></>
+                            ) : (
+                                <>Save KES ${availableDiscounts[0].value} on orders over KES ${(availableDiscounts[0].min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts[0].code}</strong></>
+                            )}
+                        </span>
+                    </div>
+                </div>
+            )}
+
             {/* Visual Brand Header Banner */}
             <div className={`relative h-44 md:h-52 bg-gradient-to-r ${activeBrandConfig.color} flex flex-col justify-end p-6 md:p-8 shrink-0 overflow-hidden transition-all duration-300`}>
                 {/* Abstract Glowing Backdrop */}
@@ -2212,13 +2351,33 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                             )}
                                         </div>
 
+                                        {/* Free Delivery Banner if Active */}
+                                        {diningOption === "Delivery" && activeFreeDeliveryOffer && (
+                                            <div className={`p-2.5 rounded-xl text-left text-[11px] font-bold border transition-all ${
+                                                isFreeDeliveryEligible
+                                                    ? "bg-emerald-50 border-emerald-200 text-emerald-950"
+                                                    : "bg-amber-50 border-amber-200 text-amber-900"
+                                            }`}>
+                                                {isFreeDeliveryEligible ? (
+                                                    <div className="flex items-center gap-1.5 font-black">
+                                                        <span>🎉</span>
+                                                        <span>FREE DELIVERY UNLOCKED! (Order over KES ${freeDeliveryThreshold.toLocaleString()})</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-between gap-1 text-[10px]">
+                                                        <span>🚚 Add <strong>KES ${Math.max(0, freeDeliveryThreshold - cartTotal).toLocaleString()}</strong> more for <strong>FREE DELIVERY</strong>!</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* Promo Code Input Block */}
                                         <div className="pt-2 border-t border-gray-100 text-left space-y-1.5">
                                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo / Discount Code</span>
                                             <div className="flex gap-2">
                                                 <input
                                                     type="text"
-                                                    placeholder="Enter code (e.g. MUTE10)"
+                                                    placeholder="Enter code (e.g. SAVE200, BOGOF, MUTE10)"
                                                     value={promoCode}
                                                     onChange={(e) => setPromoCode(e.target.value)}
                                                     disabled={submitting}
@@ -2228,13 +2387,35 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                     type="button"
                                                     onClick={handleApplyPromoCode}
                                                     disabled={submitting || !promoCode.trim()}
-                                                    className="px-4 py-2 bg-black hover:bg-neutral-850 disabled:opacity-40 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
+                                                    className="px-4 py-2 bg-black hover:bg-neutral-850 disabled:opacity-40 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
                                                 >
                                                     Apply
                                                 </button>
                                             </div>
                                             {promoError && <p className="text-[9px] font-bold text-red-500 ml-1">{promoError}</p>}
-                                            {promoSuccess && <p className="text-[9px] font-bold text-emerald-600 ml-1">✓ {promoSuccess}</p>}
+                                            {appliedDiscount && (
+                                                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-emerald-900 text-xs font-bold mt-1 shadow-2xs">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <span>🏷️</span>
+                                                        <span className="font-mono font-black uppercase">{appliedDiscount.code}</span>
+                                                        <span className="text-[10px] text-emerald-700 font-normal">
+                                                            ({appliedDiscount.type === "percentage" ? `${appliedDiscount.value}% OFF` : appliedDiscount.type === "fixed" ? `-KES ${appliedDiscount.value}` : appliedDiscount.type === "bogof" ? "BOGOF Free Item" : "Free Delivery"})
+                                                        </span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAppliedDiscount(null);
+                                                            setPromoCode("");
+                                                            setPromoSuccess("");
+                                                        }}
+                                                        className="text-emerald-700 hover:text-red-600 text-xs font-black px-1.5 py-0.5 rounded cursor-pointer"
+                                                        title="Remove code"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Order Summary calculations */}
@@ -2258,8 +2439,13 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                             <div className="flex justify-between items-center text-gray-500">
                                                 <span>Delivery Fee:</span>
                                                 <span>
-                                                    {diningOption === 'Delivery' ? (
-                                                        isGeocoding ? (
+                                                    {diningOption === "Delivery" ? (
+                                                        (isFreeDeliveryEligible || appliedDiscount?.type === "free_delivery") ? (
+                                                            <span className="text-emerald-600 font-black flex items-center gap-1.5">
+                                                                {calculatedDeliveryFee > 0 && <span className="line-through text-gray-400 font-normal text-[10px]">KES {calculatedDeliveryFee.toLocaleString()}</span>}
+                                                                <span className="bg-emerald-100 text-emerald-950 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider">FREE</span>
+                                                            </span>
+                                                        ) : isGeocoding ? (
                                                             <span className="flex items-center gap-1 text-[10px] text-gray-400">
                                                                 <Loader2 className="animate-spin" size={10} /> Calculating...
                                                             </span>
@@ -2271,7 +2457,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                                 {calculatedDistance && ` (${calculatedDistance.toFixed(1)} km)`}
                                                             </span>
                                                         )
-                                                    ) : 'FREE'}
+                                                    ) : "FREE"}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between items-end text-sm text-gray-900 font-black pt-1">
@@ -2379,6 +2565,81 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                             </div>
                                         </div>
 
+                                        {/* Recent Orders Section directly in drawer */}
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center px-1">
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Recent Orders ({pastOrders.length})</span>
+                                                {pastOrders.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowHistory(true);
+                                                            setAccountOpen(false);
+                                                        }}
+                                                        className="text-[10px] text-amber-600 font-bold hover:underline"
+                                                    >
+                                                        View All ➔
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {pastOrders.length === 0 ? (
+                                                <div className="bg-white border border-gray-200 rounded-2xl p-4 text-center text-gray-400 text-xs font-bold">
+                                                    No orders yet. Place your first meal!
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2.5">
+                                                    {pastOrders.slice(0, 3).map((order) => (
+                                                        <div key={order.id} className="bg-white border border-gray-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">
+                                                            <div className="flex justify-between items-start">
+                                                                <div>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-[10px] font-black text-white bg-black px-2 py-0.5 rounded-md font-mono">#{order.ticket_number}</span>
+                                                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                                                                            order.status === "Completed" || order.status === "Accepted"
+                                                                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                                                                : "bg-amber-50 text-amber-800 border-amber-200"
+                                                                        }`}>
+                                                                            {order.status || "Pending"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-[9px] text-gray-400 font-medium block mt-1">
+                                                                        {new Date(order.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        handleReorder(order);
+                                                                        setAccountOpen(false);
+                                                                    }}
+                                                                    className="px-2.5 py-1 bg-black hover:bg-neutral-850 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                                                                >
+                                                                    ⚡ Reorder
+                                                                </button>
+                                                            </div>
+
+                                                            <div className="text-[10px] text-gray-700 font-medium line-clamp-2">
+                                                                {(order.pos_order_items || []).map(i => `${i.quantity}x ${i.item_name}`).join(", ")}
+                                                            </div>
+
+                                                            {order.delivery_address && (
+                                                                <div className="text-[9px] text-gray-500 font-semibold truncate flex items-center gap-1">
+                                                                    <span>📍</span>
+                                                                    <span>{order.delivery_address}</span>
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex justify-between items-center text-xs pt-1 border-t border-gray-100 font-black">
+                                                                <span className="text-[9px] text-gray-400 uppercase">{order.dining_option}</span>
+                                                                <span className="font-mono text-black">KES {Math.round(order.total_amount).toLocaleString()}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
                                         {/* Actions */}
                                         <div className="space-y-3">
                                             <button
@@ -2389,7 +2650,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                 }}
                                                 className="w-full py-3.5 bg-black hover:bg-neutral-850 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all text-center flex items-center justify-center gap-2 shadow-md"
                                             >
-                                                📅 View Order History ({pastOrders.length})
+                                                📅 Full Order History ({pastOrders.length})
                                             </button>
 
                                             <button

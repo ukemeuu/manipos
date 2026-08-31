@@ -14,7 +14,10 @@ import {
   Cell
 } from 'recharts';
 import { 
-  TrendingUp, 
+  TrendingUp,
+  Gift,
+  Percent,
+  Tag, 
   Users, 
   Package, 
   Receipt, 
@@ -63,6 +66,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
   });
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [discounts, setDiscounts] = useState([]);
+  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
+  const [editingDiscount, setEditingDiscount] = useState(null);
   const [staffList, setStaffList] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [feedbackList, setFeedbackList] = useState([]);
@@ -551,11 +557,23 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                 Staff & Access
               </button>
               <button
-                onClick={() => setActiveTab('feedback')}
+                onClick={() => setActiveTab("offers")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === 'feedback' 
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                  activeTab === "offers" 
+                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10" 
+                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                }`}
+              >
+                <Gift size={18} />
+                Offers & Promotions
+              </button>
+
+              <button
+                onClick={() => setActiveTab("feedback")}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
+                  activeTab === "feedback" 
+                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10" 
+                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
                 }`}
               >
                 <MessageSquare size={18} />

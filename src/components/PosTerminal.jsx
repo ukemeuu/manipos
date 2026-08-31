@@ -6221,7 +6221,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                                                                 <div className="mt-4 space-y-1">
                                                                     <p className="text-xs font-bold text-gray-900 text-left">
-                                                                        Discount: {disc.type === 'percentage' ? `${disc.value}%` : `KES ${disc.value.toLocaleString()}`}
+                                                                        Offer: {disc.type === "percentage" ? `${disc.value}% OFF` : disc.type === "fixed" ? `KES ${disc.value.toLocaleString()} OFF` : disc.type === "bogof" ? "BOGOF Free Item" : (disc.value > 0 ? `Free Delivery (max ${disc.value}km)` : "Free Delivery")}
                                                                     </p>
                                                                     <p className="text-[9px] font-bold text-gray-400 uppercase text-left">
                                                                         Min Order Amount: KES {disc.min_order_amount.toLocaleString()}
@@ -6869,7 +6869,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                 className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none font-semibold"
                                             >
                                                 <option value="percentage">Percentage (%)</option>
-                                                <option value="fixed">Fixed (KES)</option>
+                                                <option value="fixed">Fixed Amount Off (KES)</option>
+                                                <option value="free_delivery">Free Delivery Promo</option>
+                                                <option value="bogof">Buy 1 Get 1 Free (BOGOF)</option>
                                             </select>
                                         </div>
                                         <div className="space-y-1 text-left">
