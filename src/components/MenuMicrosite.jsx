@@ -1376,7 +1376,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
             const orderPayload = {
                 customer_name: finalCustomerName,
                 dining_option: diningOption,
-                payment_method: "Paid to App",
+                payment_method: "I&M - PAYBILL No",
                 payment_status: "Pending",
                 status: "Pending",
                 total_amount: finalTotal,
