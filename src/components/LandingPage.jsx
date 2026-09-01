@@ -29,8 +29,6 @@ import {
   X,
   AlertTriangle,
 } from 'lucide-react';
-import { getPublicFeatures } from '../config/features';
-import { FeatureCard } from './FeatureCard';
 import { authenticateStaffLogin } from '../services/data/staffService';
 
 const fadeUp = {
@@ -546,28 +544,7 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
         </div>
       </section>
 
-      {/* ── MORE FEATURES GRID ── */}
-      <section className="py-10 pb-28 px-6">
-        <div className="max-w-7xl mx-auto space-y-10">
-          <div className="text-center space-y-3">
-            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
-              System Capabilities & Development Roadmap
-            </div>
-            <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-              Production Capabilities & Feature Roadmap
-            </h3>
-            <p className="text-white/50 text-base max-w-xl mx-auto font-medium">
-              Features marked LIVE are ready for production store operations. Modules in active development are clearly marked as Coming Soon.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {getPublicFeatures().map((feat, i) => (
-              <FeatureCard key={feat.id} feature={feat} index={i} />
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* ── KDS SHOWCASE ── */}
       <section className="py-24 px-6 bg-white/[0.015] border-y border-white/[0.05]">
