@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { connectQZ, disconnectQZ, isQZConnected, onQZStatusChange, listPrinters, printOrFallback } from '../lib/qzPrint';
-import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus } from 'lucide-react';
+import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, ArrowRight, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FEEDBACK_QR_CODE } from '../lib/feedbackQrBase64';
 import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
 import { CampaignsView } from './CampaignsView';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
+import { MenuItemSalesAnalyzer } from './MenuItemSalesAnalyzer';
 
 const MUTE_LOGO_URL = '/logo.png';
 
@@ -104,36 +106,8 @@ const formatCustomerName = (name) => {
 export const calculateChannelPrice = (item, channel, activeBrand) => {
     if (!item) return 0;
     const chLower = (channel || 'Walk-in').toLowerCase().trim();
+    const basePrice = parseFloat(item.basePrice !== undefined ? item.basePrice : item.price) || 0;
 
-    try {
-        const basePrice = parseFloat(item.basePrice !== undefined ? item.basePrice : item.price) || 0;
-        let chName = '';
-        if (chLower.includes('uber')) chName = 'ubereats';
-        else if (chLower.includes('glovo')) chName = 'glovo';
-        else if (chLower.includes('bolt')) chName = 'boltfood';
-
-        if (chName) {
-            const cachedChannels = JSON.parse(localStorage.getItem('pos_channels_cached') || '[]');
-            const channelInfo = cachedChannels.find(c => c.name === chName);
-            if (channelInfo && channelInfo.is_active) {
-                const cachedOverrides = JSON.parse(localStorage.getItem('pos_channel_overrides_cached') || '[]');
-                const itemOvr = cachedOverrides.find(o => o.menu_item_id === item.id && o.channel_id === channelInfo.id);
-                
-                let markupAmt = 0;
-                if (itemOvr && parseFloat(itemOvr.price_markup_value) > 0) {
-                    markupAmt = parseFloat(itemOvr.price_markup_value);
-                } else if (parseFloat(channelInfo.default_markup_percent) > 0) {
-                    markupAmt = basePrice * (parseFloat(channelInfo.default_markup_percent) / 100);
-                }
-                
-                if (markupAmt > 0) {
-                    return basePrice + markupAmt;
-                }
-            }
-        }
-    } catch (e) {
-        console.error('Error calculating dynamic channel markup:', e);
-    }
     const effectiveBrand = (activeBrand && activeBrand !== 'All') ? activeBrand : (item.brand || null);
     const bp = (effectiveBrand && item.brand_prices && typeof item.brand_prices === 'object') 
         ? item.brand_prices[effectiveBrand] 
@@ -141,37 +115,37 @@ export const calculateChannelPrice = (item, channel, activeBrand) => {
 
     // 1. Check brand-specific channel price override if defined for this channel
     if (bp) {
-        if (chLower.includes('glovo') && bp.glovo_price !== undefined && bp.glovo_price !== null && parseFloat(bp.glovo_price) > 0) return parseFloat(bp.glovo_price);
-        if (chLower.includes('uber') && bp.ubereats_price !== undefined && bp.ubereats_price !== null && parseFloat(bp.ubereats_price) > 0) return parseFloat(bp.ubereats_price);
-        if (chLower.includes('bolt') && bp.bolt_price !== undefined && bp.bolt_price !== null && parseFloat(bp.bolt_price) > 0) return parseFloat(bp.bolt_price);
-        if (chLower.includes('ando') && bp.ando_price !== undefined && bp.ando_price !== null && parseFloat(bp.ando_price) > 0) return parseFloat(bp.ando_price);
-        if ((chLower.includes('site') || chLower.includes('micro')) && bp.website_price !== undefined && bp.website_price !== null && parseFloat(bp.website_price) > 0) return parseFloat(bp.website_price);
+        if (chLower.includes('glovo') && bp.glovo_price !== undefined && bp.glovo_price !== null && parseFloat(bp.glovo_price) > 0) return Math.round(parseFloat(bp.glovo_price));
+        if (chLower.includes('uber') && bp.ubereats_price !== undefined && bp.ubereats_price !== null && parseFloat(bp.ubereats_price) > 0) return Math.round(parseFloat(bp.ubereats_price));
+        if (chLower.includes('bolt') && bp.bolt_price !== undefined && bp.bolt_price !== null && parseFloat(bp.bolt_price) > 0) return Math.round(parseFloat(bp.bolt_price));
+        if (chLower.includes('ando') && bp.ando_price !== undefined && bp.ando_price !== null && parseFloat(bp.ando_price) > 0) return Math.round(parseFloat(bp.ando_price));
+        if ((chLower.includes('site') || chLower.includes('micro')) && bp.website_price !== undefined && bp.website_price !== null && parseFloat(bp.website_price) > 0) return Math.round(parseFloat(bp.website_price));
     }
 
     // 2. Check item-level omni-channel fixed price overrides for this channel
     if (chLower.includes('glovo') && item.glovo_price !== undefined && item.glovo_price !== null && parseFloat(item.glovo_price) > 0) {
-        return parseFloat(item.glovo_price);
+        return Math.round(parseFloat(item.glovo_price));
     }
     if (chLower.includes('uber') && item.ubereats_price !== undefined && item.ubereats_price !== null && parseFloat(item.ubereats_price) > 0) {
-        return parseFloat(item.ubereats_price);
+        return Math.round(parseFloat(item.ubereats_price));
     }
     if (chLower.includes('bolt') && item.bolt_price !== undefined && item.bolt_price !== null && parseFloat(item.bolt_price) > 0) {
-        return parseFloat(item.bolt_price);
+        return Math.round(parseFloat(item.bolt_price));
     }
     if (chLower.includes('ando') && item.ando_price !== undefined && item.ando_price !== null && parseFloat(item.ando_price) > 0) {
-        return parseFloat(item.ando_price);
+        return Math.round(parseFloat(item.ando_price));
     }
     if ((chLower.includes('site') || chLower.includes('micro')) && item.website_price !== undefined && item.website_price !== null && parseFloat(item.website_price) > 0) {
-        return parseFloat(item.website_price);
+        return Math.round(parseFloat(item.website_price));
     }
 
     // 3. Fallback to brand base price if defined
     if (bp && bp.price !== undefined && bp.price !== null && parseFloat(bp.price) > 0) {
-        return parseFloat(bp.price);
+        return Math.round(parseFloat(bp.price));
     }
 
     // 4. Default fallback to item base price
-    return parseFloat(item.basePrice !== undefined ? item.basePrice : item.price) || 0;
+    return Math.round(basePrice);
 };
 
 // Dynamic Modifier Option Channel Pricing Engine
@@ -181,22 +155,22 @@ export const calculateModifierChannelPrice = (option, channel) => {
     const chLower = (channel || 'Walk-in').toLowerCase().trim();
 
     if (chLower.includes('glovo') && option.glovo_price !== undefined && option.glovo_price !== null && parseFloat(option.glovo_price) > 0) {
-        return parseFloat(option.glovo_price);
+        return Math.round(parseFloat(option.glovo_price));
     }
     if (chLower.includes('uber') && option.ubereats_price !== undefined && option.ubereats_price !== null && parseFloat(option.ubereats_price) > 0) {
-        return parseFloat(option.ubereats_price);
+        return Math.round(parseFloat(option.ubereats_price));
     }
     if (chLower.includes('bolt') && option.bolt_price !== undefined && option.bolt_price !== null && parseFloat(option.bolt_price) > 0) {
-        return parseFloat(option.bolt_price);
+        return Math.round(parseFloat(option.bolt_price));
     }
     if (chLower.includes('ando') && option.ando_price !== undefined && option.ando_price !== null && parseFloat(option.ando_price) > 0) {
-        return parseFloat(option.ando_price);
+        return Math.round(parseFloat(option.ando_price));
     }
     if ((chLower.includes('site') || chLower.includes('micro')) && option.website_price !== undefined && option.website_price !== null && parseFloat(option.website_price) > 0) {
-        return parseFloat(option.website_price);
+        return Math.round(parseFloat(option.website_price));
     }
 
-    return basePrice;
+    return Math.round(basePrice);
 };
 
 // Dynamic Modifier Total Helper (Calculates modifier price sum from selectedModifiers or instructions)
@@ -215,7 +189,7 @@ export const getItemModifierTotal = (item, orderChannel) => {
             }, 0);
         }
     }
-    return total;
+    return Math.round(total);
 };
 
 export const obfuscateTicket = (ticketNum) => {
@@ -302,7 +276,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
     const [menu, setMenu] = useState([]);
     const [loadingMenu, setLoadingMenu] = useState(true);
-    const [activeBrand, setActiveBrand] = useState(null);
+    const [activeBrand, setActiveBrand] = useState('POT OF JOLLOF');
     const [activeCategory, setActiveCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState([]);
@@ -3050,20 +3024,19 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     };
 
     // Calculate totals
-    // Calculate totals
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = Math.round(cart.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * item.quantity), 0));
     
     const discountAmount = React.useMemo(() => {
         const val = parseFloat(discountValue) || 0;
         if (discountType === 'percentage') {
-            return (subtotal * val) / 100;
+            return Math.round((subtotal * val) / 100);
         } else if (discountType === 'flat') {
-            return val;
+            return Math.round(val);
         }
         return 0;
     }, [subtotal, discountType, discountValue]);
 
-    const total = Math.max(0, subtotal - discountAmount);
+    const total = Math.round(Math.max(0, subtotal - discountAmount));
 
     // Calculate inclusive 16% VAT and 2% Catering Levy on main items/modifiers with include_vat enabled
     const { vatAmount, cateringLevyAmount } = React.useMemo(() => {
@@ -3161,7 +3134,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
             const orderPayload = {
                 customer_name: finalCustName,
-                customer_type: customerType,
                 dining_option: diningOption,
                 payment_method: paymentMethod,
                 payment_status: paymentStatus,
@@ -3816,46 +3788,95 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                         </div>
                     </div>
                 ) : activeView === 'menu' && (
-                    <div className={`flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-3 sm:p-6 gap-4 sm:gap-6 pb-20 sm:pb-6 ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200`}>
-                        {/* Brand Header — active brand + switcher only */}
-                        {(() => {
-                            const activeBrandInfo = BRAND_OPTIONS.find(b => b.id === activeBrand);
-                            return (
-                                <div className="flex items-center gap-3 pb-3 border-b border-gray-200 shrink-0">
-                                    {/* Active brand badge */}
-                                    {activeBrandInfo && (
-                                        <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-2xl px-3.5 py-2 shadow-sm">
-                                            <img
-                                                src={activeBrandInfo.logo}
-                                                alt={activeBrandInfo.name}
-                                                className="w-6 h-6 object-contain rounded"
-                                                onError={e => { e.target.style.display = 'none'; }}
-                                            />
-                                            <span className="font-black text-sm text-gray-900">{activeBrandInfo.name}</span>
-                                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                                                {filteredMenu.length} items
-                                            </span>
-                                        </div>
-                                    )}
-                                    {/* Switch brand button */}
+                    <div className={`flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-2.5 sm:p-6 gap-2.5 sm:gap-4 pb-20 sm:pb-6 ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200`}>
+                        {/* 1-Tap Brand Tabs Carousel (Always visible on mobile & desktop) */}
+                        <div className="flex items-center gap-1.5 pb-2 border-b border-gray-200/80 shrink-0 overflow-x-auto custom-scrollbar -mx-1 px-1">
+                            {BRAND_OPTIONS.map(br => {
+                                const isSelected = activeBrand === br.id;
+                                const itemCount = menu.filter(item => itemBelongsToBrand(item, br.id)).length;
+                                return (
                                     <button
+                                        key={br.id}
                                         type="button"
-                                        onClick={() => setActiveBrand(null)}
-                                        className="flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700 px-3.5 py-2 rounded-2xl font-bold text-xs shadow-sm transition-all"
+                                        onClick={() => {
+                                            setActiveBrand(br.id);
+                                            setSelectedBrand(br.id);
+                                        }}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black shrink-0 transition-all border cursor-pointer ${
+                                            isSelected
+                                                ? 'bg-gray-950 text-white border-gray-950 shadow-sm scale-[1.02]'
+                                                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                                        }`}
                                     >
-                                        <ArrowLeft size={13} />
-                                        <span>Switch Brand</span>
+                                        <img
+                                            src={br.logo}
+                                            alt={br.name}
+                                            className="w-4 h-4 object-contain rounded shrink-0"
+                                            onError={e => { e.target.style.display = 'none'; }}
+                                        />
+                                        <span className="truncate">{br.name}</span>
+                                        <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                                            isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                                        }`}>
+                                            {itemCount}
+                                        </span>
                                     </button>
-                                </div>
-                            );
-                        })()}
+                                );
+                            })}
+                            {isSystemAdmin && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveBrand('All');
+                                        setSelectedBrand('POT OF JOLLOF');
+                                    }}
+                                    className={`flex items-center gap-1 px-3 py-1.5 rounded-2xl text-xs font-black shrink-0 transition-all border cursor-pointer ${
+                                        activeBrand === 'All'
+                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                            : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <span>✨ All Brands</span>
+                                </button>
+                            )}
+                        </div>
 
+                        {/* Mobile-Only Horizontal Category Carousel */}
+                        <div className="sm:hidden flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 shrink-0 -mx-1 px-1">
+                            {[{ name: 'All', icon: '🍽️' }, ...visibleCategories].map(cat => {
+                                const count = cat.name === 'All'
+                                    ? filteredMenu.length
+                                    : filteredMenu.filter(i => i.category === cat.name).length;
+                                return (
+                                    <button
+                                        key={cat.name}
+                                        type="button"
+                                        onClick={() => setActiveCategory(cat.name)}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black shrink-0 transition-all border ${
+                                            activeCategory === cat.name
+                                                ? 'bg-gray-950 text-white border-gray-950 shadow-sm'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <span className="text-sm">{cat.icon}</span>
+                                        <span className="truncate">{cat.name}</span>
+                                        {count > 0 && (
+                                            <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                                                activeCategory === cat.name ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                                            }`}>
+                                                {count}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                        {/* Split Panel: Category Sidebar + Menu Items */}
+                        {/* Split Panel: Category Sidebar (Desktop) + Menu Items */}
                         <div className="flex-1 flex overflow-hidden gap-2 min-h-0 min-w-0">
 
-                            {/* Left: Category Sidebar */}
-                            <div className="w-20 sm:w-36 md:w-44 flex flex-col gap-1 overflow-y-auto custom-scrollbar shrink-0">
+                            {/* Left: Category Sidebar (Desktop Only) */}
+                            <div className="hidden sm:flex w-20 sm:w-36 md:w-44 flex-col gap-1 overflow-y-auto custom-scrollbar shrink-0">
                                 {[{ name: 'All', icon: '🍽️' }, ...visibleCategories].map(cat => {
                                     const count = cat.name === 'All'
                                         ? filteredMenu.length
@@ -3884,7 +3905,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 })}
                             </div>
 
-                            {/* Right: Menu Items Grid */}
+                            {/* Right: Menu Items (Mobile List View & Desktop Grid View) */}
                             <div className="flex-1 min-w-0 overflow-y-auto custom-scrollbar pr-1">
                                 {loadingMenu ? (
                                     <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
@@ -3896,100 +3917,201 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         No items found matching selection.
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pb-6">
-                                        {filteredMenu.map(item => {
-                                            const cartQty = cart.find(c => c.id === item.id)?.quantity || 0;
-                                            const displayPrice = calculateChannelPrice(item, orderChannel, activeBrand);
-                                            const basePrice = parseFloat(item.price) || 0;
-                                            const hasMarkup = displayPrice !== basePrice;
-                                            const isOut = item.is_available === false;
-                                            const isForDay = item.out_of_stock_type === 'day';
+                                    <>
+                                        {/* Mobile-Only List Row Cards (100% full width, thumb friendly) */}
+                                        <div className="sm:hidden flex flex-col gap-2 pb-24">
+                                            {filteredMenu.map(item => {
+                                                const cartQty = cart.find(c => c.id === item.id)?.quantity || 0;
+                                                const displayPrice = calculateChannelPrice(item, orderChannel, activeBrand);
+                                                const isOut = item.is_available === false;
 
-                                            return (
-                                                <motion.div
-                                                    key={item.id}
-                                                    whileTap={!isOut ? { scale: 0.97 } : {}}
-                                                    onClick={() => {
-                                                        if (isOut) {
-                                                            alert(`"${item.name}" is currently OUT OF STOCK (${isForDay ? 'for the rest of the day' : 'indefinitely'}). Tap the green "🟢 Turn On" button to make it available.`);
-                                                        } else {
-                                                            addToCart(item);
-                                                        }
-                                                    }}
-                                                    className={`rounded-3xl p-3 sm:p-4 border shadow-sm relative overflow-hidden group flex flex-col justify-between h-36 sm:h-44 transition-all ${
-                                                        isOut 
-                                                            ? 'bg-rose-50/30 border-rose-200 opacity-90 cursor-not-allowed' 
-                                                            : 'bg-white border-gray-100 hover:border-primary/30 cursor-pointer'
-                                                    }`}
-                                                >
-                                                    {/* RED BAR BANNER OVERLAY FOR OUT OF STOCK ITEMS */}
-                                                    {isOut && (
-                                                        <div className="absolute top-0 inset-x-0 bg-red-600 text-white font-black text-[9px] uppercase tracking-wider py-1 px-2 text-center shadow-sm flex items-center justify-center gap-1 z-10">
-                                                            <span>⛔ OUT OF STOCK ({isForDay ? 'REST OF DAY' : 'INDEFINITELY'})</span>
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        onClick={() => {
+                                                            if (isOut) {
+                                                                alert(`"${item.name}" is currently OUT OF STOCK.`);
+                                                            } else {
+                                                                addToCart(item);
+                                                            }
+                                                        }}
+                                                        className={`p-2.5 bg-white border rounded-2xl shadow-xs flex items-center justify-between gap-2.5 transition-all ${
+                                                            isOut ? 'border-red-200 bg-rose-50/20 opacity-80' : 'border-gray-200/80 active:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {/* Thumbnail / Emoji + Info */}
+                                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                            <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center text-2xl shrink-0 overflow-hidden">
+                                                                {item.image_url ? (
+                                                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                                                ) : item.category === 'Starters & Bites' ? '🍢' :
+                                                                    item.category === 'Breakfast' ? '🍳' :
+                                                                    item.category === 'Jollof Combos' ? '🍛' :
+                                                                    item.category === 'Stews' ? '🍲' :
+                                                                    item.category === 'Soups' ? '🥣' :
+                                                                    item.category === 'Hot Beverages' ? '☕' :
+                                                                    item.category === 'Beverages' ? '🥤' : '🍽️'}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <h4 className={`font-bold text-xs leading-snug line-clamp-1 ${isOut ? 'line-through text-rose-900' : 'text-gray-900'}`}>{item.name}</h4>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <span className="font-mono font-black text-xs text-gray-900">KES {displayPrice.toLocaleString()}</span>
+                                                                    {isOut && <span className="text-[8px] font-black uppercase text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">86 / Out</span>}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    )}
 
-                                                    {cartQty > 0 && !isOut && (
-                                                        <div className="absolute top-3 right-3 bg-primary text-secondary w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shadow z-10">
-                                                            {cartQty}×
-                                                        </div>
-                                                    )}
-
-                                                    <div className={`flex flex-col gap-1 ${isOut ? 'pt-4' : ''}`}>
-                                                        <span className="text-3xl mb-1 mt-1 block">
-                                                            {item.image_url
-                                                                ? <img src={item.image_url} alt={item.name} className={`w-10 h-10 rounded-xl object-cover ${isOut ? 'grayscale-[50%]' : ''}`} />
-                                                                : item.category === 'Starters & Bites' ? '🍢' :
-                                                                  item.category === 'Breakfast' ? '🍳' :
-                                                                  item.category === 'Jollof Combos' ? '🍛' :
-                                                                  item.category === 'Stews' ? '🍲' :
-                                                                  item.category === 'Soups' ? '🥣' :
-                                                                  item.category === 'Hot Beverages' ? '☕' :
-                                                                  item.category === 'Beverages' ? '🥤' : '🍽️'}
-                                                        </span>
-                                                        <h3 className={`font-bold text-sm leading-tight line-clamp-1 ${isOut ? 'text-rose-950 line-through' : 'text-gray-900 group-hover:text-primary transition-colors'}`}>{item.name}</h3>
-                                                        <p className="text-[10px] text-gray-400 font-semibold line-clamp-2 leading-relaxed mt-0.5">{item.description}</p>
-                                                    </div>
-
-                                                    <div className="flex justify-between items-center border-t border-gray-100 pt-2.5 mt-2">
-                                                        <div className="flex flex-col">
-                                                            <span className={`font-mono font-black text-sm ${isOut ? 'text-gray-400' : 'text-gray-900'}`}>KES {displayPrice.toLocaleString()}</span>
-                                                            {hasMarkup && (
-                                                                <span className="text-[8px] text-amber-600 font-black tracking-tight">({orderChannel} Price)</span>
+                                                        {/* Stepper or Add Button */}
+                                                        <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                                            {cartQty > 0 ? (
+                                                                <div className="flex items-center bg-gray-900 text-white rounded-xl p-0.5 shadow-sm">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => updateQty(item.id, -1)}
+                                                                        className="w-7 h-7 flex items-center justify-center text-white hover:bg-gray-800 rounded-lg active:scale-95 transition-all cursor-pointer"
+                                                                    >
+                                                                        <Minus size={11} />
+                                                                    </button>
+                                                                    <span className="font-mono font-black text-xs px-2">{cartQty}</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => addToCart(item)}
+                                                                        className="w-7 h-7 flex items-center justify-center text-white hover:bg-gray-800 rounded-lg active:scale-95 transition-all cursor-pointer"
+                                                                    >
+                                                                        <Plus size={11} />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isOut}
+                                                                    onClick={() => {
+                                                                        if (isOut) {
+                                                                            alert(`"${item.name}" is currently OUT OF STOCK.`);
+                                                                        } else {
+                                                                            addToCart(item);
+                                                                        }
+                                                                    }}
+                                                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                                                                >
+                                                                    <Plus size={12} /> Add
+                                                                </button>
                                                             )}
                                                         </div>
-
-                                                        {/* Modern Interactive Availability Toggle Switch */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (isOut) {
-                                                                    handleTurnOnItem(item);
-                                                                } else {
-                                                                    setItemToTurnOffModal(item);
-                                                                }
-                                                            }}
-                                                            className={`px-2.5 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider transition-all border flex items-center gap-1.5 shrink-0 z-20 cursor-pointer shadow-xs ${
-                                                                !isOut 
-                                                                    ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600' 
-                                                                    : 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
-                                                            }`}
-                                                            title={!isOut ? "Click to 86 / Turn OFF item" : "Click to Turn ON item"}
-                                                        >
-                                                            <span className={`w-2 h-2 rounded-full ${!isOut ? 'bg-white animate-pulse' : 'bg-white'}`} />
-                                                            <span>{!isOut ? 'In Stock' : '86 / Out'}</span>
-                                                        </button>
-
                                                     </div>
-                                                </motion.div>
-                                            );
-                                        })}
-                                    </div>
+                                                );
+                                            })}
+                                        </div>
 
+                                        {/* Desktop-Only Grid Cards */}
+                                        <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 gap-3 pb-6">
+                                            {filteredMenu.map(item => {
+                                                const cartQty = cart.find(c => c.id === item.id)?.quantity || 0;
+                                                const displayPrice = calculateChannelPrice(item, orderChannel, activeBrand);
+                                                const isOut = item.is_available === false;
+                                                const isForDay = item.out_of_stock_type === 'day';
+
+                                                return (
+                                                    <motion.div
+                                                        key={item.id}
+                                                        whileTap={!isOut ? { scale: 0.97 } : {}}
+                                                        onClick={() => {
+                                                            if (isOut) {
+                                                                alert(`"${item.name}" is currently OUT OF STOCK (${isForDay ? 'for the rest of the day' : 'indefinitely'}). Tap the green "🟢 Turn On" button to make it available.`);
+                                                            } else {
+                                                                addToCart(item);
+                                                            }
+                                                        }}
+                                                        className={`rounded-3xl p-3 sm:p-4 border shadow-sm relative overflow-hidden group flex flex-col justify-between h-36 sm:h-44 transition-all ${
+                                                            isOut 
+                                                                ? 'bg-rose-50/30 border-rose-200 opacity-90 cursor-not-allowed' 
+                                                                : 'bg-white border-gray-100 hover:border-primary/30 cursor-pointer'
+                                                        }`}
+                                                    >
+                                                        {/* RED BAR BANNER OVERLAY FOR OUT OF STOCK ITEMS */}
+                                                        {isOut && (
+                                                            <div className="absolute top-0 inset-x-0 bg-red-600 text-white font-black text-[9px] uppercase tracking-wider py-1 px-2 text-center shadow-sm flex items-center justify-center gap-1 z-10">
+                                                                <span>⛔ OUT OF STOCK ({isForDay ? 'REST OF DAY' : 'INDEFINITELY'})</span>
+                                                            </div>
+                                                        )}
+
+                                                        {cartQty > 0 && !isOut && (
+                                                            <div className="absolute top-3 right-3 bg-primary text-secondary w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shadow z-10">
+                                                                {cartQty}×
+                                                            </div>
+                                                        )}
+
+                                                        <div className={`flex flex-col gap-1 ${isOut ? 'pt-4' : ''}`}>
+                                                            <span className="text-3xl mb-1 mt-1 block">
+                                                                {item.image_url
+                                                                    ? <img src={item.image_url} alt={item.name} className={`w-10 h-10 rounded-xl object-cover ${isOut ? 'grayscale-[50%]' : ''}`} />
+                                                                    : item.category === 'Starters & Bites' ? '🍢' :
+                                                                      item.category === 'Breakfast' ? '🍳' :
+                                                                      item.category === 'Jollof Combos' ? '🍛' :
+                                                                      item.category === 'Stews' ? '🍲' :
+                                                                      item.category === 'Soups' ? '🥣' :
+                                                                      item.category === 'Hot Beverages' ? '☕' :
+                                                                      item.category === 'Beverages' ? '🥤' : '🍽️'}
+                                                            </span>
+                                                            <h3 className={`font-bold text-sm leading-tight line-clamp-1 ${isOut ? 'text-rose-950 line-through' : 'text-gray-900 group-hover:text-primary transition-colors'}`}>{item.name}</h3>
+                                                            <p className="text-[10px] text-gray-400 font-semibold line-clamp-2 leading-relaxed mt-0.5">{item.description}</p>
+                                                        </div>
+
+                                                        <div className="flex justify-between items-center border-t border-gray-100 pt-2.5 mt-2">
+                                                            <span className={`font-mono font-black text-sm ${isOut ? 'text-gray-400' : 'text-gray-900'}`}>KES {displayPrice.toLocaleString()}</span>
+
+                                                            {/* Modern Interactive Availability Toggle Switch */}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (isOut) {
+                                                                        handleTurnOnItem(item);
+                                                                    } else {
+                                                                        setItemToTurnOffModal(item);
+                                                                    }
+                                                                }}
+                                                                className={`px-2.5 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider transition-all border flex items-center gap-1.5 shrink-0 z-20 cursor-pointer shadow-xs ${
+                                                                    !isOut 
+                                                                        ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600' 
+                                                                        : 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
+                                                                }`}
+                                                                title={!isOut ? "Click to 86 / Turn OFF item" : "Click to Turn ON item"}
+                                                            >
+                                                                <span className={`w-2 h-2 rounded-full ${!isOut ? 'bg-white animate-pulse' : 'bg-white'}`} />
+                                                                <span>{!isOut ? 'In Stock' : '86 / Out'}</span>
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         </div>
+
+                        {/* Mobile Floating Cart Action Pill */}
+                        {cart.length > 0 && !cartOpen && (
+                            <div className="fixed sm:hidden bottom-3 inset-x-3 z-40 animate-in slide-in-from-bottom duration-200">
+                                <button
+                                    type="button"
+                                    onClick={() => setCartOpen(true)}
+                                    className="w-full bg-gray-950 hover:bg-black text-white p-3.5 rounded-2xl shadow-2xl flex items-center justify-between border border-gray-800 active:scale-[0.98] transition-all cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 rounded-xl bg-primary text-secondary flex items-center justify-center font-black text-xs">
+                                            {cart.reduce((sum, i) => sum + i.quantity, 0)}
+                                        </div>
+                                        <span className="font-bold text-xs">View Active Cart</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono font-black text-sm text-emerald-400">KES {total.toLocaleString()}</span>
+                                        <ArrowRight size={15} className="text-white" />
+                                    </div>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -5356,6 +5478,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 >
                                     🔌 Delivery APIs
                                 </button>
+                                <button
+                                    onClick={() => { setMenuSettingsTab('sales_analytics'); setEditingItem(null); setEditingModifierGroup(null); setEditingCategory(null); setEditingDiscount(null); }}
+                                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-all ${
+                                        menuSettingsTab === 'sales_analytics' && !editingItem
+                                            ? 'bg-primary text-secondary border-transparent shadow-sm'
+                                            : 'bg-transparent border-transparent text-gray-400 hover:text-gray-600'
+                                    }`}
+                                >
+                                    📊 Sales Velocity & Item Analytics
+                                </button>
                             </div>
                             
                             {!editingItem && (
@@ -6339,6 +6471,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 {menuSettingsTab === 'api_integrations' && (
                                     <ApiIntegrationsDashboard menu={menu} />
                                 )}
+                                {menuSettingsTab === 'sales_analytics' && (
+                                    <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar pb-12">
+                                        <MenuItemSalesAnalyzer
+                                            onEditItem={(item) => {
+                                                setEditingItem(item);
+                                                setMenuSettingsTab('items');
+                                            }}
+                                        />
+                                    </div>
+                                )}
                             </>
                         )}
 
@@ -7272,14 +7414,15 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                 {/* Right Panel: Shopping Cart / Order Panel */}
                 {cartOpen && (
                     <>
-                        {/* Right Panel Drawer — bottom sheet on mobile, side panel on desktop */}
-                        <div className="absolute bottom-0 sm:top-0 right-0 h-[72%] sm:h-full w-full sm:w-[440px] bg-white border-t sm:border-t-0 sm:border-l border-gray-100 flex flex-col overflow-hidden shrink-0 shadow-2xl z-50 animate-in slide-in-from-bottom sm:slide-in-from-right duration-250 rounded-t-3xl sm:rounded-none">
-                            <div className="px-4 py-3 border-b border-gray-50 flex justify-between items-center shrink-0">
+                        {/* Right Panel Drawer — bottom sheet above bottom nav on mobile, side panel on desktop */}
+                        <div className="fixed sm:absolute top-0 bottom-[60px] sm:bottom-0 right-0 h-[calc(100vh-60px)] sm:h-full w-full sm:w-[440px] md:w-[460px] bg-white border-t sm:border-t-0 sm:border-l border-gray-200 flex flex-col overflow-hidden shadow-2xl z-40 animate-in slide-in-from-bottom sm:slide-in-from-right duration-250 rounded-t-3xl sm:rounded-none">
+                            {/* Fixed Header */}
+                            <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center shrink-0 bg-white z-10">
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setCartOpen(false)}
-                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors mr-0.5"
-                                        title="Close Cart"
+                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors mr-0.5 cursor-pointer"
+                                        title="Back to Menu"
                                     >
                                         <X size={16} />
                                     </button>
@@ -7287,498 +7430,502 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         <ShoppingBag size={16} className="text-primary" /> Active Cart
                                     </h2>
                                 </div>
-                        <div className="flex gap-1.5 items-center shrink-0">
-                            {editingOrderId && (
-                                <button
-                                    onClick={openClearSalesModal}
-                                    className="text-[9px] text-red-600 hover:text-red-800 font-black uppercase tracking-wider px-2 py-1 hover:bg-red-50 rounded-lg transition-all"
-                                    title="Cancel/Void Order"
-                                >
-                                    Void Order
-                                </button>
-                            )}
-                            {cart.length > 0 && (
-                                <>
-                                    <button
-                                        onClick={() => openSplitBillForCart()}
-                                        className="text-[9px] text-primary hover:text-primary-dark font-black uppercase tracking-wider px-2 py-1 hover:bg-orange-50 rounded-lg transition-all"
-                                    >
-                                        Split Bill
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setCart([]);
-                                            setEditingOrderId(null);
-                                            setCustomerName('');
-                                        }}
-                                        className="text-[9px] text-gray-400 hover:text-red-500 font-black uppercase tracking-wider px-2 py-1 hover:bg-gray-50 rounded-lg transition-all"
-                                    >
-                                        Clear Cart
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Cart Items list */}
-                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 custom-scrollbar">
-                        {cart.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 p-6">
-                                <span className="text-3xl mb-1">🛒</span>
-                                <p className="text-xs font-bold">Cart is empty</p>
-                                <p className="text-[10px] text-gray-400 mt-1 max-w-[200px]">Select items from the left grid to populate the checkout cart.</p>
-                            </div>
-                        ) : (
-                            cart.map(item => (
-                                <div key={item.id} className="p-2.5 bg-gray-50/70 border border-gray-100 rounded-xl flex flex-col gap-1.5 hover:bg-gray-100/50 transition-colors">
-                                    <div className="flex justify-between items-start">
-                                        <div className="max-w-[240px]">
-                                            <h4 className="font-bold text-xs text-gray-900 leading-tight">{item.name}</h4>
-                                            <span className="text-[10px] font-mono text-gray-400 font-bold">KES {item.price.toLocaleString()} each</span>
-                                        </div>
-                                        <span className="font-mono font-black text-xs text-gray-900">
-                                            KES {(item.price * item.quantity).toLocaleString()}
-                                        </span>
-                                    </div>
-
-                                    {/* Selected modifiers display chips */}
-                                    {item.instructions && (
-                                        <div className="flex flex-wrap gap-1">
-                                            {item.instructions.split(', ').filter(Boolean).map((mod, idx) => (
-                                                <span key={idx} className="bg-primary/10 text-primary text-[8px] font-bold px-1.5 py-0.5 rounded-full">
-                                                    {mod}
-                                                </span>
-                                            ))}
-                                        </div>
+                                <div className="flex gap-1.5 items-center shrink-0">
+                                    {editingOrderId && (
+                                        <button
+                                            onClick={openClearSalesModal}
+                                            className="text-[9px] text-red-600 hover:text-red-800 font-black uppercase tracking-wider px-2 py-1 hover:bg-red-50 rounded-lg transition-all"
+                                            title="Cancel/Void Order"
+                                        >
+                                            Void Order
+                                        </button>
                                     )}
+                                    {cart.length > 0 && (
+                                        <>
+                                            <button
+                                                onClick={() => openSplitBillForCart()}
+                                                className="text-[9px] text-primary hover:text-primary-dark font-black uppercase tracking-wider px-2 py-1 hover:bg-orange-50 rounded-lg transition-all"
+                                            >
+                                                Split Bill
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCart([]);
+                                                    setEditingOrderId(null);
+                                                    setCustomerName('');
+                                                }}
+                                                className="text-[9px] text-gray-400 hover:text-red-500 font-black uppercase tracking-wider px-2 py-1 hover:bg-gray-50 rounded-lg transition-all"
+                                            >
+                                                Clear Cart
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
 
-                                    {/* Modifier toggle button */}
-                                    <button
-                                        onClick={() => setCart(prev => prev.map(c => c.id === item.id ? { ...c, _showMods: !c._showMods } : c))}
-                                        className="text-[9px] text-primary font-bold uppercase tracking-wider text-left flex items-center gap-1"
-                                    >
-                                        {item._showMods ? '▲ Hide Modifiers' : '▼ Add Modifiers / Customise'}
-                                    </button>
-
-                                    {/* Inline Modifiers Panel */}
-                                    {item._showMods && (
-                                        <div className="space-y-2 pt-2 border-t border-gray-200/60">
-                                            {getItemModifierGroups(item).map(group => (
-                                                <div key={group.group} className="space-y-1">
-                                                    <div className="flex justify-between items-center">
-                                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{group.group}</p>
-                                                        <span className="text-[8px] font-bold text-gray-400">
-                                                            {group.is_required ? 'Req' : 'Opt'} (Max: {group.max_selected})
-                                                        </span>
+                            {/* Scrollable Cart Body: Items List + Order Configuration + Calculation Details */}
+                            <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 custom-scrollbar flex flex-col divide-y divide-gray-100">
+                                {/* Cart Items List */}
+                                <div className="p-4 space-y-2.5 bg-white">
+                                    {cart.length === 0 ? (
+                                        <div className="py-12 flex flex-col items-center justify-center text-center text-gray-400">
+                                            <span className="text-3xl mb-1">🛒</span>
+                                            <p className="text-xs font-bold text-gray-600">Cart is empty</p>
+                                            <p className="text-[10px] text-gray-400 mt-1 max-w-[200px]">Select items from the menu grid to populate the checkout cart.</p>
+                                        </div>
+                                    ) : (
+                                        cart.map(item => (
+                                            <div key={item.id} className="p-3 bg-gray-50/80 border border-gray-200/60 rounded-2xl flex flex-col gap-1.5 hover:bg-gray-100/60 transition-colors">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="max-w-[240px]">
+                                                        <h4 className="font-bold text-xs text-gray-900 leading-tight">{item.name}</h4>
+                                                        <span className="text-[10px] font-mono text-gray-400 font-bold">KES {item.price.toLocaleString()} each</span>
                                                     </div>
+                                                    <span className="font-mono font-black text-xs text-gray-900">
+                                                        KES {(item.price * item.quantity).toLocaleString()}
+                                                    </span>
+                                                </div>
+
+                                                {/* Selected modifiers display chips */}
+                                                {item.instructions && (
                                                     <div className="flex flex-wrap gap-1">
-                                                        {group.options.map(opt => {
-                                                            const isSelected = (item.selectedModifiers || []).some(m => m.group === group.group && m.name === opt.name);
-                                                            return (
-                                                                <button
-                                                                    key={opt.name}
-                                                                    onClick={() => toggleCartModifier(item.id, group.group, opt)}
-                                                                    className={`px-2 py-0.5 rounded-full text-[8px] font-bold border transition-all ${
-                                                                        isSelected
-                                                                            ? 'bg-primary text-secondary border-primary shadow-sm'
-                                                                            : 'bg-white text-gray-500 border-gray-200 hover:border-primary/40'
-                                                                    }`}
-                                                                >
-                                                                    {opt.name} {opt.price > 0 ? `(+${Math.round(opt.price)})` : ''}
-                                                                </button>
-                                                            );
-                                                        })}
+                                                        {item.instructions.split(', ').filter(Boolean).map((mod, idx) => (
+                                                            <span key={idx} className="bg-primary/10 text-primary text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+                                                                {mod}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Modifier toggle button */}
+                                                <button
+                                                    onClick={() => setCart(prev => prev.map(c => c.id === item.id ? { ...c, _showMods: !c._showMods } : c))}
+                                                    className="text-[9px] text-primary font-bold uppercase tracking-wider text-left flex items-center gap-1"
+                                                >
+                                                    {item._showMods ? '▲ Hide Modifiers' : '▼ Add Modifiers / Customise'}
+                                                </button>
+
+                                                {/* Inline Modifiers Panel */}
+                                                {item._showMods && (
+                                                    <div className="space-y-2 pt-2 border-t border-gray-200/60">
+                                                        {getItemModifierGroups(item).map(group => (
+                                                            <div key={group.group} className="space-y-1">
+                                                                <div className="flex justify-between items-center">
+                                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{group.group}</p>
+                                                                    <span className="text-[8px] font-bold text-gray-400">
+                                                                        {group.is_required ? 'Req' : 'Opt'} (Max: {group.max_selected})
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {group.options.map(opt => {
+                                                                        const isSelected = (item.selectedModifiers || []).some(m => m.group === group.group && m.name === opt.name);
+                                                                        return (
+                                                                            <button
+                                                                                key={opt.name}
+                                                                                onClick={() => toggleCartModifier(item.id, group.group, opt)}
+                                                                                className={`px-2 py-0.5 rounded-full text-[8px] font-bold border transition-all ${
+                                                                                    isSelected
+                                                                                        ? 'bg-primary text-secondary border-primary shadow-sm'
+                                                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-primary/40'
+                                                                                }`}
+                                                                            >
+                                                                                {opt.name} {opt.price > 0 ? `(+${Math.round(opt.price)})` : ''}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Controls: Delete + Qty stepper + Guest chip */}
+                                                <div className="flex justify-between items-center mt-0.5 border-t border-gray-200/50 pt-1.5">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 p-1 rounded transition-colors">
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                        {/* Guest assignment chip */}
+                                                        {splitBillCount > 1 && (
+                                                            <button
+                                                                onClick={() => setCart(prev => prev.map(c =>
+                                                                    c.id === item.id
+                                                                        ? { ...c, guestNo: ((c.guestNo || 1) % splitBillCount) + 1 }
+                                                                        : c
+                                                                ))}
+                                                                className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border transition-all bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                                                                title="Tap to reassign to next guest"
+                                                            >
+                                                                G{item.guestNo || 1}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2.5">
+                                                        <button onClick={() => updateQty(item.id, -1)} className="w-5 h-5 rounded-md border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+                                                            <Minus size={10} />
+                                                        </button>
+                                                        <span className="font-bold text-xs text-gray-800">{item.quantity}</span>
+                                                        <button onClick={() => addToCart(item)} className="w-5 h-5 rounded-md border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+                                                            <Plus size={10} />
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Controls: Delete + Qty stepper + Guest chip */}
-                                    <div className="flex justify-between items-center mt-0.5 border-t border-gray-200/50 pt-1.5">
-                                        <div className="flex items-center gap-1.5">
-                                            <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 p-1 rounded transition-colors">
-                                                <Trash2 size={12} />
-                                            </button>
-                                            {/* Guest assignment chip — only visible when split bill mode active */}
-                                            {splitBillCount > 1 && (
-                                                <button
-                                                    onClick={() => setCart(prev => prev.map(c =>
-                                                        c.id === item.id
-                                                            ? { ...c, guestNo: ((c.guestNo || 1) % splitBillCount) + 1 }
-                                                            : c
-                                                    ))}
-                                                    className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border transition-all bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-                                                    title="Tap to reassign to next guest"
-                                                >
-                                                    G{item.guestNo || 1}
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2.5">
-                                            <button onClick={() => updateQty(item.id, -1)} className="w-5 h-5 rounded-md border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-                                                <Minus size={10} />
-                                            </button>
-                                            <span className="font-bold text-xs text-gray-800">{item.quantity}</span>
-                                            <button onClick={() => addToCart(item)} className="w-5 h-5 rounded-md border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-                                                <Plus size={10} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-
-                    {/* Order Details & Checkout Configuration */}
-                    <div className="border-t border-gray-100 p-2.5 bg-gray-50/50 space-y-2 shrink-0">
-                        {/* New vs Returning Customer Classification Toggle */}
-                        <div className="p-1.5 bg-white border border-gray-200/80 rounded-2xl shadow-xs space-y-1">
-                            <div className="flex justify-between items-center px-1">
-                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Customer Status Tag *</label>
-                                <span className="text-[8px] font-bold text-gray-400">1-Click Tag</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setCustomerType('New')}
-                                    className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
-                                        customerType === 'New'
-                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.01]'
-                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    <span>✨ New Customer</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCustomerType('Returning')}
-                                    className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
-                                        customerType === 'Returning'
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.01]'
-                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    <span>🔄 Returning</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Guest Name input + Register New Guest button */}
-                        <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Customer / Guest Name</label>
-                                <button
-                                    onClick={() => setShowRegisterGuestModal(true)}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-[#18A07A] text-white rounded-full text-[10px] font-black uppercase hover:bg-[#128061] active:scale-95 transition-all shadow-sm"
-                                    title="Register New Guest to CRM"
-                                >
-                                    <UserPlus size={11} /> New Customer
-                                </button>
-                            </div>
-                            <input
-                                type="text"
-                                placeholder="Enter customer name..."
-                                value={customerNameText}
-                                onChange={(e) => setCustomerNameText(e.target.value)}
-                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-[12px] font-bold outline-none focus:border-[#18A07A] focus:ring-2 focus:ring-[#18A07A]/10 transition-all text-gray-900 shadow-sm"
-                            />
-                        </div>
-                        {guestSuccessMsg && (
-                            <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-[11px] font-bold rounded-xl flex items-center gap-2">
-                                ✅ {guestSuccessMsg}
-                            </div>
-                        )}
-
-                        {/* Force Table Selection Dropdown if Dine-in is selected */}
-                        {(diningOption === 'Dine-in' || diningOption === 'Dine Inn') && (
-                            <div className="flex gap-2 items-center bg-white border border-gray-250/60 p-2 rounded-2xl shadow-sm">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Select Table *:</label>
-                                <select
-                                    value={selectedTable}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        setSelectedTable(val);
-                                        setCustomerName(val); // Sync to customerName state
-                                    }}
-                                    className="flex-1 bg-gray-50/50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-[11px] font-black outline-none focus:border-primary focus:bg-white transition-all text-gray-900"
-                                >
-                                    <option value="">-- Select Table --</option>
-                                    {TABLES.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                            </div>
-                        )}
-
-                        {/* Collapsible settings toggle bar */}
-                        <button 
-                            type="button"
-                            onClick={() => setShowCartConfig(!showCartConfig)}
-                            className="w-full flex justify-between items-center py-1.5 px-2.5 bg-white hover:bg-gray-100 border border-gray-200 text-[11px] font-black text-gray-700 transition-all rounded-xl shadow-sm"
-                        >
-                            <span className="flex items-center gap-1.5 truncate">
-                                ⚙️ {selectedBrand.split(' ')[0]} • {orderChannel} • {diningOption}
-                            </span>
-                            <span className="text-[8px] text-gray-400 font-bold uppercase tracking-wider shrink-0 ml-2">
-                                {showCartConfig ? '▲ Hide Settings' : '▼ Expand Settings'}
-                            </span>
-                        </button>
-
-                        {showCartConfig && (
-                            <div className="space-y-2 animate-in slide-in-from-top-2 duration-150">
-                                {/* Brand Selection (Customer input is moved to be always visible) */}
-                                <div className="grid grid-cols-1">
-                                    <div>
-                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Brand</label>
-                                        <select
-                                            value={selectedBrand}
-                                            onChange={(e) => setSelectedBrand(e.target.value)}
-                                            className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
-                                        >
-                                            <option value="POT OF JOLLOF">POT OF JOLLOF</option>
-                                            <option value="LITTLE LAGOS">LITTLE LAGOS</option>
-                                            <option value="CAFE SWAHILI">CAFE SWAHILI</option>
-                                            <option value="SAMAKI STREET">SAMAKI STREET</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {/* Channel & Service Model */}
-                                <div className="grid grid-cols-2 gap-2.5">
-                                    <div>
-                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Order Channel</label>
-                                        <select
-                                            value={orderChannel}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                setOrderChannel(val);
-                                                if (['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(val)) {
-                                                    setDiningOption('Delivery');
-                                                }
-                                            }}
-                                            className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
-                                        >
-                                            <option value="Walk-in">Walk-in</option>
-                                            <option value="WhatsApp">WhatsApp</option>
-                                            <option value="Uber Eats">Uber Eats</option>
-                                            <option value="Glovo">Glovo</option>
-                                            <option value="Bolt Food">Bolt Food</option>
-                                            <option value="Ando">Ando</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Dining Option</label>
-                                        <select
-                                            value={diningOption}
-                                            onChange={(e) => setDiningOption(e.target.value)}
-                                            disabled={['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(orderChannel)}
-                                            className="w-full bg-white disabled:bg-gray-100 disabled:text-gray-400 border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
-                                        >
-                                            <option value="Dine-in">Dine-in</option>
-                                            <option value="Takeaway">Takeaway</option>
-                                            <option value="Delivery">Delivery</option>
-                                        </select>
-                                    </div>
-                                    {diningOption === 'Delivery' && (
-                                        <div className="col-span-2 pt-1">
-                                            <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Delivery Address</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Enter full delivery address..."
-                                                value={deliveryAddress}
-                                                onChange={(e) => setDeliveryAddress(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
-                                            />
-                                        </div>
+                                            </div>
+                                        ))
                                     )}
                                 </div>
 
-                                {/* Payment Method & Status */}
-                                <div className="grid grid-cols-2 gap-2.5">
-                                    <div>
-                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Payment Method</label>
-                                        <select
-                                            value={paymentMethod}
-                                            onChange={(e) => setPaymentMethod(e.target.value)}
-                                            className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
-                                        >
-                                            <option value="CASH">CASH</option>
-                                            <option value="CARD">CARD</option>
-                                            <option value="I&M - PAYBILL No">I&M - PAYBILL No</option>
-                                            {['ubereats', 'uber eats', 'glovo', 'bolt food', 'ando'].includes(String(orderChannel || '').toLowerCase()) && (
-                                                <option value="Paid to APP">Paid to APP</option>
-                                            )}
-                                            <option value="ANDO">ANDO</option>
-                                            <option value="Split">Split Payment</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Payment Status</label>
-                                        <select
-                                            value={paymentStatus}
-                                            onChange={(e) => setPaymentStatus(e.target.value)}
-                                            className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary"
-                                        >
-                                            <option value="Paid">Paid</option>
-                                            <option value="Pending">Pay Later (Pending)</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {/* Discount Picker */}
-                                <div className="grid grid-cols-3 gap-2 items-end">
-                                    <div className="col-span-2">
-                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Discount Mode</label>
-                                        <div className="flex gap-1.5">
-                                            {['none', 'percentage', 'flat'].map(type => (
-                                                <button
-                                                    key={type}
-                                                    type="button"
-                                                    onClick={() => { setDiscountType(type); setDiscountValue(''); }}
-                                                    className={`flex-1 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all ${
-                                                        discountType === type
-                                                            ? 'bg-gray-900 border-gray-900 text-white shadow-sm'
-                                                            : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    {type}
-                                                </button>
-                                            ))}
+                                {/* Order Details & Checkout Configuration */}
+                                <div className="p-3.5 bg-gray-50/70 space-y-2.5">
+                                    {/* New vs Returning Customer Classification Toggle */}
+                                    <div className="p-2 bg-white border border-gray-200/80 rounded-2xl shadow-xs space-y-1">
+                                        <div className="flex justify-between items-center px-1">
+                                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Customer Status Tag *</label>
+                                            <span className="text-[8px] font-bold text-gray-400">1-Click Tag</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCustomerType('New')}
+                                                className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+                                                    customerType === 'New'
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.01]'
+                                                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                <span>✨ New Customer</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCustomerType('Returning')}
+                                                className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+                                                    customerType === 'Returning'
+                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.01]'
+                                                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                <span>🔄 Returning</span>
+                                            </button>
                                         </div>
                                     </div>
-                                    <div>
-                                        {discountType !== 'none' && (
-                                            <input
-                                                type="number"
-                                                placeholder={discountType === 'percentage' ? '%' : 'KES'}
-                                                value={discountValue}
-                                                onChange={(e) => setDiscountValue(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 rounded-xl px-1.5 py-0.5 text-[10px] text-center font-black outline-none focus:border-primary font-mono"
-                                            />
+
+                                    {/* Guest Name input + Register New Guest button */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Customer / Guest Name</label>
+                                            <button
+                                                onClick={() => setShowRegisterGuestModal(true)}
+                                                className="flex items-center gap-1.5 px-3 py-1 bg-[#18A07A] text-white rounded-full text-[10px] font-black uppercase hover:bg-[#128061] active:scale-95 transition-all shadow-sm"
+                                                title="Register New Guest to CRM"
+                                            >
+                                                <UserPlus size={11} /> New Customer
+                                            </button>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="Enter customer name..."
+                                            value={customerNameText}
+                                            onChange={(e) => setCustomerNameText(e.target.value)}
+                                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-[12px] font-bold outline-none focus:border-[#18A07A] focus:ring-2 focus:ring-[#18A07A]/10 transition-all text-gray-900 shadow-sm"
+                                        />
+                                    </div>
+                                    {guestSuccessMsg && (
+                                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-[11px] font-bold rounded-xl flex items-center gap-2">
+                                            ✅ {guestSuccessMsg}
+                                        </div>
+                                    )}
+
+                                    {/* Force Table Selection Dropdown if Dine-in is selected */}
+                                    {(diningOption === 'Dine-in' || diningOption === 'Dine Inn') && (
+                                        <div className="flex gap-2 items-center bg-white border border-gray-250/60 p-2 rounded-2xl shadow-sm">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Select Table *:</label>
+                                            <select
+                                                value={selectedTable}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setSelectedTable(val);
+                                                    setCustomerName(val); // Sync to customerName state
+                                                }}
+                                                className="flex-1 bg-gray-50/50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-[11px] font-black outline-none focus:border-primary focus:bg-white transition-all text-gray-900"
+                                            >
+                                                <option value="">-- Select Table --</option>
+                                                {TABLES.map(t => <option key={t} value={t}>{t}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Collapsible settings toggle bar */}
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowCartConfig(!showCartConfig)}
+                                        className="w-full flex justify-between items-center py-2 px-3 bg-white hover:bg-gray-100 border border-gray-200 text-[11px] font-black text-gray-700 transition-all rounded-xl shadow-xs cursor-pointer"
+                                    >
+                                        <span className="flex items-center gap-1.5 truncate">
+                                            ⚙️ {selectedBrand.split(' ')[0]} • {orderChannel} • {diningOption}
+                                        </span>
+                                        <span className="text-[8px] text-gray-400 font-bold uppercase tracking-wider shrink-0 ml-2">
+                                            {showCartConfig ? '▲ Hide Settings' : '▼ Expand Settings'}
+                                        </span>
+                                    </button>
+
+                                    {showCartConfig && (
+                                        <div className="space-y-2 animate-in slide-in-from-top-2 duration-150">
+                                            {/* Brand Selection */}
+                                            <div>
+                                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Brand</label>
+                                                <select
+                                                    value={selectedBrand}
+                                                    onChange={(e) => setSelectedBrand(e.target.value)}
+                                                    className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                >
+                                                    <option value="POT OF JOLLOF">POT OF JOLLOF</option>
+                                                    <option value="LITTLE LAGOS">LITTLE LAGOS</option>
+                                                    <option value="CAFE SWAHILI">CAFE SWAHILI</option>
+                                                    <option value="SAMAKI STREET">SAMAKI STREET</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Channel & Service Model */}
+                                            <div className="grid grid-cols-2 gap-2.5">
+                                                <div>
+                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Order Channel</label>
+                                                    <select
+                                                        value={orderChannel}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setOrderChannel(val);
+                                                            if (['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(val)) {
+                                                                setDiningOption('Delivery');
+                                                            }
+                                                        }}
+                                                        className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                    >
+                                                        <option value="Walk-in">Walk-in</option>
+                                                        <option value="WhatsApp">WhatsApp</option>
+                                                        <option value="Uber Eats">Uber Eats</option>
+                                                        <option value="Glovo">Glovo</option>
+                                                        <option value="Bolt Food">Bolt Food</option>
+                                                        <option value="Ando">Ando</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Dining Option</label>
+                                                    <select
+                                                        value={diningOption}
+                                                        onChange={(e) => setDiningOption(e.target.value)}
+                                                        disabled={['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(orderChannel)}
+                                                        className="w-full bg-white disabled:bg-gray-100 disabled:text-gray-400 border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                    >
+                                                        <option value="Dine-in">Dine-in</option>
+                                                        <option value="Takeaway">Takeaway</option>
+                                                        <option value="Delivery">Delivery</option>
+                                                    </select>
+                                                </div>
+                                                {diningOption === 'Delivery' && !['ubereats', 'uber eats', 'glovo', 'bolt food', 'boltfood', 'ando'].includes((orderChannel || '').toLowerCase().trim()) && (
+                                                    <div className="col-span-2 pt-1">
+                                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Delivery Address</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Enter full delivery address..."
+                                                            value={deliveryAddress}
+                                                            onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Payment Method & Status */}
+                                            <div className="grid grid-cols-2 gap-2.5">
+                                                <div>
+                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Payment Method</label>
+                                                    <select
+                                                        value={paymentMethod}
+                                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                                        className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                    >
+                                                        <option value="CASH">CASH</option>
+                                                        <option value="CARD">CARD</option>
+                                                        <option value="I&M - PAYBILL No">I&M - PAYBILL No</option>
+                                                        {['ubereats', 'uber eats', 'glovo', 'bolt food', 'ando'].includes(String(orderChannel || '').toLowerCase()) && (
+                                                            <option value="Paid to APP">Paid to APP</option>
+                                                        )}
+                                                        <option value="ANDO">ANDO</option>
+                                                        <option value="Split">Split Payment</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Payment Status</label>
+                                                    <select
+                                                        value={paymentStatus}
+                                                        onChange={(e) => setPaymentStatus(e.target.value)}
+                                                        className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                    >
+                                                        <option value="Paid">Paid</option>
+                                                        <option value="Pending">Pay Later (Pending)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Discount Picker */}
+                                            <div className="grid grid-cols-3 gap-2 items-end">
+                                                <div className="col-span-2">
+                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Discount Mode</label>
+                                                    <div className="flex gap-1.5">
+                                                        {['none', 'percentage', 'flat'].map(type => (
+                                                            <button
+                                                                key={type}
+                                                                type="button"
+                                                                onClick={() => { setDiscountType(type); setDiscountValue(''); }}
+                                                                className={`flex-1 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all ${
+                                                                    discountType === type
+                                                                        ? 'bg-gray-900 border-gray-900 text-white shadow-sm'
+                                                                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                                                }`}
+                                                            >
+                                                                {type}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    {discountType !== 'none' && (
+                                                        <input
+                                                            type="number"
+                                                            placeholder={discountType === 'percentage' ? '%' : 'KES'}
+                                                            value={discountValue}
+                                                            onChange={(e) => setDiscountValue(e.target.value)}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] text-center font-black outline-none focus:border-primary font-mono"
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Custom Order Date (Backdate) */}
+                                            <div className="pt-1.5 border-t border-gray-150">
+                                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Order Date (Backdate)</label>
+                                                <input
+                                                    type="date"
+                                                    value={customOrderDate}
+                                                    onChange={(e) => setCustomOrderDate(e.target.value)}
+                                                    className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1 text-[10px] font-bold outline-none focus:border-primary text-gray-700 font-sans"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Split Details Input Box */}
+                                    {paymentMethod === 'Split' && (
+                                        <div className="p-2.5 bg-orange-50/70 border border-orange-150 rounded-2xl space-y-1.5 animate-in slide-in-from-bottom-2 duration-200">
+                                            <span className="text-[9px] font-bold text-orange-700 flex items-center gap-1"><CreditCard size={10}/> Split Payments Breakdown:</span>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div>
+                                                    <label className="block text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Cash</label>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        value={splitCash}
+                                                        onChange={(e) => setSplitCash(e.target.value)}
+                                                        className="w-full p-1.5 border border-gray-200 bg-white rounded-lg text-xs font-mono font-bold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">M-Pesa</label>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        value={splitMpesa}
+                                                        onChange={(e) => setSplitMpesa(e.target.value)}
+                                                        className="w-full p-1.5 border border-gray-200 bg-white rounded-lg text-xs font-mono font-bold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Card</label>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        value={splitCard}
+                                                        onChange={(e) => setSplitCard(e.target.value)}
+                                                        className="w-full p-1.5 border border-gray-200 bg-white rounded-lg text-xs font-mono font-bold"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-between items-center text-[9px] font-bold border-t border-orange-200/50 pt-1 mt-0.5">
+                                                <span className="text-gray-500">Split Total: KES {splitTotal.toLocaleString()}</span>
+                                                <span className={Math.abs(splitTotal - total) < 0.1 ? 'text-green-600' : 'text-red-500'}>
+                                                    {Math.abs(splitTotal - total) < 0.1 ? '✓ Balanced' : `Diff: KES ${(total - splitTotal).toLocaleString()}`}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Calculation Summary Breakdown */}
+                                    <div className="pt-2 border-t border-gray-200/70 space-y-1 text-[11px] font-medium text-gray-500">
+                                        <div className="flex justify-between">
+                                            <span>Subtotal:</span>
+                                            <span className="font-mono font-bold text-gray-700">KES {subtotal.toLocaleString()}</span>
+                                        </div>
+                                        {discountAmount > 0 && (
+                                            <div className="flex justify-between text-red-500 font-bold">
+                                                <span>Discount Applied:</span>
+                                                <span className="font-mono">- KES {discountAmount.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between text-[9px] text-gray-400">
+                                            <span>Included Tax (VAT 16%):</span>
+                                            <span className="font-mono">KES {vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                        </div>
+                                        {cateringLevyAmount > 0 && (
+                                            <div className="flex justify-between text-[9px] text-gray-400">
+                                                <span>Catering Levy (2%):</span>
+                                                <span className="font-mono">KES {cateringLevyAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Custom Order Date (Backdate) */}
-                                <div className="pt-1.5 border-t border-gray-100">
-                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Order Date (Backdate)</label>
-                                    <input
-                                        type="date"
-                                        value={customOrderDate}
-                                        onChange={(e) => setCustomOrderDate(e.target.value)}
-                                        className="w-full bg-white border border-gray-200 rounded-xl px-2 py-1 text-[10px] font-bold outline-none focus:border-primary text-gray-700 font-sans"
-                                    />
+                            {/* Sticky Bottom Action Bar with Grand Total and Checkout CTA */}
+                            <div className="p-4 bg-white border-t border-gray-200 shrink-0 sticky bottom-0 z-20 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] space-y-2">
+                                <div className="flex justify-between items-center text-gray-950 font-black text-base">
+                                    <span>Grand Total:</span>
+                                    <span className="font-mono text-lg text-primary">KES {total.toLocaleString()}</span>
                                 </div>
-                            </div>
-                        )}
 
-                        {/* Split Details Input Box */}
-                        {paymentMethod === 'Split' && (
-                            <div className="p-2.5 bg-orange-50/50 border border-orange-100 rounded-2xl space-y-1.5 animate-in slide-in-from-bottom-2 duration-200">
-                                <span className="text-[9px] font-bold text-orange-700 flex items-center gap-1"><CreditCard size={10}/> Split Payments Breakdown:</span>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <div>
-                                        <label className="block text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Cash</label>
-                                        <input
-                                            type="number"
-                                            placeholder="0"
-                                            value={splitCash}
-                                            onChange={(e) => setSplitCash(e.target.value)}
-                                            className="w-full p-1 border border-gray-200 bg-white rounded-lg text-xs font-mono font-bold"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">M-Pesa</label>
-                                        <input
-                                            type="number"
-                                            placeholder="0"
-                                            value={splitMpesa}
-                                            onChange={(e) => setSplitMpesa(e.target.value)}
-                                            className="w-full p-1 border border-gray-200 bg-white rounded-lg text-xs font-mono font-bold"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Card</label>
-                                        <input
-                                            type="number"
-                                            placeholder="0"
-                                            value={splitCard}
-                                            onChange={(e) => setSplitCard(e.target.value)}
-                                            className="w-full p-1 border border-gray-200 bg-white rounded-lg text-xs font-mono font-bold"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-between items-center text-[9px] font-bold border-t border-orange-200/50 pt-1 mt-0.5">
-                                    <span className="text-gray-500">Split Total: KES {splitTotal.toLocaleString()}</span>
-                                    <span className={Math.abs(splitTotal - total) < 0.1 ? 'text-green-600' : 'text-red-500'}>
-                                        {Math.abs(splitTotal - total) < 0.1 ? '✓ Balanced' : `Diff: KES ${(total - splitTotal).toLocaleString()}`}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Calculation Summary */}
-                        <div className="border-t border-gray-200/60 pt-2 space-y-1 text-[11px] font-medium text-gray-500">
-                            <div className="flex justify-between">
-                                <span>Subtotal:</span>
-                                <span className="font-mono font-bold text-gray-700">KES {subtotal.toLocaleString()}</span>
-                            </div>
-                            {discountAmount > 0 && (
-                                <div className="flex justify-between text-red-500 font-bold">
-                                    <span>Discount Applied:</span>
-                                    <span className="font-mono">- KES {discountAmount.toLocaleString()}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between text-[9px] text-gray-400">
-                                <span>Included Tax (VAT 16%):</span>
-                                <span className="font-mono">KES {vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                            </div>
-                            {cateringLevyAmount > 0 && (
-                                <div className="flex justify-between text-[9px] text-gray-400">
-                                    <span>Catering Levy (2%):</span>
-                                    <span className="font-mono">KES {cateringLevyAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between text-gray-900 font-black text-sm border-t border-gray-200/60 pt-1.5">
-                                <span>Grand Total:</span>
-                                <span className="font-mono">KES {total.toLocaleString()}</span>
+                                <button
+                                    type="button"
+                                    onClick={handleCheckout}
+                                    disabled={submitting || cart.length === 0 || (paymentMethod === 'Split' && !isSplitValid)}
+                                    className="w-full py-3 bg-gray-950 hover:bg-black text-white rounded-2xl font-black shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed text-xs uppercase tracking-wider cursor-pointer"
+                                >
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
+                                    Send Order & Print Receipt
+                                </button>
+                                
+                                {editingOrderId && paymentStatus === 'Paid' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleVacateTable(editingOrderId)}
+                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow transition-all flex items-center justify-center gap-2 text-xs"
+                                    >
+                                        🚪 Vacate Table / Complete Bill
+                                    </button>
+                                )}
+                                
+                                {editingOrderId && paymentStatus === 'Pending' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const activeOrderObj = openOrders.find(o => o.id === editingOrderId);
+                                            if (activeOrderObj) handleOpenClearModal(activeOrderObj);
+                                        }}
+                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow transition-all flex items-center justify-center gap-2 text-xs"
+                                    >
+                                        💵 Clear Pending Bill / Close Table
+                                    </button>
+                                )}
                             </div>
                         </div>
-
-                        {/* Order Placement Action Buttons */}
-                        <button
-                            type="button"
-                            onClick={handleCheckout}
-                            disabled={submitting || cart.length === 0 || (paymentMethod === 'Split' && !isSplitValid)}
-                            className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs animate-in fade-in"
-                        >
-                            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}
-                            Send Order & Print Receipt — KES {total.toLocaleString()}
-                        </button>
-                        
-                        {editingOrderId && paymentStatus === 'Paid' && (
-                            <button
-                                type="button"
-                                onClick={() => handleVacateTable(editingOrderId)}
-                                className="w-full mt-2 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow transition-all flex items-center justify-center gap-2 text-xs animate-in slide-in-from-bottom-2 duration-150"
-                            >
-                                🚪 Vacate Table / Complete Bill
-                            </button>
-                        )}
-                        
-                        {editingOrderId && paymentStatus === 'Pending' && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const activeOrderObj = openOrders.find(o => o.id === editingOrderId);
-                                    if (activeOrderObj) handleOpenClearModal(activeOrderObj);
-                                }}
-                                className="w-full mt-2 py-2 bg-emerald-650 hover:bg-emerald-700 text-white rounded-xl font-bold shadow transition-all flex items-center justify-center gap-2 text-xs animate-in slide-in-from-bottom-2 duration-150"
-                            >
-                                💵 Clear Pending Bill / Close Table
-                            </button>
-                        )}
-                    </div>
-                </div>
                     </>
                 )}
             </div>
@@ -8515,41 +8662,49 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                 )}
             </AnimatePresence>
 
-            {/* ─── Mobile Bottom Navigation Bar ─── */}
-            <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 flex items-stretch shadow-2xl print:hidden" style={{paddingBottom: 'env(safe-area-inset-bottom)'}}>
+            {/* ─── Mobile Bottom Navigation Bar (Always on Top) ─── */}
+            <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-[60px] z-50 bg-white border-t border-gray-200 flex items-stretch shadow-2xl print:hidden" style={{paddingBottom: 'env(safe-area-inset-bottom)'}}>
                 <button
                     type="button"
                     onClick={() => { setActiveView('menu'); setCartOpen(false); }}
-                    className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all ${activeView === 'menu' ? 'text-primary bg-primary/5' : 'text-gray-400'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        activeView === 'menu' && !cartOpen ? 'text-primary bg-primary/10' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                 >
-                    <span className="text-lg">🍽️</span>
+                    <span className="text-xl">🍽️</span>
                     <span>Menu</span>
                 </button>
                 <button
                     type="button"
                     onClick={() => { setActiveView('tables'); setCartOpen(false); }}
-                    className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all ${activeView === 'tables' ? 'text-primary bg-primary/5' : 'text-gray-400'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        activeView === 'tables' && !cartOpen ? 'text-primary bg-primary/10' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                 >
-                    <span className="text-lg">🪑</span>
+                    <span className="text-xl">🪑</span>
                     <span>Tables</span>
                 </button>
                 <button
                     type="button"
                     onClick={() => { setActiveView('history'); setCartOpen(false); }}
-                    className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all ${activeView === 'history' ? 'text-amber-600 bg-amber-50' : 'text-gray-400'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        activeView === 'history' && !cartOpen ? 'text-amber-600 bg-amber-50' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                 >
-                    <span className="text-lg">📋</span>
+                    <span className="text-xl">📋</span>
                     <span>History</span>
                 </button>
                 <button
                     type="button"
                     onClick={() => setCartOpen(!cartOpen)}
-                    className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all relative ${cart.length > 0 ? 'text-primary bg-primary/5' : 'text-gray-400'}`}
+                    className={`flex-1 flex flex-col items-center justify-center py-1 gap-0.5 text-[10px] font-black uppercase tracking-wider transition-all relative cursor-pointer ${
+                        cartOpen ? 'text-primary bg-primary/10' : (cart.length > 0 ? 'text-emerald-700 font-bold' : 'text-gray-500 hover:text-gray-900')
+                    }`}
                 >
-                    <span className="text-lg relative">
+                    <span className="text-xl relative">
                         🛒
                         {cart.length > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center leading-none">
+                            <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">
                                 {cart.reduce((s, i) => s + i.quantity, 0)}
                             </span>
                         )}
@@ -9724,7 +9879,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 }
 
 const FEEDBACK_URL = "https://potofjollof.manipos.com/feedback";
-const FEEDBACK_QR_CODE = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(FEEDBACK_URL)}`;
 
 
 // ============================================================
