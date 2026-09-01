@@ -1652,6 +1652,16 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         );
     }
 
+    const handleExitMenu = () => {
+        if (activeBrand === "Pot of Jollof" || window.location.hostname.includes("potofjollof")) {
+            window.location.href = "https://potofjollof.co.ke";
+        } else if (onBack) {
+            onBack();
+        } else {
+            window.location.href = "https://potofjollof.co.ke";
+        }
+    };
+
     const activeBrandConfig = BRAND_CONFIGS[activeBrand] || {
         name: 'MUTE KITCHENS',
         desc: 'Explore our menus and place your orders directly to our chefs from your phone.',
@@ -1661,20 +1671,20 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col font-sans select-none">
-            {/* Top Deals Announcement Bar */}
-            {availableDiscounts.length > 0 && (
+            {/* Top Deals Announcement Bar - Only active when promos are active */}
+            {availableDiscounts.filter(d => d.is_active).length > 0 && (
                 <div className="bg-amber-400 text-slate-950 px-4 py-2 text-xs font-black flex items-center justify-between shadow-sm z-30 shrink-0">
                     <div className="flex items-center gap-2 mx-auto tracking-tight">
                         <span className="animate-bounce">🎁</span>
                         <span>
-                            {availableDiscounts.find(d => d.type === "free_delivery") ? (
-                                <>FREE Delivery on orders over KES ${(availableDiscounts.find(d => d.type === "free_delivery").min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts.find(d => d.type === "free_delivery").code}</strong></>
-                            ) : availableDiscounts[0].type === "percentage" ? (
-                                <>${availableDiscounts[0].value}% OFF! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts[0].code}</strong></>
-                            ) : availableDiscounts[0].type === "bogof" ? (
-                                <>Buy 1 Get 1 Free (BOGOF)! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts[0].code}</strong></>
+                            {availableDiscounts.find(d => d.is_active && d.type === "free_delivery") ? (
+                                <>FREE Delivery on orders over KES {(availableDiscounts.find(d => d.is_active && d.type === "free_delivery").min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.find(d => d.is_active && d.type === "free_delivery").code}</strong></>
+                            ) : availableDiscounts.filter(d => d.is_active)[0].type === "percentage" ? (
+                                <>{availableDiscounts.filter(d => d.is_active)[0].value}% OFF! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.filter(d => d.is_active)[0].code}</strong></>
+                            ) : availableDiscounts.filter(d => d.is_active)[0].type === "bogof" ? (
+                                <>Buy 1 Get 1 Free (BOGOF)! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.filter(d => d.is_active)[0].code}</strong></>
                             ) : (
-                                <>Save KES ${availableDiscounts[0].value} on orders over KES ${(availableDiscounts[0].min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">${availableDiscounts[0].code}</strong></>
+                                <>Save KES {availableDiscounts.filter(d => d.is_active)[0].value.toLocaleString()} on orders over KES {(availableDiscounts.filter(d => d.is_active)[0].min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.filter(d => d.is_active)[0].code}</strong></>
                             )}
                         </span>
                     </div>
@@ -1688,50 +1698,21 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0d0e12] via-transparent to-black/30"></div>
 
                 {/* Visual Header Navigation Buttons */}
-                {activeBrand === 'All' ? (
-                    <>
-                        {onBack && (
-                            <button
-                                onClick={onBack}
-                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                            >
-                                <ArrowLeft size={10} /> Exit Menu
-                            </button>
-                        )}
-                        <button
-                            onClick={() => setAccountOpen(true)}
-                            className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                        >
-                            👤 {guestUser ? guestUser.first_name : 'Log In'}
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        {!isSingleBrand && (
-                            <button
-                                onClick={() => setActiveBrand('All')}
-                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                            >
-                                <ArrowLeft size={10} /> Back
-                            </button>
-                        )}
-                        {isSingleBrand && onBack && (
-                            <button
-                                onClick={onBack}
-                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                            >
-                                <ArrowLeft size={10} /> Exit Menu
-                            </button>
-                        )}
+                <button
+                    type="button"
+                    onClick={handleExitMenu}
+                    className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/40 hover:bg-black/70 border border-white/20 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-200 hover:text-white transition-all shadow-md cursor-pointer backdrop-blur-md"
+                >
+                    <ArrowLeft size={11} /> Exit Menu
+                </button>
 
-                        <button
-                            onClick={() => setAccountOpen(true)}
-                            className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                        >
-                            👤 {guestUser ? guestUser.first_name : 'Log In'}
-                        </button>
-                    </>
-                )}
+                <button
+                    type="button"
+                    onClick={() => setAccountOpen(true)}
+                    className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/40 hover:bg-black/70 border border-white/20 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-200 hover:text-white transition-all shadow-md cursor-pointer backdrop-blur-md"
+                >
+                    👤 {guestUser ? guestUser.first_name : "Log In"}
+                </button>
 
                 <div className="relative z-10 max-w-6xl mx-auto w-full flex flex-col items-center justify-center text-center gap-2">
                     {activeBrand !== 'All' && (
@@ -2377,11 +2358,11 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                 {isFreeDeliveryEligible ? (
                                                     <div className="flex items-center gap-1.5 font-black">
                                                         <span>🎉</span>
-                                                        <span>FREE DELIVERY UNLOCKED! (Order over KES ${freeDeliveryThreshold.toLocaleString()})</span>
+                                                        <span>FREE DELIVERY UNLOCKED! (Order over KES {freeDeliveryThreshold.toLocaleString()})</span>
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center justify-between gap-1 text-[10px]">
-                                                        <span>🚚 Add <strong>KES ${Math.max(0, freeDeliveryThreshold - cartTotal).toLocaleString()}</strong> more for <strong>FREE DELIVERY</strong>!</span>
+                                                        <span>🚚 Add <strong>KES {Math.max(0, freeDeliveryThreshold - cartTotal).toLocaleString()}</strong> more for <strong>FREE DELIVERY</strong>!</span>
                                                     </div>
                                                 )}
                                             </div>

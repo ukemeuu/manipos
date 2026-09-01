@@ -1308,6 +1308,320 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
               </motion.div>
             )}
 
+            
+            {/* OFFERS & PROMOTIONS PANEL */}
+            {activeTab === "offers" && (
+              <motion.div
+                key="offers"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/60 p-6 rounded-3xl border border-slate-800 backdrop-blur-xl">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-amber-400/10 text-amber-400 rounded-2xl border border-amber-400/20">
+                        <Gift size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-black text-white">Offers & Promotions</h2>
+                        <p className="text-xs text-slate-400 mt-0.5">Manage % discounts, BOGOF offers, spend thresholds, and free delivery promotions.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEditingDiscount({
+                      code: "",
+                      type: "percentage",
+                      value: 10,
+                      min_order_amount: 0,
+                      is_active: true
+                    })}
+                    className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-400/10 cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    Create New Offer
+                  </button>
+                </div>
+
+                {/* Free Delivery Consolidated Config Card */}
+                <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2.5">
+                      <Truck size={18} className="text-sky-400" />
+                      <h3 className="font-bold text-white text-sm">Free Delivery Promo Overview</h3>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg">
+                      Auto-Evaluated in Cart
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    When active, orders meeting the minimum spend and radius criteria automatically receive free delivery in the customer cart.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Active Free Delivery Rule</span>
+                      <span className="text-sm font-black text-white mt-1 block">
+                        {discounts.find(d => d.type === "free_delivery" && d.is_active) ? (
+                          <span className="text-emerald-400 flex items-center gap-1.5 mt-1">
+                            <Check size={14} /> Code: {discounts.find(d => d.type === "free_delivery" && d.is_active).code}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 mt-1 block">Inactive</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Min Spend Required</span>
+                      <span className="text-sm font-black text-white mt-1 block">
+                        {discounts.find(d => d.type === "free_delivery" && d.is_active) ? (
+                          `KES ${(discounts.find(d => d.type === "free_delivery" && d.is_active).min_order_amount || 0).toLocaleString()}`
+                        ) : "N/A"}
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Radius Cap</span>
+                      <span className="text-sm font-black text-white mt-1 block">
+                        {discounts.find(d => d.type === "free_delivery" && d.is_active) ? (
+                          (discounts.find(d => d.type === "free_delivery" && d.is_active).value > 0 ? `${discounts.find(d => d.type === "free_delivery" && d.is_active).value} km max` : "Unlimited Radius")
+                        ) : "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* All Offers List */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center px-1">
+                    <h3 className="font-bold text-white text-sm">All Promotional Campaigns ({discounts.length})</h3>
+                    {loadingDiscounts && <Loader2 size={16} className="animate-spin text-amber-400" />}
+                  </div>
+
+                  {discounts.length === 0 ? (
+                    <div className="bg-slate-900/30 border border-slate-800/80 rounded-3xl p-12 text-center space-y-3">
+                      <Tag size={32} className="mx-auto text-slate-600" />
+                      <p className="text-slate-400 text-sm font-bold">No promotional campaigns created yet</p>
+                      <button
+                        onClick={() => setEditingDiscount({
+                          code: "SAVE200",
+                          type: "fixed",
+                          value: 200,
+                          min_order_amount: 1500,
+                          is_active: true
+                        })}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 mt-2 cursor-pointer"
+                      >
+                        <Plus size={14} /> Add First Offer
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {discounts.map((disc) => (
+                        <div
+                          key={disc.id}
+                          className={`bg-slate-900/50 border rounded-3xl p-5 space-y-4 transition-all hover:border-slate-700 ${
+                            disc.is_active ? "border-slate-800" : "border-slate-850 opacity-60"
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="px-3 py-1 bg-amber-400 text-slate-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl shadow-sm inline-block">
+                                {disc.code}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 block mt-2 uppercase tracking-wider">
+                                {disc.type === "percentage" ? "📊 Percentage Off" : disc.type === "fixed" ? "💰 Fixed Amount Off" : disc.type === "bogof" ? "🎁 Buy 1 Get 1 Free" : "🚚 Free Delivery"}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleDiscountStatus(disc)}
+                              className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                disc.is_active
+                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                  : "bg-slate-800 border-slate-700 text-slate-400"
+                              }`}
+                            >
+                              {disc.is_active ? "Active" : "Inactive"}
+                            </button>
+                          </div>
+
+                          <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-850 space-y-1.5 text-xs text-left">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Offer Value:</span>
+                              <span className="font-bold text-white font-mono">
+                                {disc.type === "percentage"
+                                  ? `${disc.value}% OFF`
+                                  : disc.type === "fixed"
+                                  ? `KES ${disc.value.toLocaleString()} OFF`
+                                  : disc.type === "bogof"
+                                  ? "1 Free Item"
+                                  : (disc.value > 0 ? `Free Delivery (max ${disc.value}km)` : "Free Delivery")}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Min Order Spend:</span>
+                              <span className="font-bold text-white font-mono">
+                                {disc.min_order_amount > 0 ? `KES ${disc.min_order_amount.toLocaleString()}` : "No Minimum"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end items-center gap-2 pt-2 border-t border-slate-800/80">
+                            <button
+                              onClick={() => setEditingDiscount(disc)}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <Edit3 size={13} /> Edit
+                            </button>
+                            <button
+                              onClick={() => deleteDiscount(disc.id)}
+                              className="p-1.5 text-slate-500 hover:text-red-400 transition-colors cursor-pointer rounded-lg"
+                              title="Delete Offer"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Create / Edit Offer Modal */}
+                {editingDiscount && (
+                  <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 text-left text-white"
+                    >
+                      <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <Gift size={18} className="text-amber-400" />
+                          <h3 className="font-bold text-base">
+                            {editingDiscount.id ? "Edit Promotion / Offer" : "Create New Promotion / Offer"}
+                          </h3>
+                        </div>
+                        <button
+                          onClick={() => setEditingDiscount(null)}
+                          className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          saveDiscount(editingDiscount);
+                        }}
+                        className="space-y-4"
+                      >
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Promo Code <span className="text-amber-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. SAVE200, FREEDEL, BOGOF, MUTE10"
+                            value={editingDiscount.code}
+                            onChange={(e) => setEditingDiscount({ ...editingDiscount, code: e.target.value.toUpperCase() })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono font-bold text-white uppercase focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Offer Type <span className="text-amber-400">*</span>
+                          </label>
+                          <select
+                            value={editingDiscount.type}
+                            onChange={(e) => setEditingDiscount({ ...editingDiscount, type: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:border-amber-400"
+                          >
+                            <option value="percentage">Percentage Off (% of Order)</option>
+                            <option value="fixed">Fixed Amount Off (KES)</option>
+                            <option value="free_delivery">Free Delivery (with Min Spend & Radius Cap)</option>
+                            <option value="bogof">Buy 1 Get 1 Free (BOGOF)</option>
+                          </select>
+                        </div>
+
+                        {editingDiscount.type !== "bogof" && (
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                              {editingDiscount.type === "percentage"
+                                ? "Discount Percentage (%)"
+                                : editingDiscount.type === "fixed"
+                                ? "Discount Amount (KES)"
+                                : "Delivery Radius Cap (km) — 0 for Unlimited"}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={editingDiscount.value}
+                              onChange={(e) => setEditingDiscount({ ...editingDiscount, value: e.target.value })}
+                              placeholder={editingDiscount.type === "percentage" ? "15" : editingDiscount.type === "fixed" ? "200" : "5"}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Minimum Order Spend Threshold (KES)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editingDiscount.min_order_amount}
+                            onChange={(e) => setEditingDiscount({ ...editingDiscount, min_order_amount: e.target.value })}
+                            placeholder="e.g. 1500 (0 for no minimum)"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
+                          <div>
+                            <span className="text-xs font-bold text-white block">Active Status</span>
+                            <span className="text-[10px] text-slate-400 font-medium">Enable this promotion immediately</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditingDiscount({ ...editingDiscount, is_active: !editingDiscount.is_active })}
+                            className={`w-12 h-6 flex items-center rounded-full p-1 transition-all cursor-pointer ${
+                              editingDiscount.is_active ? "bg-amber-400 justify-end" : "bg-slate-700 justify-start"
+                            }`}
+                          >
+                            <span className="bg-slate-950 w-4 h-4 rounded-full shadow-sm block" />
+                          </button>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingDiscount(null)}
+                            className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="flex-1 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-amber-400/10 cursor-pointer"
+                          >
+                            Save Offer
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+
             {/* CUSTOMER FEEDBACK PANEL */}
             {activeTab === 'feedback' && (
               <motion.div
