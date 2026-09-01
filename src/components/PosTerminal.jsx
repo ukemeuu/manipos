@@ -6208,8 +6208,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                             <div>
                                                                 <div className="flex justify-between items-start">
                                                                     <span className="px-2.5 py-1 bg-black text-white text-[10px] font-mono font-black uppercase tracking-wider rounded-lg shadow-sm">
-                                                                        {disc.code}
+                                                                        {disc.code.replace(/\[ITEMS:.*\]/, "")}
                                                                     </span>
+                                                                    {disc.code.includes("[ITEMS:") && (
+                                                                        <span className="text-[8px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md block mt-1">
+                                                                            🎯 {disc.code.match(/\[ITEMS:(.*)\]/)?.[1]}
+                                                                        </span>
+                                                                    )}
                                                                     <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border ${
                                                                         disc.is_active 
                                                                             ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
@@ -6849,16 +6854,99 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-white">
-                                    <div className="space-y-1 text-left">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo Code</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. WELCOME10"
-                                            value={editingDiscount.code}
-                                            onChange={(e) => setEditingDiscount({ ...editingDiscount, code: e.target.value.toUpperCase() })}
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none font-semibold font-mono uppercase"
-                                        />
-                                    </div>
+                                    {(() => {
+                                        const cleanCode = (editingDiscount.code || "").replace(/\[ITEMS:.*\]/, "");
+                                        const selectedItems = (editingDiscount.code || "").match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").filter(Boolean) || [];
+                                        const isItemSpecific = selectedItems.length > 0 || editingDiscount._isItemSpecific;
+
+                                        const toggleItem = (name) => {
+                                            let next = [...selectedItems];
+                                            if (next.includes(name)) {
+                                                next = next.filter(i => i !== name);
+                                            } else {
+                                                next.push(name);
+                                            }
+                                            const updatedCode = next.length > 0 ? `${cleanCode}[ITEMS:${next.join(",")}]` : cleanCode;
+                                            setEditingDiscount({
+                                                ...editingDiscount,
+                                                code: updatedCode,
+                                                _isItemSpecific: true
+                                            });
+                                        };
+
+                                        return (
+                                            <>
+                                                <div className="space-y-1 text-left">
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo Code</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. LUNCH20, SAVE200"
+                                                        value={cleanCode}
+                                                        onChange={(e) => {
+                                                            const newClean = e.target.value.toUpperCase().replace(/\[.*\]/g, "");
+                                                            const newCode = selectedItems.length > 0 ? `${newClean}[ITEMS:${selectedItems.join(",")}]` : newClean;
+                                                            setEditingDiscount({ ...editingDiscount, code: newCode });
+                                                        }}
+                                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none font-semibold font-mono uppercase"
+                                                    />
+                                                </div>
+
+                                                {/* Item specific toggle */}
+                                                {(editingDiscount.type === "percentage" || editingDiscount.type === "fixed") && (
+                                                    <div className="space-y-2 p-3 bg-gray-50 rounded-2xl border border-gray-200 text-left">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-xs font-bold text-gray-800">Target Items</span>
+                                                            <div className="flex bg-gray-200 p-0.5 rounded-lg text-[10px] font-bold">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setEditingDiscount({ ...editingDiscount, code: cleanCode, _isItemSpecific: false })}
+                                                                    className={`px-2 py-0.5 rounded ${!isItemSpecific ? "bg-white text-black shadow-xs" : "text-gray-600"}`}
+                                                                >
+                                                                    All Items
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setEditingDiscount({ ...editingDiscount, _isItemSpecific: true })}
+                                                                    className={`px-2 py-0.5 rounded ${isItemSpecific ? "bg-white text-black shadow-xs" : "text-gray-600"}`}
+                                                                >
+                                                                    Specific Items
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {isItemSpecific && (
+                                                            <div className="space-y-2 pt-1">
+                                                                {selectedItems.length > 0 && (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {selectedItems.map(name => (
+                                                                            <span key={name} className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                                                                                <span>{name}</span>
+                                                                                <button type="button" onClick={() => toggleItem(name)} className="text-red-500 font-bold ml-1">✕</button>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                <div className="max-h-28 overflow-y-auto space-y-1 bg-white p-2 rounded-xl border border-gray-200 custom-scrollbar">
+                                                                    {menuItems.slice(0, 30).map(item => (
+                                                                        <div
+                                                                            key={item.id || item.name}
+                                                                            onClick={() => toggleItem(item.name)}
+                                                                            className={`flex justify-between items-center p-1.5 rounded text-[11px] font-medium cursor-pointer ${
+                                                                                selectedItems.includes(item.name) ? "bg-amber-50 text-amber-900 font-bold" : "hover:bg-gray-100 text-gray-700"
+                                                                            }`}
+                                                                        >
+                                                                            <span>{item.name}</span>
+                                                                            <span className="text-[9px] font-mono text-gray-400">KES {item.price}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1 text-left">
