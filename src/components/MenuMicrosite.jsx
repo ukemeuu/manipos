@@ -1321,12 +1321,19 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
         setPromoError("");
         setPromoSuccess("");
         try {
-            const { data, error } = await supabase
+            // Find active discount by exact code or base code (e.g. LUNCH20 matching LUNCH20[ITEMS:Jollof Lunch Box S])
+            const { data: allActive, error } = await supabase
                 .from("pos_discounts")
                 .select("*")
-                .eq("code", promoCode.trim().toUpperCase())
-                .eq("is_active", true)
-                .maybeSingle();
+                .eq("is_active", true);
+
+            if (error) throw error;
+
+            const inputCode = promoCode.trim().toUpperCase();
+            const data = (allActive || []).find(d => {
+                const clean = d.code.replace(/\[ITEMS:.*\]/, "").trim().toUpperCase();
+                return clean === inputCode || d.code.trim().toUpperCase() === inputCode;
+            });
                 
             if (error) throw error;
             
@@ -1340,6 +1347,18 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                 setPromoError(`Minimum spend for this code is KES ${data.min_order_amount.toLocaleString()}`);
                 setAppliedDiscount(null);
                 return;
+            }
+
+            const targetItems = data.code.match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").map(s => s.trim().toLowerCase()) || [];
+            if (targetItems.length > 0) {
+                const hasMatchingItem = cart.some(ci => 
+                    targetItems.some(target => ci.name?.toLowerCase().includes(target) || target.includes(ci.name?.toLowerCase()))
+                );
+                if (!hasMatchingItem) {
+                    setPromoError(`This promo only applies to: ${targetItems.join(", ")}. Add qualifying items to your cart first.`);
+                    setAppliedDiscount(null);
+                    return;
+                }
             }
 
             if (data.type === "free_delivery" && data.value > 0 && calculatedDistance && calculatedDistance > data.value) {
@@ -1384,10 +1403,20 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
 
     const discountAmount = React.useMemo(() => {
         if (!appliedDiscount) return 0;
+
+        const targetItems = appliedDiscount.code.match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").map(s => s.trim().toLowerCase()) || [];
+        
+        let applicableSpend = cartTotal;
+        if (targetItems.length > 0) {
+            applicableSpend = cart
+                .filter(ci => targetItems.some(target => ci.name?.toLowerCase().includes(target) || target.includes(ci.name?.toLowerCase())))
+                .reduce((sum, ci) => sum + (parseFloat(ci.price || 0) * (ci.quantity || 1)), 0);
+        }
+
         if (appliedDiscount.type === "percentage") {
-            return Math.round((cartTotal * appliedDiscount.value) / 100);
+            return Math.round((applicableSpend * appliedDiscount.value) / 100);
         } else if (appliedDiscount.type === "fixed") {
-            return Math.min(cartTotal, appliedDiscount.value);
+            return Math.min(applicableSpend, appliedDiscount.value);
         } else if (appliedDiscount.type === "bogof") {
             if (cart.length === 0) return 0;
             const cheapest = cart.slice().sort((a, b) => a.price - b.price)[0];
@@ -2435,7 +2464,7 @@ export function MenuMicrosite({ onBack, defaultBrand, tenantSlug = 'potofjollof'
                                                 <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-emerald-900 text-xs font-bold mt-1 shadow-2xs">
                                                     <span className="flex items-center gap-1.5">
                                                         <span>🏷️</span>
-                                                        <span className="font-mono font-black uppercase">{appliedDiscount.code}</span>
+                                                        <span className="font-mono font-black uppercase">{appliedDiscount.code.replace(/\[ITEMS:.*\]/, "")}</span>
                                                         <span className="text-[10px] text-emerald-700 font-normal">
                                                             ({appliedDiscount.type === "percentage" ? `${appliedDiscount.value}% OFF` : appliedDiscount.type === "fixed" ? `-KES ${appliedDiscount.value}` : appliedDiscount.type === "bogof" ? "BOGOF Free Item" : "Free Delivery"})
                                                         </span>

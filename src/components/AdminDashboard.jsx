@@ -69,6 +69,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
   const [discounts, setDiscounts] = useState([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState(null);
+  const [promoItemSearch, setPromoItemSearch] = useState("");
   const [staffList, setStaffList] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [feedbackList, setFeedbackList] = useState([]);
@@ -1427,8 +1428,13 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                           <div className="flex justify-between items-start">
                             <div>
                               <span className="px-3 py-1 bg-amber-400 text-slate-950 font-mono font-black text-xs uppercase tracking-wider rounded-xl shadow-sm inline-block">
-                                {disc.code}
+                                {disc.code.replace(/\[ITEMS:.*\]/, "")}
                               </span>
+                              {disc.code.includes("[ITEMS:") && (
+                                <span className="text-[9px] font-bold text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-md block mt-1">
+                                  🎯 Items: {disc.code.match(/\[ITEMS:(.*)\]/)?.[1]}
+                                </span>
+                              )}
                               <span className="text-[10px] font-bold text-slate-400 block mt-2 uppercase tracking-wider">
                                 {disc.type === "percentage" ? "📊 Percentage Off" : disc.type === "fixed" ? "💰 Fixed Amount Off" : disc.type === "bogof" ? "🎁 Buy 1 Get 1 Free" : "🚚 Free Delivery"}
                               </span>
@@ -1488,15 +1494,35 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                   )}
                 </div>
 
-                {/* Create / Edit Offer Modal */}
-                {editingDiscount && (
-                  <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                {/* Create / Edit Offer Modal */}
+                {editingDiscount && (() => {
+                  const cleanCode = (editingDiscount.code || "").replace(/\[ITEMS:.*\]/, "");
+                  const selectedItems = (editingDiscount.code || "").match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").filter(Boolean) || [];
+                  const isItemSpecific = selectedItems.length > 0 || editingDiscount._isItemSpecific;
+
+                  const toggleItemSelection = (itemName) => {
+                    let nextItems = [...selectedItems];
+                    if (nextItems.includes(itemName)) {
+                      nextItems = nextItems.filter(i => i !== itemName);
+                    } else {
+                      nextItems.push(itemName);
+                    }
+                    const newCode = nextItems.length > 0 ? `${cleanCode}[ITEMS:${nextItems.join(",")}]` : cleanCode;
+                    setEditingDiscount({
+                      ...editingDiscount,
+                      code: newCode,
+                      _isItemSpecific: true
+                    });
+                  };
+
+                  return (
+                  <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 text-left text-white"
+                      className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5 text-left text-white my-8 max-h-[90vh] flex flex-col"
                     >
-                      <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                      <div className="flex justify-between items-center pb-3 border-b border-slate-800 shrink-0">
                         <div className="flex items-center gap-2">
                           <Gift size={18} className="text-amber-400" />
                           <h3 className="font-bold text-base">
@@ -1516,7 +1542,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                           e.preventDefault();
                           saveDiscount(editingDiscount);
                         }}
-                        className="space-y-4"
+                        className="space-y-4 overflow-y-auto pr-1"
                       >
                         <div className="space-y-1.5">
                           <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -1525,47 +1551,144 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                           <input
                             type="text"
                             required
-                            placeholder="e.g. SAVE200, FREEDEL, BOGOF, MUTE10"
-                            value={editingDiscount.code}
-                            onChange={(e) => setEditingDiscount({ ...editingDiscount, code: e.target.value.toUpperCase() })}
+                            placeholder="e.g. JOLLOF20, LUNCHBOX15, SAVE200"
+                            value={cleanCode}
+                            onChange={(e) => {
+                              const newClean = e.target.value.toUpperCase().replace(/\[.*\]/g, "");
+                              const newCode = selectedItems.length > 0 ? `${newClean}[ITEMS:${selectedItems.join(",")}]` : newClean;
+                              setEditingDiscount({ ...editingDiscount, code: newCode });
+                            }}
                             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono font-bold text-white uppercase focus:outline-none focus:border-amber-400"
                           />
                         </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                            Offer Type <span className="text-amber-400">*</span>
-                          </label>
-                          <select
-                            value={editingDiscount.type}
-                            onChange={(e) => setEditingDiscount({ ...editingDiscount, type: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:border-amber-400"
-                          >
-                            <option value="percentage">Percentage Off (% of Order)</option>
-                            <option value="fixed">Fixed Amount Off (KES)</option>
-                            <option value="free_delivery">Free Delivery (with Min Spend & Radius Cap)</option>
-                            <option value="bogof">Buy 1 Get 1 Free (BOGOF)</option>
-                          </select>
-                        </div>
-
-                        {editingDiscount.type !== "bogof" && (
+                        <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1.5">
                             <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                              {editingDiscount.type === "percentage"
-                                ? "Discount Percentage (%)"
-                                : editingDiscount.type === "fixed"
-                                ? "Discount Amount (KES)"
-                                : "Delivery Radius Cap (km) — 0 for Unlimited"}
+                              Offer Type <span className="text-amber-400">*</span>
                             </label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              value={editingDiscount.value}
-                              onChange={(e) => setEditingDiscount({ ...editingDiscount, value: e.target.value })}
-                              placeholder={editingDiscount.type === "percentage" ? "15" : editingDiscount.type === "fixed" ? "200" : "5"}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-400"
-                            />
+                            <select
+                              value={editingDiscount.type}
+                              onChange={(e) => setEditingDiscount({ ...editingDiscount, type: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:border-amber-400"
+                            >
+                              <option value="percentage">Percentage Off (%)</option>
+                              <option value="fixed">Fixed Amount Off (KES)</option>
+                              <option value="free_delivery">Free Delivery Promo</option>
+                              <option value="bogof">Buy 1 Get 1 Free (BOGOF)</option>
+                            </select>
+                          </div>
+
+                          {editingDiscount.type !== "bogof" && (
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                {editingDiscount.type === "percentage"
+                                  ? "Discount (%)"
+                                  : editingDiscount.type === "fixed"
+                                  ? "Discount (KES)"
+                                  : "Radius Cap (km)"}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={editingDiscount.value}
+                                onChange={(e) => setEditingDiscount({ ...editingDiscount, value: e.target.value })}
+                                placeholder="e.g. 20"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-400"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Item-Level Discount Selector */}
+                        {(editingDiscount.type === "percentage" || editingDiscount.type === "fixed") && (
+                          <div className="space-y-2 p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <span className="text-xs font-bold text-white block">Discount Target</span>
+                                <span className="text-[10px] text-slate-400">Discount entire ticket or specific items</span>
+                              </div>
+                              <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-[10px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingDiscount({
+                                      ...editingDiscount,
+                                      code: cleanCode,
+                                      _isItemSpecific: false
+                                    });
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg transition-all ${!isItemSpecific ? "bg-amber-400 text-slate-950" : "text-slate-400"}`}
+                                >
+                                  All Items
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingDiscount({
+                                      ...editingDiscount,
+                                      _isItemSpecific: true
+                                    });
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg transition-all ${isItemSpecific ? "bg-amber-400 text-slate-950" : "text-slate-400"}`}
+                                >
+                                  Specific Items
+                                </button>
+                              </div>
+                            </div>
+
+                            {isItemSpecific && (
+                              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                                <input
+                                  type="text"
+                                  placeholder="Search menu items to discount..."
+                                  value={promoItemSearch}
+                                  onChange={(e) => setPromoItemSearch(e.target.value)}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                                />
+
+                                {/* Selected Items Chips */}
+                                {selectedItems.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {selectedItems.map((name) => (
+                                      <span key={name} className="bg-amber-400/10 border border-amber-400/30 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                                        <span>{name}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleItemSelection(name)}
+                                          className="text-amber-400 hover:text-red-400 ml-0.5"
+                                        >
+                                          ✕
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Available Menu Items List */}
+                                <div className="max-h-36 overflow-y-auto space-y-1 bg-slate-900/60 p-2 rounded-xl border border-slate-850 custom-scrollbar">
+                                  {menuItems
+                                    .filter(item => !promoItemSearch || item.name.toLowerCase().includes(promoItemSearch.toLowerCase()))
+                                    .slice(0, 20)
+                                    .map((item) => {
+                                      const isSelected = selectedItems.includes(item.name);
+                                      return (
+                                        <div
+                                          key={item.id || item.name}
+                                          onClick={() => toggleItemSelection(item.name)}
+                                          className={`flex justify-between items-center p-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                            isSelected ? "bg-amber-400/15 text-amber-300 border border-amber-400/30" : "hover:bg-slate-800 text-slate-300"
+                                          }`}
+                                        >
+                                          <span>{item.name}</span>
+                                          <span className="text-[10px] font-mono text-slate-400">KES {item.price}</span>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -1599,7 +1722,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                           </button>
                         </div>
 
-                        <div className="flex gap-2 pt-2">
+                        <div className="flex gap-2 pt-2 shrink-0">
                           <button
                             type="button"
                             onClick={() => setEditingDiscount(null)}
@@ -1617,7 +1740,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                       </form>
                     </motion.div>
                   </div>
-                )}
+                );
+              })()}
               </motion.div>
             )}
 
