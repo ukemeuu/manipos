@@ -5221,11 +5221,28 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                             {/* Unified Items Sold Report Sidebar Widget */}
                             {(() => {
                                 const itemTally = {};
-                                const EXCLUDE = (n) => /^delivery/i.test((n || '').trim()) || /^pack(age|aging)?\s*fee/i.test((n || '').trim());
+                                const isFeeOrDelivery = (n) => {
+                                    const raw = (n || "").trim().toLowerCase();
+                                    return (
+                                        raw.startsWith("delivery") ||
+                                        raw.includes("delivery fee") ||
+                                        raw.includes("delivery charge") ||
+                                        raw.startsWith("package") ||
+                                        raw.startsWith("packaging") ||
+                                        raw.startsWith("packing") ||
+                                        raw.includes("pack fee") ||
+                                        raw.includes("package fee") ||
+                                        raw.includes("packaging fee") ||
+                                        raw === "delivery" ||
+                                        raw === "package" ||
+                                        raw === "packaging" ||
+                                        raw === "packing"
+                                    );
+                                };
                                 historyOrders.forEach(order => {
                                     if (order.status === 'Cancelled' || order.status === 'Returned' || order.payment_status === 'Voided') return;
                                     (order.items || []).forEach(item => {
-                                        if (EXCLUDE(item.item_name)) return;
+                                        if (isFeeOrDelivery(item.item_name)) return;
                                         const key = item.item_name || 'Unknown';
                                         if (!itemTally[key]) itemTally[key] = { qty: 0, revenue: 0 };
                                         itemTally[key].qty += (item.quantity || 1);
@@ -5250,8 +5267,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                      <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
                                          <div className="flex items-center justify-between mb-3">
                                              <div>
-                                                 <p className="text-[10px] font-black text-gray-900 uppercase tracking-wider">🏆 Items Sold Report</p>
-                                                 <p className="text-[8px] font-bold text-gray-400 mt-0.5">{sorted.length} unique items sold</p>
+                                                 <p className="text-[10px] font-black text-gray-900 uppercase tracking-wider">🍽️ Dish Sales Velocity & Performance Analyzer</p>
+                                                 <p className="text-[8px] font-bold text-emerald-600 mt-0.5">{sorted.length} dishes · Excludes delivery & packaging fees</p>
                                              </div>
                                              <button
                                                  onClick={() => generateItemsSoldPDF(itemsForPDF, `${historyStartDate} to ${historyEndDate}`)}

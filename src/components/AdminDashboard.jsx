@@ -112,7 +112,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
       const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
 
       // 1. Fetch Orders
-      let ordersQuery = supabase.from('pos_orders').select('*').order('created_at', { ascending: false });
+      let ordersQuery = supabase.from('pos_orders').select('*, items:pos_order_items(*)').order('created_at', { ascending: false });
       if (currentRestaurantId) ordersQuery = ordersQuery.eq('restaurant_id', currentRestaurantId);
       const { data: fetchedOrders } = await ordersQuery;
       setOrders(fetchedOrders || []);
@@ -228,12 +228,62 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
         amount: o.total_amount
       }));
 
+    // Dish Sales Velocity & Performance Analyzer calculation (strictly excluding delivery & packaging fees)
+    const isFeeOrDelivery = (n) => {
+      const raw = (n || "").trim().toLowerCase();
+      return (
+        raw.startsWith("delivery") ||
+        raw.includes("delivery fee") ||
+        raw.includes("delivery charge") ||
+        raw.startsWith("package") ||
+        raw.startsWith("packaging") ||
+        raw.startsWith("packing") ||
+        raw.includes("pack fee") ||
+        raw.includes("package fee") ||
+        raw.includes("packaging fee") ||
+        raw === "delivery" ||
+        raw === "package" ||
+        raw === "packaging" ||
+        raw === "packing"
+      );
+    };
+
+    const dishTally = {};
+    let totalDishUnits = 0;
+    let totalDishRevenue = 0;
+
+    validOrders.forEach(o => {
+      (o.items || []).forEach(item => {
+        const nm = item.item_name || item.name || "";
+        if (!nm || isFeeOrDelivery(nm)) return;
+        const qty = item.quantity || 1;
+        const rev = (item.price || 0) * qty;
+        if (!dishTally[nm]) {
+          dishTally[nm] = { name: nm, qty: 0, revenue: 0 };
+        }
+        dishTally[nm].qty += qty;
+        dishTally[nm].revenue += rev;
+        totalDishUnits += qty;
+        totalDishRevenue += rev;
+      });
+    });
+
+    const dishVelocity = Object.values(dishTally)
+      .sort((a, b) => b.qty - a.qty)
+      .map(d => ({
+        ...d,
+        velocityShare: totalDishUnits > 0 ? Math.round((d.qty / totalDishUnits) * 100) : 0
+      }));
+
     return {
       grossSales,
       transactionCount,
       avgOrderValue,
       paymentSplitData,
-      salesOverTime
+      salesOverTime,
+      dishVelocity,
+      totalDishUnits,
+      totalDishRevenue
     };
   }, [orders]);
 
@@ -907,6 +957,72 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Dish Sales Velocity & Performance Analyzer Card */}
+                <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-3xl space-y-5">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <UtensilsCrossed size={18} className="text-amber-400" />
+                        <h4 className="font-extrabold text-white text-base">Dish Sales Velocity & Performance Analyzer</h4>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Culinary sales volume & velocity breakdown. <span className="text-emerald-400 font-semibold">Strictly excludes all delivery charges & packaging fees.</span>
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-xl">
+                      {stats.dishVelocity?.length || 0} Menu Dishes Analyzed
+                    </span>
+                  </div>
+
+                  {(!stats.dishVelocity || stats.dishVelocity.length === 0) ? (
+                    <div className="text-center py-10 text-slate-500 text-xs font-medium">
+                      No individual dish transactions recorded yet in the current period.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                      {stats.dishVelocity.map((dish, idx) => (
+                        <div
+                          key={dish.name}
+                          className="bg-slate-950/70 border border-slate-800/80 hover:border-amber-400/40 p-4 rounded-2xl transition-all space-y-2.5"
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-400 font-mono font-black text-[10px] flex items-center justify-center shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <span className="font-bold text-white text-xs truncate" title={dish.name}>
+                                {dish.name}
+                              </span>
+                            </div>
+                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-mono font-extrabold text-[11px] rounded-lg shrink-0">
+                              {dish.qty} sold
+                            </span>
+                          </div>
+
+                          {/* Velocity share progress bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] text-slate-400">
+                              <span>Velocity Share</span>
+                              <span className="font-mono font-bold text-slate-300">{dish.velocityShare}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full transition-all"
+                                style={{ width: `${dish.velocityShare}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px] pt-1 border-t border-slate-900 font-medium">
+                            <span className="text-slate-500">Gross Sales</span>
+                            <span className="font-mono font-black text-amber-300">KES {dish.revenue.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
