@@ -144,6 +144,16 @@ export function getTenantInfo() {
     isRetailMarketingDomain = false;
   }
 
+  // CRITICAL RULE (GEMINI.md Rule 1):
+  // manipos.com and www.manipos.com MUST ALWAYS maintain their neutral landing page as a POS provider
+  // and must NEVER route to tenant microsites or Pot of Jollof menu.
+  if (hostname === 'manipos.com' || hostname === 'www.manipos.com') {
+    if (!queryTenant && queryPage !== 'pos' && queryPage !== 'terminal' && queryPage !== 'superadmin' && queryPage !== 'feedback' && queryPage !== 'links' && window.location.pathname !== '/feedback' && window.location.pathname !== '/links') {
+      isGuestMicrosite = false;
+      tenantSlug = null;
+    }
+  }
+
   if (!isPosDomain && !isGuestMicrosite && !isFeedbackDomain && !isLinkHubDomain && !isRetailMarketingDomain && !isRetailPosDomain && !tenantSlug) {
     isMarketingDomain = true;
   }

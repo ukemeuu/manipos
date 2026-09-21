@@ -237,6 +237,21 @@ function App() {
     return <RestaurantLinkHub />;
   }
 
+  // STRICT DOMAIN BOUNDARY (GEMINI.md Rule 1):
+  // manipos.com and www.manipos.com must exclusively serve the ManiPOS SaaS marketing landing page
+  // and must NEVER route to tenant microsites unless explicitly scoped by subdomain or tenant query.
+  if ((tenantInfo.hostname === 'manipos.com' || tenantInfo.hostname === 'www.manipos.com') && (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite)) {
+    const queryTenant = new URLSearchParams(window.location.search).get('tenant');
+    if (!queryTenant) {
+      return (
+        <LandingPage 
+          onProceedToLogin={(slug) => navigateToLogin(slug)} 
+          onSwitchToRetail={navigateToRetailHome}
+        />
+      );
+    }
+  }
+
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
   if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
     return <MenuMicrosite onBack={navigateToHome} tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;

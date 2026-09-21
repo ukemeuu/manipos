@@ -1,0 +1,35 @@
+# Robots.txt for Pot of Jollof Kitchen (potofjollof.co.ke)
+# Optimized for Google Search and Generative AI Agents (GEO)
+
+User-agent: *
+Allow: /
+Allow: /menu.html
+Allow: /events.html
+Allow: /contact.html
+Allow: /about.html
+Allow: /llms.txt
+Allow: /llms-full.txt
+
+# Allow all AI Search Crawlers (ChatGPT Search, Perplexity, Gemini, Claude)
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://potofjollof.co.ke/sitemap.xml
