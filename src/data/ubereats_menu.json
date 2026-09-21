@@ -1,0 +1,3481 @@
+{
+  "store": {
+    "name": "Pot Of Jollof Kitchen",
+    "subtitle": "West African \u2022 Nigerian \u2022 Jollof & Swallows",
+    "rating": 4.6,
+    "delivery_time": "Delivery in 20\u201335 mins",
+    "delivery_fee": "KES 0 (Free within 3km)",
+    "address": "Maralal Oasis, Argwings Kodhek Rd, Hurlingham, Nairobi",
+    "hero_image": "https://tb-static.uber.com/prod/image-proc/processed_images/4e90474638bd455660f9b4db5dfc2211/492abbfd79da0fd117a23fd2a6cf3df9.jpeg",
+    "logo": "/jollof_logo.png"
+  },
+  "categories": [
+    {
+      "name": "Most Popular",
+      "items": [
+        {
+          "id": "ebbfd831-a150-5e87-8276-2855ea3c0fe1",
+          "title": "Nigerian Party Jollof rice",
+          "description": "Authentic nigerian party jollof rice freshly prepared with traditional West African ingredients.",
+          "price": 750.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5857de56349a797ca0c2d36092f05d80/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%",
+          "isPopular": true
+        },
+        {
+          "id": "b7115c40-a5d6-54c4-bb3a-636f53824a46",
+          "title": "Jollof Lunch Box (S) + FREE Soda",
+          "description": "Party Jollof Rice served with your choice of Chicken, Beef, or Tilapia, accompanied by Fried Plantain, Coleslaw, and Signature Sauce.",
+          "price": 1280.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/aaa1ab93bd2c957042150e6316ff7c09/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_soda",
+              "title": "Choice of Free Soda",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sd_coke",
+                  "name": "Coca-Cola (Cold)",
+                  "price": 0
+                },
+                {
+                  "id": "sd_fanta",
+                  "name": "Fanta Orange",
+                  "price": 0
+                },
+                {
+                  "id": "sd_sprite",
+                  "name": "Sprite",
+                  "price": 0
+                },
+                {
+                  "id": "sd_water",
+                  "name": "Still Bottled Water",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "73%",
+          "isPopular": true
+        },
+        {
+          "id": "036e01eb-de91-505a-a358-01d2da531caa",
+          "title": "Egusi Soup with Swallow",
+          "description": "Authentic Nigerian egusi soup served with\nany meat of your choice",
+          "price": 2200.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/eca16c24fb1cc1395f317c409fd6e7ea/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS WITH SWALLOW",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_swallow",
+              "title": "Choice of Swallow",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sw_poundo",
+                  "name": "Poundo Yam",
+                  "price": 0
+                },
+                {
+                  "id": "sw_eba",
+                  "name": "Eba (Garri)",
+                  "price": 0
+                },
+                {
+                  "id": "sw_semo",
+                  "name": "Semolina",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        },
+        {
+          "id": "b06c100d-2b0e-4149-8403-0e8a619bf365",
+          "title": "Jollof Suya Box",
+          "description": "Jollof rice, Grilled beef Suya, Plantain, & Coleslaw. Served with sauce",
+          "price": 1590.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/6b1c337a8d97ad10bf33c98d817ffe4c/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        },
+        {
+          "id": "7e5e80b9-50c9-5e62-ac0f-c62afd35544e",
+          "title": "Chicken Suya Shawarma",
+          "description": "Chicken suya, fresh veggies, and a warm tortilla wrap come together for a delicious and easy meal.",
+          "price": 850.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/0d24f6d30d64a5f43364c0d4f6f7d8b3/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "STARTERS & BITES",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_spice",
+              "title": "Spice Preference",
+              "required": false,
+              "min": 0,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sp_mild",
+                  "name": "Mild (Subtle heat)",
+                  "price": 0
+                },
+                {
+                  "id": "sp_medium",
+                  "name": "Medium (Classic Nigerian heat)",
+                  "price": 0
+                },
+                {
+                  "id": "sp_hot",
+                  "name": "Extra Hot (Lagos Fire \ud83c\udf36\ufe0f)",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        },
+        {
+          "id": "f515fe0f-c002-4861-be47-1c3f05b34684",
+          "title": "Goat Meat Pepper Soup",
+          "description": "Classic, fiery pepper soup made with tender goat meat, traditional local spices, and fresh African basil leaves. Properly spiced.",
+          "price": 1490.0,
+          "image_url": null,
+          "category": "PEPPER SOUPS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        },
+        {
+          "id": "9ff80dd0-bc28-46a3-9f87-6ae1eed10335",
+          "title": "Fried Plantain (Dodo)",
+          "description": "Authentic fried plantain (dodo) freshly prepared with traditional West African ingredients.",
+          "price": 765.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/4f933fe1fd84ad3117ef2028ae4c180b/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        },
+        {
+          "id": "8a55171f-d4e8-5de5-a92d-d093ef9ba27c",
+          "title": "Puff Puff Snack",
+          "description": "Sweet, soft, and fluffy Nigerian fried\ndough snack with a light, golden crunch. 4pcs",
+          "price": 360.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/89548ecdb1dcff29d69246275aa04a93/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "STARTERS & BITES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "83%",
+          "isPopular": true
+        },
+        {
+          "id": "3fbb2c34-29a5-504d-a42c-9e0626b69cd5",
+          "title": "Chicken Fried Rice",
+          "description": "Authentic chicken fried rice freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/2475d4fadbca4bfbab3dc467906241e2/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        },
+        {
+          "id": "7f71bca4-88f3-4c0f-be07-28fd4396aed0",
+          "title": "3 Piece Jollof Combo",
+          "description": "Authentic 3 piece jollof combo freshly prepared with traditional West African ingredients.",
+          "price": 1032.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/ced44f512a6adad78694c8a075a94373/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%",
+          "isPopular": true
+        }
+      ]
+    },
+    {
+      "name": "JOLLOF COMBOS",
+      "items": [
+        {
+          "id": "b7115c40-a5d6-54c4-bb3a-636f53824a46",
+          "title": "Jollof Lunch Box (S) + FREE Soda",
+          "description": "Party Jollof Rice served with your choice of Chicken, Beef, or Tilapia, accompanied by Fried Plantain, Coleslaw, and Signature Sauce.",
+          "price": 1280.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/aaa1ab93bd2c957042150e6316ff7c09/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_soda",
+              "title": "Choice of Free Soda",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sd_coke",
+                  "name": "Coca-Cola (Cold)",
+                  "price": 0
+                },
+                {
+                  "id": "sd_fanta",
+                  "name": "Fanta Orange",
+                  "price": 0
+                },
+                {
+                  "id": "sd_sprite",
+                  "name": "Sprite",
+                  "price": 0
+                },
+                {
+                  "id": "sd_water",
+                  "name": "Still Bottled Water",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "73%"
+        },
+        {
+          "id": "eb35520e-3291-5497-8e86-145ce68bafec",
+          "title": "Jollof Lunch Box (L) + FREE Soda (1.25L)",
+          "description": "Large Party Jollof Rice Platter \u2013 Generously served with your choice of 2 Quarter Chicken pieces, 6 Tender Beef Cuts, or a Whole Large Tilapia. Comes with Fried Plantains, Creamy Coleslaw, and our Signature Sauce.\nPerfect for 2 people.",
+          "price": 2400.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/bafebc387f2e07708384198f28a2a11f/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_soda",
+              "title": "Choice of Free Soda",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sd_coke",
+                  "name": "Coca-Cola (Cold)",
+                  "price": 0
+                },
+                {
+                  "id": "sd_fanta",
+                  "name": "Fanta Orange",
+                  "price": 0
+                },
+                {
+                  "id": "sd_sprite",
+                  "name": "Sprite",
+                  "price": 0
+                },
+                {
+                  "id": "sd_water",
+                  "name": "Still Bottled Water",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "75%"
+        },
+        {
+          "id": "750f9227-4a8b-59e2-8134-fd65faa13367",
+          "title": "Jollof Value Combo",
+          "description": "Authentic jollof value combo freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5e9bb62cfd945462dd0167174795f240/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "94d89b8a-a770-58e0-a546-a8bf19aeffcc",
+          "title": "Jollof Pasta & Chicken",
+          "description": "Spaghetti cooked in a rich, spiced\ntomato sauce for a flavourful twist on\nJollof.",
+          "price": 1545.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/e1b2d2f76e0d69dc016780a5b8f8986d/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "a2a55c32-d626-53b9-9c80-7f8a804ab3c2",
+          "title": "Jollof Pasta (Plain)",
+          "description": "Plain jollof pasta",
+          "price": 920.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/e1b2d2f76e0d69dc016780a5b8f8986d/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "a60bfb82-18fc-5758-b639-90c82d8b19ad",
+          "title": "NEW! Jollof & Mackerel Fish Combo",
+          "description": "Jollof rice, mackerel fish, sweet fried plantain, coleslaw and sauce.",
+          "price": 1690.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/e427d6c972088861699a311bcacc15fb/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "b06c100d-2b0e-4149-8403-0e8a619bf365",
+          "title": "Jollof Suya Box",
+          "description": "Jollof rice, Grilled beef Suya, Plantain, & Coleslaw. Served with sauce",
+          "price": 1590.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/6b1c337a8d97ad10bf33c98d817ffe4c/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "a2c7b0ae-1c7b-4a29-939a-0646d94b6c48",
+          "title": "Jollof Wings Box + Soda",
+          "description": "Sweet and spicy or BBQ chicken wings served with jollof rice, plantain and soda",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/d771031bca7e15aeb5ef77972cdca367/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_soda",
+              "title": "Choice of Free Soda",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sd_coke",
+                  "name": "Coca-Cola (Cold)",
+                  "price": 0
+                },
+                {
+                  "id": "sd_fanta",
+                  "name": "Fanta Orange",
+                  "price": 0
+                },
+                {
+                  "id": "sd_sprite",
+                  "name": "Sprite",
+                  "price": 0
+                },
+                {
+                  "id": "sd_water",
+                  "name": "Still Bottled Water",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "7f71bca4-88f3-4c0f-be07-28fd4396aed0",
+          "title": "3 Piece Jollof Combo",
+          "description": "Authentic 3 piece jollof combo freshly prepared with traditional West African ingredients.",
+          "price": 1032.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/ced44f512a6adad78694c8a075a94373/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "da1e53ae-5201-4b76-bd33-3633a546e7d4",
+          "title": "REFUEL COMBO",
+          "description": "Treat yourself to the ultimate Refuel Combo and save KSh 200 on this massive feast!\nWe've brought together all your absolute favorites on one legendary plate:\nSmoky Jollof Rice \nThick, loaded Suya Shawarma \nJuicy, saucy wings\nFresh coleslaw & a chilled Coca-Cola",
+          "price": 1590.0,
+          "image_url": null,
+          "category": "JOLLOF COMBOS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "BREAKFAST",
+      "items": [
+        {
+          "id": "63080383-6518-5031-a590-295ed4e7b9b4",
+          "title": "Egg sauce & Plantain",
+          "description": "Home-made egg sauce served with\nfried plantain",
+          "price": 890.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/3a2de9c66ccf2e93916eec58c5dbf3ca/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "BREAKFAST",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_plantain_prep",
+              "title": "Plantain Preparation",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pl_fried",
+                  "name": "Fried Plantains (Dodo)",
+                  "price": 0
+                },
+                {
+                  "id": "pl_boiled",
+                  "name": "Boiled Ripe Plantains",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "STEWS",
+      "items": [
+        {
+          "id": "d666ead3-1c17-5980-bb8b-cd8955d0526d",
+          "title": "Chicken Stew",
+          "description": "Well marinated chicken cooked, fried\nand stewed to perfection",
+          "price": 1250.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/50aae3310ebd55c2bba6756431594cc4/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "STEWS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "0f38795b-6d69-55d5-8056-eb4f369bdeb0",
+          "title": "Beef Stew",
+          "description": "Well marinated beef cooked, fried and\nstewed to perfection",
+          "price": 1250.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/f9a4efc9493faf2e179742b8315d9f84/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "STEWS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "17ed4971-a951-58c5-ac13-fcdeec0bfac2",
+          "title": "Assorted Meat Stew",
+          "description": "A hearty Nigerian stew made with tender\ncow skin, cow leg, beef intestines, fried liver, and\nflavored with locust beans.",
+          "price": 1250.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/a4a10c10ed6304e7af9fc2c487c94ae7/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "STEWS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "c95a7543-51d8-541a-97c7-2481226372e1",
+          "title": "Mackerel Fish Stew",
+          "description": "Flavourful Nigerian fish stew, pairs well with\nrice, swallows, or any of your favourite sides.",
+          "price": 1415.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/07a979fd73f5e01846a66f1180c1bb3b/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "STEWS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "c063cb78-2d6c-462f-82bb-77de2c6aa336",
+          "title": "Ofada Sauce",
+          "description": "Authentic ofada sauce freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/3d8a78ed19472f3af2a31fc1791675de/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "STEWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "e4052e4c-4825-4a00-862f-7a8b73e248f0",
+          "title": "Fresh Tilapia fish stew",
+          "description": "Fresh tilapia fish gently simmered in a rich, vibrant blend of blended tomatoes, bell peppers, and habanero bonnets.",
+          "price": 1800.0,
+          "image_url": null,
+          "category": "STEWS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "STARTERS & BITES",
+      "items": [
+        {
+          "id": "967a48c3-6943-52c8-88bd-1422332bf5cf",
+          "title": "Crispy Beef Samosas",
+          "description": "3pcs crispy beef samosas",
+          "price": 510.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/d4dcd0dd3d64412a8bd179f1414ab78a/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "STARTERS & BITES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "13d5250e-1023-5b74-826f-7746d618055a",
+          "title": "Peppered Ponmo",
+          "description": "Slow cooked, tender, tasty cowhide tossed in a rich, spicy sauce. A classic Nigerian appetizer.",
+          "price": 890.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/bc55b3081194205416b48c8a8b686e4d/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "STARTERS & BITES",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_spice",
+              "title": "Spice Preference",
+              "required": false,
+              "min": 0,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sp_mild",
+                  "name": "Mild (Subtle heat)",
+                  "price": 0
+                },
+                {
+                  "id": "sp_medium",
+                  "name": "Medium (Classic Nigerian heat)",
+                  "price": 0
+                },
+                {
+                  "id": "sp_hot",
+                  "name": "Extra Hot (Lagos Fire \ud83c\udf36\ufe0f)",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "8a55171f-d4e8-5de5-a92d-d093ef9ba27c",
+          "title": "Puff Puff Snack",
+          "description": "Sweet, soft, and fluffy Nigerian fried\ndough snack with a light, golden crunch. 4pcs",
+          "price": 360.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/89548ecdb1dcff29d69246275aa04a93/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "STARTERS & BITES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "83%"
+        },
+        {
+          "id": "7e5e80b9-50c9-5e62-ac0f-c62afd35544e",
+          "title": "Chicken Suya Shawarma",
+          "description": "Chicken suya, fresh veggies, and a warm tortilla wrap come together for a delicious and easy meal.",
+          "price": 850.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/0d24f6d30d64a5f43364c0d4f6f7d8b3/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "STARTERS & BITES",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_spice",
+              "title": "Spice Preference",
+              "required": false,
+              "min": 0,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sp_mild",
+                  "name": "Mild (Subtle heat)",
+                  "price": 0
+                },
+                {
+                  "id": "sp_medium",
+                  "name": "Medium (Classic Nigerian heat)",
+                  "price": 0
+                },
+                {
+                  "id": "sp_hot",
+                  "name": "Extra Hot (Lagos Fire \ud83c\udf36\ufe0f)",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "VALUE PLATES",
+      "items": [
+        {
+          "id": "1321ee79-5489-5c94-bc71-f93da4928a46",
+          "title": "Chicken Stew Combo Meal",
+          "description": "A perfectly balanced plate featuring our tender, seasoned Chicken in a rich, slow-simmered tomato-based Stew. Choose your free side: Jollof Rice, Vegetable Rice, or Steamed White Rice. Served with sweet Fried Plantain (Dodo) for the complete meal.",
+          "price": 1890.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/a3b9360e7acd5e51d9d2711b21969e02/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "VALUE PLATES",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "eb1db5ce-ac47-5cd9-9fa8-9218b2f09bf6",
+          "title": "Palm Oil Native Rice Combo Meal",
+          "description": "Authentic Native Rice (cooked in palm oil and spices) with tender Beef cuts, and sweet Fried Plantain",
+          "price": 1890.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/f35d49358a7c488629cb4dd2a2910712/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "VALUE PLATES",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "59234287-2fce-57f8-87ff-929241e5cc26",
+          "title": "Mackerel Fish Stew Combo Meal",
+          "description": "Fresh mackerel fish in rich tomato stew. Served with your choice of Jollof, Vegetable rice, white spaghetti, or Steamed Rice plus Fried Plantain (Dodo).",
+          "price": 1790.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5a36ffd9e087af51ad3f5dcbf302e48b/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "VALUE PLATES",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "CHEF'S SPECIALS",
+      "items": [
+        {
+          "id": "d72dc0dc-d25c-54c4-ac15-76e3193b9e0d",
+          "title": "Sweet Potato Porridge W/ Chicken or Beef",
+          "description": "Enjoy tender sweet potatoes cooked in a rich blend of tomatoes, onions, and aromatic spices. Served with your choice of tasty fried beef or a quarter fried chicken.",
+          "price": 1415.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/7080a0e3be95154c01c10f5a6b02e212/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "CHEF'S SPECIALS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        }
+      ]
+    },
+    {
+      "name": "RICE DISHES",
+      "items": [
+        {
+          "id": "0dd1f76c-d1eb-580b-904f-16fa5c1e9ce2",
+          "title": "Vegetable rice",
+          "description": "Authentic vegetable rice freshly prepared with traditional West African ingredients.",
+          "price": 770.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5492e5a0d82bb004bc83141f6d063a87/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "ebbfd831-a150-5e87-8276-2855ea3c0fe1",
+          "title": "Nigerian Party Jollof rice",
+          "description": "Authentic nigerian party jollof rice freshly prepared with traditional West African ingredients.",
+          "price": 750.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5857de56349a797ca0c2d36092f05d80/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "f5d22e74-bbf0-5750-857d-fe61de619007",
+          "title": "Palm Oil Native Rice",
+          "description": "Authentic palm oil native rice freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/ecff3505d36ac0d5d4d0e464dc65514a/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "75%"
+        },
+        {
+          "id": "49b0ddaf-56f2-5c80-a1c6-4f153ced7abb",
+          "title": "Steamed White Rice",
+          "description": "Steamed parboiled rice, goes with any stew",
+          "price": 450.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5c42f7875ed4703c1e3e88186f87d0f1/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "73bd3f9f-3e3e-5b91-9714-1491b7cf0a5f",
+          "title": "Ofada rice",
+          "description": "Authentic ofada rice freshly prepared with traditional West African ingredients.",
+          "price": 1200.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/084a7af1b0fadf5e9b643c6f5f506c53/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "3fbb2c34-29a5-504d-a42c-9e0626b69cd5",
+          "title": "Chicken Fried Rice",
+          "description": "Authentic chicken fried rice freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/2475d4fadbca4bfbab3dc467906241e2/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "RICE DISHES",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "SOUPS WITH SWALLOW",
+      "items": [
+        {
+          "id": "036e01eb-de91-505a-a358-01d2da531caa",
+          "title": "Egusi Soup with Swallow",
+          "description": "Authentic Nigerian egusi soup served with\nany meat of your choice",
+          "price": 2200.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/eca16c24fb1cc1395f317c409fd6e7ea/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS WITH SWALLOW",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_swallow",
+              "title": "Choice of Swallow",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sw_poundo",
+                  "name": "Poundo Yam",
+                  "price": 0
+                },
+                {
+                  "id": "sw_eba",
+                  "name": "Eba (Garri)",
+                  "price": 0
+                },
+                {
+                  "id": "sw_semo",
+                  "name": "Semolina",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "9897c5f2-c34a-572d-98a7-8546d30382e4",
+          "title": "Okra Soup with Swallow",
+          "description": "Flavourful Okra soup served with any\nmeat of your choice",
+          "price": 2200.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/65bd4e49d5f5b1f61d1ed9528c3acabb/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "SOUPS WITH SWALLOW",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_swallow",
+              "title": "Choice of Swallow",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sw_poundo",
+                  "name": "Poundo Yam",
+                  "price": 0
+                },
+                {
+                  "id": "sw_eba",
+                  "name": "Eba (Garri)",
+                  "price": 0
+                },
+                {
+                  "id": "sw_semo",
+                  "name": "Semolina",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "03262e13-86f5-5c50-b0bf-b76fb1d37ef7",
+          "title": "Ogbono Soup with Swallow",
+          "description": "Ogbono soup served with any meat of\nyour choice.",
+          "price": 2200.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/67b319c14f89fa0d344dbfd719c14d6f/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS WITH SWALLOW",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_swallow",
+              "title": "Choice of Swallow",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sw_poundo",
+                  "name": "Poundo Yam",
+                  "price": 0
+                },
+                {
+                  "id": "sw_eba",
+                  "name": "Eba (Garri)",
+                  "price": 0
+                },
+                {
+                  "id": "sw_semo",
+                  "name": "Semolina",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "f0101d6e-b74a-5d4b-8f69-bf381ab0734c",
+          "title": "Efo riro Soup with Swallow",
+          "description": "Tasty Yoruba vegetable soup with tender\nmeat, fish, and spices, simmered in rich\npalm oil.",
+          "price": 2200.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/1fdc19d5e4deeea31f43e2e6b6311b77/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS WITH SWALLOW",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_swallow",
+              "title": "Choice of Swallow",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "sw_poundo",
+                  "name": "Poundo Yam",
+                  "price": 0
+                },
+                {
+                  "id": "sw_eba",
+                  "name": "Eba (Garri)",
+                  "price": 0
+                },
+                {
+                  "id": "sw_semo",
+                  "name": "Semolina",
+                  "price": 0
+                }
+              ]
+            },
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "SOUPS ONLY",
+      "items": [
+        {
+          "id": "ac32d776-5d70-5626-8d51-8fcb22d481a9",
+          "title": "Egusi Soup",
+          "description": "Egusi Soup",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/6456271d782a8298727b6d6bb8026714/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS ONLY",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "66%"
+        },
+        {
+          "id": "e03087ea-d8dd-5475-b2f1-d082226d2b33",
+          "title": "Ogbono Soup",
+          "description": "Authentic ogbono soup freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/243f783d3c5901e01f52d47e4b5626a0/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS ONLY",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "23f0448a-7196-58ee-94af-5be018f7817a",
+          "title": "Efo riro Soup",
+          "description": "Authentic efo riro soup freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/0fa2c1cd7697be6b3ce7cf091453d423/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS ONLY",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "c457f082-cf43-520a-b496-17f3d8aecb97",
+          "title": "Okra Soup",
+          "description": "Authentic okra soup freshly prepared with traditional West African ingredients.",
+          "price": 1490.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/682af70d7c658f15aa90cbccbc45160b/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS ONLY",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "88b702fe-906a-57a0-9780-855673d4f581",
+          "title": "Plain Okra",
+          "description": "Authentic plain okra freshly prepared with traditional West African ingredients.",
+          "price": 450.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/589f0452981d6b9f08a78cccf6436c74/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS ONLY",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "d1345ace-a9c4-5cea-8b5b-5ee19c958812",
+          "title": "Egusi Chicken Soup",
+          "description": "Popular Nigerian Egusi soup cooked with tender\npieces of chicken",
+          "price": 1750.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/e35224a93b31480a474de3bfc6aadd86/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SOUPS ONLY",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "SIDE MEATS",
+      "items": [
+        {
+          "id": "ebf5f0ba-9f81-537c-8ac2-66de2ef92bf7",
+          "title": "Quarter fried chicken",
+          "description": "Authentic quarter fried chicken freshly prepared with traditional West African ingredients.",
+          "price": 770.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/8a2e0ea3f27597261fdc42a4cf2db182/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SIDE MEATS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "f03b2c48-a419-5cbf-b404-89f6b46de75b",
+          "title": "Fried Mackerel Fish",
+          "description": "Authentic fried mackerel fish freshly prepared with traditional West African ingredients.",
+          "price": 1050.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5eaea8e8da4f8be8c2f478d3eeb485e3/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SIDE MEATS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "PEPPER SOUPS",
+      "items": [
+        {
+          "id": "124210ad-8e9e-5575-8c7f-5c5e21a5f329",
+          "title": "Assorted Meat Pepper Soup",
+          "description": "Authentic assorted meat pepper soup freshly prepared with traditional West African ingredients.",
+          "price": 890.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/63a13331beea27203b813d2950083a75/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "PEPPER SOUPS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "75%"
+        },
+        {
+          "id": "43593512-ed30-4fb0-b872-4d71083ca046",
+          "title": "Fresh Tilapia Fish Pepper Soup",
+          "description": "Classic Nigerian pepper soup made with fresh tilapia, traditional local spices, and fresh African basil leaves. Fiery, fresh, and properly spiced.",
+          "price": 1690.0,
+          "image_url": null,
+          "category": "PEPPER SOUPS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "f515fe0f-c002-4861-be47-1c3f05b34684",
+          "title": "Goat Meat Pepper Soup",
+          "description": "Classic, fiery pepper soup made with tender goat meat, traditional local spices, and fresh African basil leaves. Properly spiced.",
+          "price": 1490.0,
+          "image_url": null,
+          "category": "PEPPER SOUPS",
+          "hasCustomizations": true,
+          "modifiers": [
+            {
+              "id": "mod_protein",
+              "title": "Choice of Protein",
+              "required": true,
+              "min": 1,
+              "max": 1,
+              "options": [
+                {
+                  "id": "pr_beef",
+                  "name": "Tender Beef",
+                  "price": 0
+                },
+                {
+                  "id": "pr_chicken",
+                  "name": "Fried / Stewed Chicken",
+                  "price": 0
+                },
+                {
+                  "id": "pr_goat",
+                  "name": "Goat Meat",
+                  "price": 200
+                },
+                {
+                  "id": "pr_fish",
+                  "name": "Mackerel Fish",
+                  "price": 250
+                },
+                {
+                  "id": "pr_assorted",
+                  "name": "Assorted Meat (Ponmo, Shaki, Beef)",
+                  "price": 300
+                }
+              ]
+            },
+            {
+              "id": "mod_sides",
+              "title": "Popular Add-ons",
+              "required": false,
+              "min": 0,
+              "max": 4,
+              "options": [
+                {
+                  "id": "add_dodo",
+                  "name": "Extra Fried Plantains (Dodo)",
+                  "price": 350
+                },
+                {
+                  "id": "add_moimoi",
+                  "name": "Side Moi Moi",
+                  "price": 390
+                },
+                {
+                  "id": "add_egg",
+                  "name": "Boiled Egg",
+                  "price": 100
+                },
+                {
+                  "id": "add_coleslaw",
+                  "name": "Fresh Coleslaw",
+                  "price": 250
+                }
+              ]
+            }
+          ],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "SIDES & SWALLOWS",
+      "items": [
+        {
+          "id": "5bf2572d-0be2-59cc-89d3-acae781eb1da",
+          "title": "Creamed Spinach",
+          "description": "Authentic creamed spinach freshly prepared with traditional West African ingredients.",
+          "price": 450.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/aeb9475d9a5ba7efd6829ee71317575a/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "0d449344-5aa1-5369-8549-09ba26269b43",
+          "title": "Boiled Egg",
+          "description": "Authentic boiled egg freshly prepared with traditional West African ingredients.",
+          "price": 100.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/1ad2ca979744db342342966668d86a6a/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "63aedd6e-4eea-5376-9ff6-a8d8e3207aa2",
+          "title": "Kachumbari",
+          "description": "Authentic kachumbari freshly prepared with traditional West African ingredients.",
+          "price": 300.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/2cd1649fd7ada176ee860ab6e2540173/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "75%"
+        },
+        {
+          "id": "146032f1-5953-504e-b24a-9aacc5edcab2",
+          "title": "Coleslaw",
+          "description": "Authentic coleslaw freshly prepared with traditional West African ingredients.",
+          "price": 250.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/e2be75d5941b570c2f201fec310c0073/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "8d8c992c-800d-5290-b05c-608ad98a94e4",
+          "title": "Poundo Yam",
+          "description": "smooth, soft yam flour\nswallow, best enjoyed\nwith egusi soup",
+          "price": 850.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/48686d56a234e5ea5a76364463d43261/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        },
+        {
+          "id": "f392129c-eadf-5e53-87ee-6dd54d60932b",
+          "title": "Eba",
+          "description": "Soft, smooth\ngarri(cassava)\nflakes swallow",
+          "price": 550.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/8939e7719e689bcf63b8ee8891a4ae4a/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "205838d0-d44f-5458-a0ce-c814edf3797d",
+          "title": "Semolina",
+          "description": "Stretchy wheat\nflour swallow",
+          "price": 450.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/5b1594e8028422c3888601ed4afceed4/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "50e15e54-a3c5-465f-a5d6-46f7249c2711",
+          "title": "Ugali",
+          "description": "Kenyan swallow\nmade from\nmaize flour",
+          "price": 195.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/6152c7cf4cd6e7a005810b6a95174d41/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "93%"
+        },
+        {
+          "id": "6749674c-51bc-5237-b3f2-06c960ee734a",
+          "title": "Soft Chapatis",
+          "description": "2pcs",
+          "price": 290.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/e4b0d0d73a68c423bbb95094fda0527e/c67fc65e9b4e16a553eb7574fba090f1.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "80%"
+        },
+        {
+          "id": "9ff80dd0-bc28-46a3-9f87-6ae1eed10335",
+          "title": "Fried Plantain (Dodo)",
+          "description": "Authentic fried plantain (dodo) freshly prepared with traditional West African ingredients.",
+          "price": 765.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/4f933fe1fd84ad3117ef2028ae4c180b/a1681d67ebe55c76c3af5f401619c278.jpeg",
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "8ad394a6-3db6-57d9-ae76-6f8fcc8209b1",
+          "title": "EXTRA SAUCE",
+          "description": "Authentic extra sauce freshly prepared with traditional West African ingredients.",
+          "price": 150.0,
+          "image_url": null,
+          "category": "SIDES & SWALLOWS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        }
+      ]
+    },
+    {
+      "name": "DRINKS",
+      "items": [
+        {
+          "id": "93892310-620a-5cbb-92c7-3dbe4805df01",
+          "title": "Fresh Mango Juice",
+          "description": "Fresh mango juice",
+          "price": 450.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/7b41ec75c25325ff262a233b8181cdee/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "DRINKS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "95%"
+        },
+        {
+          "id": "bcf1b015-fe57-555b-a606-9109450ab0bc",
+          "title": "Zobo Hibiscus Drink",
+          "description": "A refreshing Nigerian beverage crafted from vibrant hibiscus petals, zesty ginger, warm cloves, sweet diced pineapple, and a hint of fresh lemon.",
+          "price": 450.0,
+          "image_url": "https://tb-static.uber.com/prod/image-proc/processed_images/c3e5c17c42ea812db1a6ee1d0bf78f4f/d03e52b3c8af19d8fa8222e23efd9cfa.jpeg",
+          "category": "DRINKS",
+          "hasCustomizations": false,
+          "modifiers": [],
+          "isSoldOut": false,
+          "rating": "100%"
+        }
+      ]
+    }
+  ]
+}

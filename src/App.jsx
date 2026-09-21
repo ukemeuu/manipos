@@ -7,6 +7,7 @@ import { RetailLandingPage } from './components/RetailLandingPage';
 import { RetailPosTerminal } from './components/RetailPosTerminal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MenuMicrosite } from './components/MenuMicrosite';
+import { UberEatsMicrosite } from './components/UberEatsMicrosite';
 import { FeedbackForm } from './components/FeedbackForm';
 import { RestaurantLinkHub } from './components/RestaurantLinkHub';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
@@ -254,7 +255,17 @@ function App() {
 
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
   if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
-    return <MenuMicrosite onBack={navigateToHome} tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
+    const queryParams = new URLSearchParams(window.location.search);
+    if (queryParams.get('view') === 'legacy' || queryParams.get('mode') === 'classic') {
+      return <MenuMicrosite onBack={navigateToHome} tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
+    }
+    return (
+      <UberEatsMicrosite 
+        onBack={navigateToHome} 
+        onStaffLogin={() => navigateToLogin(tenantInfo.tenantSlug)}
+        onAdminLogin={() => navigateToLogin(tenantInfo.tenantSlug)}
+      />
+    );
   }
 
   // ROUTE 1.5: Standalone Retail POS Register Terminal
