@@ -234,6 +234,19 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                             </span>
                         </div>
 
+                        {/* Delivery Destination Badge */}
+                        {orderSuccess.diningOption === "Delivery" && (orderSuccess.deliveryAddress || orderSuccess.notes) && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left space-y-1 shadow-xs">
+                                <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-amber-900 tracking-wider">
+                                    <span>🛵</span>
+                                    <span>Delivery Destination:</span>
+                                </div>
+                                <p className="text-xs font-bold text-gray-900 leading-snug">
+                                    {orderSuccess.deliveryAddress || (orderSuccess.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) || "Delivery order"}
+                                </p>
+                            </div>
+                        )}
+
                         {/* Paybill & Account Number Card */}
                         <div className="bg-amber-50/70 border-2 border-amber-300/50 rounded-2xl p-4 text-left space-y-3">
                             <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
@@ -340,6 +353,14 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                                     <span className="font-mono font-black text-black bg-amber-100 px-2 py-0.5 rounded text-xs">{orderSuccess.mpesaCode}</span>
                                 </div>
                             )}
+                            {orderSuccess.diningOption === "Delivery" && (orderSuccess.deliveryAddress || orderSuccess.notes) && (
+                                <div className="text-xs pt-2 border-t border-gray-200 text-left">
+                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-wider">🛵 Delivery Address</span>
+                                    <span className="font-bold text-gray-900 leading-snug block mt-0.5">
+                                        {orderSuccess.deliveryAddress || (orderSuccess.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) || "Delivery order"}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Share Confirmation Code to WhatsApp Button */}
@@ -377,6 +398,15 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                                 Payment verified by cashier! Your order is accepted & sent to the kitchen.
                             </p>
                         </div>
+
+                        {orderSuccess.diningOption === "Delivery" && (orderSuccess.deliveryAddress || orderSuccess.notes) && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left shadow-xs">
+                                <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider block">🛵 Delivering to:</span>
+                                <span className="text-xs font-bold text-gray-900 mt-0.5 block">
+                                    {orderSuccess.deliveryAddress || (orderSuccess.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1])}
+                                </span>
+                            </div>
+                        )}
 
                         <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 text-left space-y-3">
                             <span className="text-[10px] font-black uppercase text-emerald-800 tracking-widest block text-center">Live Order Status</span>
@@ -456,6 +486,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const [isRegistering, setIsRegistering] = useState(false);
     const [guestLoading, setGuestLoading] = useState(false);
     const [pastOrders, setPastOrders] = useState([]);
+    const [availableDiscounts, setAvailableDiscounts] = useState([]);
     const [showHistory, setShowHistory] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
     
@@ -464,6 +495,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const [appliedDiscount, setAppliedDiscount] = useState(null); // { code, type, value, min_order_amount }
     const [promoError, setPromoError] = useState('');
     const [promoSuccess, setPromoSuccess] = useState('');
+    const [redeemLoyaltyPoints, setRedeemLoyaltyPoints] = useState(false);
     
     // Order success state
     const [orderSuccess, setOrderSuccess] = useState(null); // Will hold { ticketNumber, total, brand, items, diningOption, deliveryAddress }
@@ -489,37 +521,109 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const selectedAddressRef = useRef(false);
 
 
-    const fetchPastOrders = async (guestId) => {
+    const fetchDiscounts = async () => {
         try {
             const { data, error } = await supabase
-                .from('pos_orders')
-                .select(`
-                    id,
-                    ticket_number,
-                    created_at,
-                    dining_option,
-                    total_amount,
-                    notes,
-                    pos_order_items (
-                        id,
-                        item_name,
-                        quantity,
-                        price,
-                        instructions
-                    )
-                `)
-                .eq('guest_id', guestId)
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setPastOrders(data || []);
+                .from("pos_discounts")
+                .select("*")
+                .eq("is_active", true)
+                .order("created_at", { ascending: false });
+            if (!error && data) {
+                setAvailableDiscounts(data);
+            }
         } catch (e) {
-            console.error('Error fetching past orders:', e);
+            console.warn("Discounts load notice:", e);
+        }
+    };
+
+    const fetchPastOrders = async (guestId, currentGuest) => {
+        try {
+            let orders = [];
+            const targetGuest = currentGuest || guestUser;
+            const gid = guestId || targetGuest?.id;
+
+            // 1. Query by guest_id if present
+            if (gid) {
+                const { data: byGuestId } = await supabase
+                    .from("pos_orders")
+                    .select(`
+                        id,
+                        ticket_number,
+                        created_at,
+                        dining_option,
+                        total_amount,
+                        delivery_address,
+                        status,
+                        payment_status,
+                        payment_method,
+                        notes,
+                        pos_order_items (
+                            id,
+                            item_name,
+                            quantity,
+                            price,
+                            instructions
+                        )
+                    `)
+                    .eq("guest_id", gid)
+                    .order("created_at", { ascending: false });
+                if (byGuestId) orders = [...orders, ...byGuestId];
+            }
+
+            // 2. Query by phone or name to link any previous orders
+            const phone = targetGuest?.phone;
+            const firstName = targetGuest?.first_name;
+            if (phone || (firstName && firstName.length > 1)) {
+                let nameQuery = supabase
+                    .from("pos_orders")
+                    .select(`
+                        id,
+                        ticket_number,
+                        created_at,
+                        dining_option,
+                        total_amount,
+                        delivery_address,
+                        status,
+                        payment_status,
+                        payment_method,
+                        notes,
+                        pos_order_items (
+                            id,
+                            item_name,
+                            quantity,
+                            price,
+                            instructions
+                        )
+                    `)
+                    .order("created_at", { ascending: false })
+                    .limit(25);
+
+                if (firstName) {
+                    nameQuery = nameQuery.ilike("customer_name", `%${firstName}%`);
+                }
+                const { data: byName } = await nameQuery;
+                if (byName) {
+                    const existingIds = new Set(orders.map(o => o.id));
+                    byName.forEach(o => {
+                        if (!existingIds.has(o.id)) {
+                            orders.push(o);
+                            existingIds.add(o.id);
+                        }
+                    });
+                }
+            }
+
+            orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            setPastOrders(orders);
+        } catch (e) {
+            console.error("Error fetching past orders:", e);
         }
     };
 
     useEffect(() => {
         document.title = "Pot of Jollof | Order Online & Digital Menu";
         fetchMenu();
+        fetchDiscounts();
 
         // Track QR Code Scan on digital menu landing
         try {
@@ -1156,58 +1260,143 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         return Array.from(addresses);
     }, [pastOrders, guestUser]);
 
+    // Active Free Delivery Offer Auto-Evaluator
+    const activeFreeDeliveryOffer = React.useMemo(() => {
+        return availableDiscounts.find(d => d.type === "free_delivery" && d.is_active);
+    }, [availableDiscounts]);
+
+    const freeDeliveryThreshold = activeFreeDeliveryOffer?.min_order_amount || 0;
+    const freeDeliveryMaxRadius = activeFreeDeliveryOffer?.value || 0;
+
+    const isFreeDeliveryEligible = React.useMemo(() => {
+        if (!activeFreeDeliveryOffer) return false;
+        const meetsSpend = cartTotal >= freeDeliveryThreshold;
+        const meetsRadius = !freeDeliveryMaxRadius || freeDeliveryMaxRadius <= 0 || (calculatedDistance === null || calculatedDistance <= freeDeliveryMaxRadius);
+        return meetsSpend && meetsRadius;
+    }, [activeFreeDeliveryOffer, cartTotal, freeDeliveryThreshold, freeDeliveryMaxRadius, calculatedDistance]);
+
     const handleApplyPromoCode = async (e) => {
         if (e) e.preventDefault();
         if (!promoCode.trim()) return;
-        setPromoError('');
-        setPromoSuccess('');
+        setPromoError("");
+        setPromoSuccess("");
         try {
-            const { data, error } = await supabase
-                .from('pos_discounts')
-                .select('*')
-                .eq('code', promoCode.trim().toUpperCase())
-                .eq('is_active', true)
-                .maybeSingle();
+            // Find active discount by exact code or base code (e.g. LUNCH20 matching LUNCH20[ITEMS:Jollof Lunch Box S])
+            const { data: allActive, error } = await supabase
+                .from("pos_discounts")
+                .select("*")
+                .eq("is_active", true);
+
+            if (error) throw error;
+
+            const inputCode = promoCode.trim().toUpperCase();
+            const data = (allActive || []).find(d => {
+                const clean = d.code.replace(/\[ITEMS:.*\]/, "").trim().toUpperCase();
+                return clean === inputCode || d.code.trim().toUpperCase() === inputCode;
+            });
                 
             if (error) throw error;
             
             if (!data) {
-                setPromoError('Invalid or expired discount code.');
+                setPromoError("Invalid or expired promo code.");
                 setAppliedDiscount(null);
                 return;
             }
             
             if (cartTotal < (data.min_order_amount || 0)) {
-                setPromoError(`Minimum order amount for this code is KES ${data.min_order_amount.toLocaleString()}`);
+                setPromoError(`Minimum spend for this code is KES ${data.min_order_amount.toLocaleString()}`);
+                setAppliedDiscount(null);
+                return;
+            }
+
+            const targetItems = data.code.match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").map(s => s.trim().toLowerCase()) || [];
+            if (targetItems.length > 0) {
+                const hasMatchingItem = cart.some(ci => 
+                    targetItems.some(target => ci.name?.toLowerCase().includes(target) || target.includes(ci.name?.toLowerCase()))
+                );
+                if (!hasMatchingItem) {
+                    setPromoError(`This promo only applies to: ${targetItems.join(", ")}. Add qualifying items to your cart first.`);
+                    setAppliedDiscount(null);
+                    return;
+                }
+            }
+
+            if (data.type === "free_delivery" && data.value > 0 && calculatedDistance && calculatedDistance > data.value) {
+                setPromoError(`Free delivery promo is capped at ${data.value} km radius (your distance is ${calculatedDistance.toFixed(1)} km)`);
+                setAppliedDiscount(null);
+                return;
+            }
+
+            if (data.type === "bogof" && cart.length === 0) {
+                setPromoError("Please add items to your cart to activate Buy 1 Get 1 Free!");
                 setAppliedDiscount(null);
                 return;
             }
             
             setAppliedDiscount(data);
-            const successMsg = data.type === 'percentage' 
-                ? `${data.value}% discount applied!` 
-                : `KES ${data.value.toLocaleString()} discount applied!`;
+            let successMsg = "";
+            if (data.type === "percentage") successMsg = `${data.value}% discount applied!`;
+            else if (data.type === "fixed") successMsg = `KES ${data.value.toLocaleString()} discount applied!`;
+            else if (data.type === "bogof") successMsg = "🎉 Buy 1 Get 1 Free (BOGOF) applied!";
+            else if (data.type === "free_delivery") successMsg = "🚚 Free Delivery promo applied!";
+            else successMsg = "Promo code applied successfully!";
             setPromoSuccess(successMsg);
         } catch (err) {
-            setPromoError('Failed to validate code: ' + err.message);
+            setPromoError("Failed to validate code: " + err.message);
             setAppliedDiscount(null);
         }
     };
 
+    // Loyalty points & 15-order milestone rewards engine
+    const totalGuestOrders = (guestUser?.visit_count || pastOrders.length || 0);
+    const redeemedRewardsAmount = React.useMemo(() => {
+        if (!guestUser?.notes) return 0;
+        const match = guestUser.notes.match(/\[RedeemedRewards:(\d+)\]/);
+        return match ? parseInt(match[1]) : 0;
+    }, [guestUser]);
+
+    const earnedRewardsTotal = Math.floor(totalGuestOrders / 15) * 50;
+    const availableLoyaltyBalance = Math.max(0, earnedRewardsTotal - redeemedRewardsAmount);
+    const ordersUntilNextReward = 15 - (totalGuestOrders % 15);
+    const loyaltyProgressPercent = Math.round(((totalGuestOrders % 15) / 15) * 100);
+    const loyaltyDiscountAmount = (redeemLoyaltyPoints && availableLoyaltyBalance >= 50) ? Math.min(cartTotal, 50) : 0;
+
     const discountAmount = React.useMemo(() => {
         if (!appliedDiscount) return 0;
-        if (appliedDiscount.type === 'percentage') {
-            return Math.round((cartTotal * appliedDiscount.value) / 100);
-        } else {
-            return Math.min(cartTotal, appliedDiscount.value);
-        }
-    }, [cartTotal, appliedDiscount]);
 
-    const packagingFeeAmount = (diningOption === 'Takeaway' || diningOption === 'Delivery') 
-        ? whatsappSettings.packaging_fee 
+        const targetItems = appliedDiscount.code.match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").map(s => s.trim().toLowerCase()) || [];
+        
+        let applicableSpend = cartTotal;
+        if (targetItems.length > 0) {
+            applicableSpend = cart
+                .filter(ci => targetItems.some(target => ci.name?.toLowerCase().includes(target) || target.includes(ci.name?.toLowerCase())))
+                .reduce((sum, ci) => sum + (parseFloat(ci.price || 0) * (ci.quantity || 1)), 0);
+        }
+
+        if (appliedDiscount.type === "percentage") {
+            return Math.round((applicableSpend * appliedDiscount.value) / 100);
+        } else if (appliedDiscount.type === "fixed") {
+            return Math.min(applicableSpend, appliedDiscount.value);
+        } else if (appliedDiscount.type === "bogof") {
+            if (cart.length === 0) return 0;
+            const cheapest = cart.slice().sort((a, b) => a.price - b.price)[0];
+            return cheapest ? cheapest.price : 0;
+        } else if (appliedDiscount.type === "free_delivery") {
+            return 0; // Handled directly in deliveryFeeAmount
+        }
+        return 0;
+    }, [cartTotal, appliedDiscount, cart]);
+
+    const deliveryFeeAmount = React.useMemo(() => {
+        if (diningOption !== "Delivery") return 0;
+        if (isFreeDeliveryEligible || appliedDiscount?.type === "free_delivery") return 0;
+        return calculatedDeliveryFee;
+    }, [diningOption, isFreeDeliveryEligible, appliedDiscount, calculatedDeliveryFee]);
+
+    const packagingFeeAmount = (diningOption === "Takeaway" || diningOption === "Delivery") 
+        ? (whatsappSettings?.packaging_fee || 50)
         : 0;
-    const deliveryFeeAmount = diningOption === 'Delivery' ? calculatedDeliveryFee : 0;
-    const finalTotal = Math.max(0, cartTotal - discountAmount + packagingFeeAmount + deliveryFeeAmount);
+    const finalTotal = Math.max(0, cartTotal - discountAmount - loyaltyDiscountAmount + packagingFeeAmount + deliveryFeeAmount);
 
     // Cart operations
     const addToCart = (item) => {
@@ -1243,8 +1432,15 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
         if (cart.length === 0) return;
-        if (diningOption === 'Delivery' && !deliveryAddress.trim()) {
-            alert('Please specify your Delivery Address.');
+
+        let activeDeliveryAddress = (deliveryAddress || "").trim();
+        // Smart fallback: if Delivery is selected and user typed location in the top box
+        if (diningOption === "Delivery" && !activeDeliveryAddress && customerName.trim()) {
+            activeDeliveryAddress = customerName.trim();
+        }
+
+        if (diningOption === "Delivery" && !activeDeliveryAddress) {
+            alert("Please specify your Delivery Address.");
             return;
         }
 
@@ -1278,10 +1474,8 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             }
 
             // Build order payload
-            const promoNoteText = appliedDiscount ? `\n[Promo Applied: ${appliedDiscount.code} (-KES ${discountAmount.toLocaleString()})]` : '';
-            const finalNotes = diningOption === 'Delivery'
-                ? (notes.trim() ? `Delivery Address: ${deliveryAddress.trim()}\nNotes: ${notes.trim()}${promoNoteText}` : `Delivery Address: ${deliveryAddress.trim()}${promoNoteText}`)
-                : (notes.trim() ? `${notes.trim()}${promoNoteText}` : promoNoteText.trim());
+            const promoNoteText = appliedDiscount ? `\n[Promo Applied: ${appliedDiscount.code} (-KES ${discountAmount.toLocaleString()})]` : "";
+            const loyaltyNoteText = loyaltyDiscountAmount > 0 ? `\n[Loyalty Reward: -KES ${loyaltyDiscountAmount} (15-Order Milestone)]` : "";
 
             let finalCustomerName = '';
             if (diningOption === 'Dine-in') {
@@ -1295,16 +1489,22 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                     : (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : (customerName.trim() || 'Online Guest'));
             }
 
+            const finalNotes = diningOption === "Delivery"
+                ? (notes.trim() ? `Delivery Address: ${activeDeliveryAddress}\nNotes: ${notes.trim()}${promoNoteText}${loyaltyNoteText}` : `Delivery Address: ${activeDeliveryAddress}${promoNoteText}${loyaltyNoteText}`)
+                : (notes.trim() ? `${notes.trim()}${promoNoteText}` : (promoNoteText + loyaltyNoteText).trim());
+
             const orderPayload = {
                 customer_name: finalCustomerName,
                 dining_option: diningOption,
-                payment_method: 'Paid to App',
-                payment_status: 'Pending',
-                status: 'Pending',
+                payment_method: "I&M - PAYBILL No",
+                payment_status: "Pending",
+                status: "Pending",
                 total_amount: finalTotal,
-                discount: discountAmount,
-                cashier_name: 'Self-Service Microsite',
-                brand: activeBrand === 'All' ? (cart.length > 0 ? getBrandForItem(cart[0]) : 'POT OF JOLLOF') : activeBrand,
+                discount: discountAmount + loyaltyDiscountAmount,
+                cashier_name: "Self-Service Microsite",
+                brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0]) : "POT OF JOLLOF") : activeBrand,
+                delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
+                guest_id: guestUser ? guestUser.id : null,
                 notes: finalNotes
             };
 
@@ -1358,6 +1558,9 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             if (itemsError) throw itemsError;
 
             // 3. Immediately display success modal to user (sub-second feedback)
+            if (guestUser) {
+                fetchPastOrders(guestUser.id, guestUser);
+            }
             setOrderSuccess({
                 orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
@@ -1438,6 +1641,16 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         );
     }
 
+    const handleExitMenu = () => {
+        if (activeBrand === "Pot of Jollof" || window.location.hostname.includes("potofjollof")) {
+            window.location.href = "https://potofjollof.co.ke";
+        } else if (onBack) {
+            onBack();
+        } else {
+            window.location.href = "https://potofjollof.co.ke";
+        }
+    };
+
     const activeBrandConfig = BRAND_CONFIGS[activeBrand] || {
         name: 'MUTE KITCHENS',
         desc: 'Explore our menus and place your orders directly to our chefs from your phone.',
@@ -1447,6 +1660,26 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col font-sans select-none">
+            {/* Top Deals Announcement Bar - Only active when promos are active */}
+            {availableDiscounts.filter(d => d.is_active).length > 0 && (
+                <div className="bg-amber-400 text-slate-950 px-4 py-2 text-xs font-black flex items-center justify-between shadow-sm z-30 shrink-0">
+                    <div className="flex items-center gap-2 mx-auto tracking-tight">
+                        <span className="animate-bounce">🎁</span>
+                        <span>
+                            {availableDiscounts.find(d => d.is_active && d.type === "free_delivery") ? (
+                                <>FREE Delivery on orders over KES {(availableDiscounts.find(d => d.is_active && d.type === "free_delivery").min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.find(d => d.is_active && d.type === "free_delivery").code}</strong></>
+                            ) : availableDiscounts.filter(d => d.is_active)[0].type === "percentage" ? (
+                                <>{availableDiscounts.filter(d => d.is_active)[0].value}% OFF! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.filter(d => d.is_active)[0].code}</strong></>
+                            ) : availableDiscounts.filter(d => d.is_active)[0].type === "bogof" ? (
+                                <>Buy 1 Get 1 Free (BOGOF)! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.filter(d => d.is_active)[0].code}</strong></>
+                            ) : (
+                                <>Save KES {availableDiscounts.filter(d => d.is_active)[0].value.toLocaleString()} on orders over KES {(availableDiscounts.filter(d => d.is_active)[0].min_order_amount || 1500).toLocaleString()}! • Code: <strong className="font-mono bg-black text-amber-300 px-1.5 py-0.5 rounded text-[10px] uppercase">{availableDiscounts.filter(d => d.is_active)[0].code}</strong></>
+                            )}
+                        </span>
+                    </div>
+                </div>
+            )}
+
             {/* Visual Brand Header Banner */}
             <div className={`relative h-44 md:h-52 bg-gradient-to-r ${activeBrandConfig.color} flex flex-col justify-end p-6 md:p-8 shrink-0 overflow-hidden transition-all duration-300`}>
                 {/* Abstract Glowing Backdrop */}
@@ -1454,50 +1687,21 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0d0e12] via-transparent to-black/30"></div>
 
                 {/* Visual Header Navigation Buttons */}
-                {activeBrand === 'All' ? (
-                    <>
-                        {onBack && (
-                            <button
-                                onClick={onBack}
-                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                            >
-                                <ArrowLeft size={10} /> Exit Menu
-                            </button>
-                        )}
-                        <button
-                            onClick={() => setAccountOpen(true)}
-                            className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                        >
-                            👤 {guestUser ? guestUser.first_name : 'Log In'}
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        {!isSingleBrand && (
-                            <button
-                                onClick={() => setActiveBrand('All')}
-                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                            >
-                                <ArrowLeft size={10} /> Back
-                            </button>
-                        )}
-                        {isSingleBrand && onBack && (
-                            <button
-                                onClick={onBack}
-                                className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                            >
-                                <ArrowLeft size={10} /> Exit Menu
-                            </button>
-                        )}
+                <button
+                    type="button"
+                    onClick={handleExitMenu}
+                    className="absolute left-4 top-4 md:left-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/40 hover:bg-black/70 border border-white/20 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-200 hover:text-white transition-all shadow-md cursor-pointer backdrop-blur-md"
+                >
+                    <ArrowLeft size={11} /> Exit Menu
+                </button>
 
-                        <button
-                            onClick={() => setAccountOpen(true)}
-                            className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/35 hover:bg-black/50 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-300 hover:text-white transition-all shadow-md"
-                        >
-                            👤 {guestUser ? guestUser.first_name : 'Log In'}
-                        </button>
-                    </>
-                )}
+                <button
+                    type="button"
+                    onClick={() => setAccountOpen(true)}
+                    className="absolute right-4 top-4 md:right-6 md:top-6 z-20 flex items-center gap-1.5 px-3 py-1 bg-black/40 hover:bg-black/70 border border-white/20 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-200 hover:text-white transition-all shadow-md cursor-pointer backdrop-blur-md"
+                >
+                    👤 {guestUser ? guestUser.first_name : "Log In"}
+                </button>
 
                 <div className="relative z-10 max-w-6xl mx-auto w-full flex flex-col items-center justify-center text-center gap-2">
                     {activeBrand !== 'All' && (
@@ -1967,113 +2171,238 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
 
                                         {/* Dynamic inputs */}
                                         <div className="space-y-3">
-                                            <input
-                                                type="text"
-                                                placeholder={diningOption === 'Dine-in' ? "Diner Name (Optional)" : "Your Name (Optional)"}
-                                                value={customerName}
-                                                disabled={submitting}
-                                                onChange={(e) => {
-                                                    setCustomerName(e.target.value);
-                                                    setUserTypedName(true);
-                                                }}
-                                                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
-                                            />
-                                            {diningOption === 'Delivery' && (
-                                                <div className="space-y-2 text-left">
-                                                    {guestUser && savedAddresses.length > 0 && (
-                                                        <div className="space-y-1.5">
-                                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Select Delivery Address</span>
-                                                            <div className="flex flex-col gap-1.5">
-                                                                {savedAddresses.map((addr, idx) => (
-                                                                    <button
-                                                                        key={idx}
-                                                                        type="button"
-                                                                        onClick={() => setDeliveryAddress(addr)}
-                                                                        className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
-                                                                            deliveryAddress === addr
-                                                                                ? 'bg-black border-black text-white font-bold'
-                                                                                : 'bg-white border-gray-255 text-gray-700 hover:border-gray-300'
-                                                                        }`}
-                                                                    >
-                                                                        📍 {addr}
-                                                                    </button>
-                                                                ))}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (savedAddresses.includes(deliveryAddress)) {
-                                                                            setDeliveryAddress('');
-                                                                        }
-                                                                    }}
-                                                                    className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
-                                                                        !savedAddresses.includes(deliveryAddress)
-                                                                            ? 'bg-black border-black text-white font-bold'
-                                                                            : 'bg-white border-gray-250 text-gray-800 hover:bg-gray-100 font-bold border-dashed'
-                                                                    }`}
-                                                                >
-                                                                    ➕ Add New Address
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
-                                                        <div className="relative">
-                                                            <div className="relative flex items-center">
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder="Delivery Address (e.g. Kilimani, Westlands, Purple Tower) *"
-                                                                    required
-                                                                    value={deliveryAddress}
-                                                                    disabled={submitting}
-                                                                    onChange={(e) => {
-                                                                        selectedAddressRef.current = false;
-                                                                        setDeliveryAddress(e.target.value);
-                                                                    }}
-                                                                    onFocus={() => setShowSuggestions(true)}
-                                                                    className="w-full bg-white border border-gray-300 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-semibold shadow-xs"
-                                                                />
-                                                                {isSearchingAddress && (
-                                                                    <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
-                                                                        🔍 Searching...
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            
-                                                            {/* Real-time Address Autocomplete Floating Dropdown */}
-                                                            {showSuggestions && addressSuggestions.length > 0 && (
-                                                                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
-                                                                    <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
-                                                                        <span>📍 Select Matching Location:</span>
-                                                                        <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
-                                                                    </div>
-                                                                    {addressSuggestions.map((s, idx) => (
+                                            {diningOption === "Delivery" ? (
+                                                <div className="space-y-3 text-left">
+                                                    {/* 1. Delivery Address Field */}
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            📍 Delivery Address / Location <span className="text-red-500">*</span>
+                                                        </label>
+
+                                                        {guestUser && savedAddresses.length > 0 && (
+                                                            <div className="space-y-1.5 mb-2">
+                                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Saved Addresses</span>
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    {savedAddresses.map((addr, idx) => (
                                                                         <button
                                                                             key={idx}
                                                                             type="button"
-                                                                            onClick={() => handleSelectAddressSuggestion(s)}
-                                                                            className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                            onClick={() => setDeliveryAddress(addr)}
+                                                                            className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
+                                                                                deliveryAddress === addr
+                                                                                    ? "bg-black border-black text-white font-bold"
+                                                                                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                                                                            }`}
                                                                         >
-                                                                            <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
-                                                                            <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                            📍 {addr}
                                                                         </button>
                                                                     ))}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            if (savedAddresses.includes(deliveryAddress)) {
+                                                                                setDeliveryAddress("");
+                                                                            }
+                                                                        }}
+                                                                        className={`p-2.5 rounded-xl border text-[10px] text-left transition-all ${
+                                                                            !savedAddresses.includes(deliveryAddress)
+                                                                                ? "bg-black border-black text-white font-bold"
+                                                                                : "bg-white border-gray-250 text-gray-800 hover:bg-gray-100 font-bold border-dashed"
+                                                                        }`}
+                                                                    >
+                                                                        ➕ Add New Address
+                                                                    </button>
                                                                 </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {(!guestUser || savedAddresses.length === 0 || !savedAddresses.includes(deliveryAddress)) && (
+                                                            <div className="relative">
+                                                                <div className="relative flex items-center">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Building, street, estate (e.g. Westgate, Kilimani, Westlands) *"
+                                                                        required
+                                                                        value={deliveryAddress}
+                                                                        disabled={submitting}
+                                                                        onChange={(e) => {
+                                                                            selectedAddressRef.current = false;
+                                                                            setDeliveryAddress(e.target.value);
+                                                                        }}
+                                                                        onFocus={() => setShowSuggestions(true)}
+                                                                        className="w-full bg-white border-2 border-gray-300 focus:border-black rounded-xl py-2.5 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none font-semibold shadow-xs"
+                                                                    />
+                                                                    {isSearchingAddress && (
+                                                                        <span className="absolute right-3 text-[10px] text-amber-600 font-bold animate-pulse">
+                                                                            🔍 Searching...
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {/* Real-time Address Autocomplete Floating Dropdown */}
+                                                                {showSuggestions && addressSuggestions.length > 0 && (
+                                                                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-amber-500 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-100 text-left">
+                                                                        <div className="px-3 py-1.5 bg-amber-50 text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center justify-between">
+                                                                            <span>📍 Select Matching Location:</span>
+                                                                            <span className="text-[9px] font-normal text-amber-600">Auto-calculates distance & fee</span>
+                                                                        </div>
+                                                                        {addressSuggestions.map((s, idx) => (
+                                                                            <button
+                                                                                key={idx}
+                                                                                type="button"
+                                                                                onClick={() => handleSelectAddressSuggestion(s)}
+                                                                                className="w-full px-3 py-2 text-xs text-gray-900 hover:bg-amber-50 hover:text-amber-900 font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                            >
+                                                                                <span className="text-amber-500 text-sm shrink-0 mt-0.5">📍</span>
+                                                                                <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
 
-                                                    )}
+                                                        {/* Confirmed Delivery Location Banner */}
+                                                        {deliveryAddress && (
+                                                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-bold p-2.5 rounded-xl flex items-center justify-between shadow-2xs mt-1">
+                                                                <span className="truncate mr-2">📍 {deliveryAddress}</span>
+                                                                {calculatedDistance ? (
+                                                                    <span className="shrink-0 text-[10px] bg-emerald-200 text-emerald-950 px-1.5 py-0.5 rounded font-mono font-black">
+                                                                        {calculatedDistance.toFixed(1)} km
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 2. Customer Name & Phone Field */}
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            👤 Recipient Name & Phone (Optional)
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. John Doe - 0712345678"
+                                                            value={customerName}
+                                                            disabled={submitting}
+                                                            onChange={(e) => {
+                                                                setCustomerName(e.target.value);
+                                                                setUserTypedName(true);
+                                                            }}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
+
+                                                    {/* 3. Delivery Notes */}
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            📝 Apt / Floor / Gate Instructions
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. 3rd Floor Apt 4B, call at gate"
+                                                            value={notes}
+                                                            disabled={submitting}
+                                                            onChange={(e) => setNotes(e.target.value)}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3 text-left">
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            {diningOption === "Dine-in" ? "👤 Diner Name / Table" : "👤 Pickup Customer Name"}
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder={diningOption === "Dine-in" ? "Diner Name (Optional)" : "Your Name (Optional)"}
+                                                            value={customerName}
+                                                            disabled={submitting}
+                                                            onChange={(e) => {
+                                                                setCustomerName(e.target.value);
+                                                                setUserTypedName(true);
+                                                            }}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[10px] font-black text-gray-800 uppercase tracking-wider ml-0.5">
+                                                            📝 Special Prep Instructions
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Special kitchen prep instructions"
+                                                            value={notes}
+                                                            disabled={submitting}
+                                                            onChange={(e) => setNotes(e.target.value)}
+                                                            className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
+                                                        />
+                                                    </div>
                                                 </div>
                                             )}
-                                            <input
-                                                type="text"
-                                                placeholder="Order notes / delivery specs / special request"
-                                                value={notes}
-                                                disabled={submitting}
-                                                onChange={(e) => setNotes(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs placeholder-gray-400 text-gray-900 focus:outline-none focus:border-black font-medium"
-                                            />
                                         </div>
+
+                                        {/* Free Delivery Banner if Active */}
+                                        {diningOption === "Delivery" && activeFreeDeliveryOffer && (
+                                            <div className={`p-2.5 rounded-xl text-left text-[11px] font-bold border transition-all ${
+                                                isFreeDeliveryEligible
+                                                    ? "bg-emerald-50 border-emerald-200 text-emerald-950"
+                                                    : "bg-amber-50 border-amber-200 text-amber-900"
+                                            }`}>
+                                                {isFreeDeliveryEligible ? (
+                                                    <div className="flex items-center gap-1.5 font-black">
+                                                        <span>🎉</span>
+                                                        <span>FREE DELIVERY UNLOCKED! (Order over KES {freeDeliveryThreshold.toLocaleString()})</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-between gap-1 text-[10px]">
+                                                        <span>🚚 Add <strong>KES {Math.max(0, freeDeliveryThreshold - cartTotal).toLocaleString()}</strong> more for <strong>FREE DELIVERY</strong>!</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Loyalty Reward Balance & Redemption */}
+                                        {guestUser && (
+                                            <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 space-y-2 text-left shadow-2xs">
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-base">⭐</span>
+                                                        <div>
+                                                            <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">Loyalty Points & Rewards</span>
+                                                            <span className="text-[9px] text-amber-800 font-medium">
+                                                                {availableLoyaltyBalance >= 50 ? `KES ${availableLoyaltyBalance} reward balance ready!` : `${ordersUntilNextReward} more orders until your next KES 50 reward!`}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {availableLoyaltyBalance >= 50 ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRedeemLoyaltyPoints(!redeemLoyaltyPoints)}
+                                                            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs ${
+                                                                redeemLoyaltyPoints
+                                                                    ? "bg-emerald-600 text-white"
+                                                                    : "bg-amber-400 hover:bg-amber-300 text-amber-950 font-black"
+                                                            }`}
+                                                        >
+                                                            {redeemLoyaltyPoints ? "✓ Redeemed KES 50" : "Redeem KES 50"}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-[10px] font-mono font-black text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-lg">
+                                                            {totalGuestOrders % 15}/15
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {/* Mini progress bar */}
+                                                <div className="w-full bg-amber-200/60 h-1.5 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="bg-amber-500 h-full transition-all duration-500 rounded-full"
+                                                        style={{ width: `${loyaltyProgressPercent}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Promo Code Input Block */}
                                         <div className="pt-2 border-t border-gray-100 text-left space-y-1.5">
@@ -2081,7 +2410,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                                             <div className="flex gap-2">
                                                 <input
                                                     type="text"
-                                                    placeholder="Enter code (e.g. MUTE10)"
+                                                    placeholder="Enter code (e.g. SAVE200, BOGOF, MUTE10)"
                                                     value={promoCode}
                                                     onChange={(e) => setPromoCode(e.target.value)}
                                                     disabled={submitting}
@@ -2091,13 +2420,35 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                                                     type="button"
                                                     onClick={handleApplyPromoCode}
                                                     disabled={submitting || !promoCode.trim()}
-                                                    className="px-4 py-2 bg-black hover:bg-neutral-850 disabled:opacity-40 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
+                                                    className="px-4 py-2 bg-black hover:bg-neutral-850 disabled:opacity-40 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
                                                 >
                                                     Apply
                                                 </button>
                                             </div>
                                             {promoError && <p className="text-[9px] font-bold text-red-500 ml-1">{promoError}</p>}
-                                            {promoSuccess && <p className="text-[9px] font-bold text-emerald-600 ml-1">✓ {promoSuccess}</p>}
+                                            {appliedDiscount && (
+                                                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-emerald-900 text-xs font-bold mt-1 shadow-2xs">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <span>🏷️</span>
+                                                        <span className="font-mono font-black uppercase">{appliedDiscount.code.replace(/\[ITEMS:.*\]/, "")}</span>
+                                                        <span className="text-[10px] text-emerald-700 font-normal">
+                                                            ({appliedDiscount.type === "percentage" ? `${appliedDiscount.value}% OFF` : appliedDiscount.type === "fixed" ? `-KES ${appliedDiscount.value}` : appliedDiscount.type === "bogof" ? "BOGOF Free Item" : "Free Delivery"})
+                                                        </span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAppliedDiscount(null);
+                                                            setPromoCode("");
+                                                            setPromoSuccess("");
+                                                        }}
+                                                        className="text-emerald-700 hover:text-red-600 text-xs font-black px-1.5 py-0.5 rounded cursor-pointer"
+                                                        title="Remove code"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Order Summary calculations */}
@@ -2112,6 +2463,12 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                                                     <span>- KES {discountAmount.toLocaleString()}</span>
                                                 </div>
                                             )}
+                                            {loyaltyDiscountAmount > 0 && (
+                                                <div className="flex justify-between items-center text-amber-700 bg-amber-50/80 p-1.5 rounded-lg border border-amber-200/60">
+                                                    <span className="flex items-center gap-1">⭐ Loyalty Milestone (15 Orders):</span>
+                                                    <span className="font-mono font-black">- KES {loyaltyDiscountAmount.toLocaleString()}</span>
+                                                </div>
+                                            )}
                                             {packagingFeeAmount > 0 && (
                                                 <div className="flex justify-between items-center text-gray-500">
                                                     <span>Packaging Fee:</span>
@@ -2121,8 +2478,13 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                                             <div className="flex justify-between items-center text-gray-500">
                                                 <span>Delivery Fee:</span>
                                                 <span>
-                                                    {diningOption === 'Delivery' ? (
-                                                        isGeocoding ? (
+                                                    {diningOption === "Delivery" ? (
+                                                        (isFreeDeliveryEligible || appliedDiscount?.type === "free_delivery") ? (
+                                                            <span className="text-emerald-600 font-black flex items-center gap-1.5">
+                                                                {calculatedDeliveryFee > 0 && <span className="line-through text-gray-400 font-normal text-[10px]">KES {calculatedDeliveryFee.toLocaleString()}</span>}
+                                                                <span className="bg-emerald-100 text-emerald-950 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider">FREE</span>
+                                                            </span>
+                                                        ) : isGeocoding ? (
                                                             <span className="flex items-center gap-1 text-[10px] text-gray-400">
                                                                 <Loader2 className="animate-spin" size={10} /> Calculating...
                                                             </span>
@@ -2134,7 +2496,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                                                                 {calculatedDistance && ` (${calculatedDistance.toFixed(1)} km)`}
                                                             </span>
                                                         )
-                                                    ) : 'FREE'}
+                                                    ) : "FREE"}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between items-end text-sm text-gray-900 font-black pt-1">
@@ -2229,17 +2591,125 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
 
                                             <div className="h-px bg-gray-100"></div>
 
+                                            {/* Loyalty Rewards Milestone Tier Card */}
+                                            <div className="bg-gradient-to-br from-amber-400 to-amber-500 rounded-3xl p-5 text-slate-950 space-y-3 shadow-lg shadow-amber-400/15 text-left">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-950/70 block">Loyalty Rewards</span>
+                                                        <h4 className="text-base font-black tracking-tight leading-tight mt-0.5">15 Orders = KES 50 Reward</h4>
+                                                    </div>
+                                                    <div className="p-2 bg-slate-950 text-amber-400 rounded-2xl font-black text-xs font-mono">
+                                                        ⭐ {totalGuestOrders % 15}/15
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between text-[10px] font-black text-amber-950 uppercase">
+                                                        <span>Progress to Next KES 50</span>
+                                                        <span>{ordersUntilNextReward} Orders Left</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-950/20 h-2.5 rounded-full overflow-hidden p-0.5">
+                                                        <div
+                                                            className="bg-slate-950 h-full rounded-full transition-all duration-500"
+                                                            style={{ width: `${loyaltyProgressPercent}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="pt-2 border-t border-amber-950/15 flex justify-between items-center text-xs font-black">
+                                                    <span className="text-[10px] uppercase text-amber-950/80">Available Reward Wallet:</span>
+                                                    <span className="text-sm font-mono bg-slate-950 text-white px-2.5 py-1 rounded-xl">
+                                                        KES {availableLoyaltyBalance.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+
                                             {/* CRM Stats */}
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="bg-gray-50 rounded-2xl p-4 border border-gray-150 text-center">
-                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Visits</span>
-                                                    <span className="text-xl font-black text-black font-mono mt-1 block">{guestUser.visit_count || 0}</span>
+                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Total Orders</span>
+                                                    <span className="text-xl font-black text-black font-mono mt-1 block">{totalGuestOrders}</span>
                                                 </div>
                                                 <div className="bg-gray-50 rounded-2xl p-4 border border-gray-150 text-center">
-                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Total Spend</span>
+                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Lifetime Spend</span>
                                                     <span className="text-sm font-black text-black font-mono mt-2 block">KES {Math.round(guestUser.lifetime_spend || 0).toLocaleString()}</span>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        {/* Recent Orders Section directly in drawer */}
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center px-1">
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Recent Orders ({pastOrders.length})</span>
+                                                {pastOrders.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowHistory(true);
+                                                            setAccountOpen(false);
+                                                        }}
+                                                        className="text-[10px] text-amber-600 font-bold hover:underline"
+                                                    >
+                                                        View All ➔
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {pastOrders.length === 0 ? (
+                                                <div className="bg-white border border-gray-200 rounded-2xl p-4 text-center text-gray-400 text-xs font-bold">
+                                                    No orders yet. Place your first meal!
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2.5">
+                                                    {pastOrders.slice(0, 3).map((order) => (
+                                                        <div key={order.id} className="bg-white border border-gray-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">
+                                                            <div className="flex justify-between items-start">
+                                                                <div>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-[10px] font-black text-white bg-black px-2 py-0.5 rounded-md font-mono">#{order.ticket_number}</span>
+                                                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                                                                            order.status === "Completed" || order.status === "Accepted"
+                                                                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                                                                : "bg-amber-50 text-amber-800 border-amber-200"
+                                                                        }`}>
+                                                                            {order.status || "Pending"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-[9px] text-gray-400 font-medium block mt-1">
+                                                                        {new Date(order.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        handleReorder(order);
+                                                                        setAccountOpen(false);
+                                                                    }}
+                                                                    className="px-2.5 py-1 bg-black hover:bg-neutral-850 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                                                                >
+                                                                    ⚡ Reorder
+                                                                </button>
+                                                            </div>
+
+                                                            <div className="text-[10px] text-gray-700 font-medium line-clamp-2">
+                                                                {(order.pos_order_items || []).map(i => `${i.quantity}x ${i.item_name}`).join(", ")}
+                                                            </div>
+
+                                                            {order.delivery_address && (
+                                                                <div className="text-[9px] text-gray-500 font-semibold truncate flex items-center gap-1">
+                                                                    <span>📍</span>
+                                                                    <span>{order.delivery_address}</span>
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex justify-between items-center text-xs pt-1 border-t border-gray-100 font-black">
+                                                                <span className="text-[9px] text-gray-400 uppercase">{order.dining_option}</span>
+                                                                <span className="font-mono text-black">KES {Math.round(order.total_amount).toLocaleString()}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Actions */}
@@ -2252,7 +2722,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                                                 }}
                                                 className="w-full py-3.5 bg-black hover:bg-neutral-850 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all text-center flex items-center justify-center gap-2 shadow-md"
                                             >
-                                                📅 View Order History ({pastOrders.length})
+                                                📅 Full Order History ({pastOrders.length})
                                             </button>
 
                                             <button

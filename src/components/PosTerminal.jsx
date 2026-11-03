@@ -4155,6 +4155,15 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                             <div>
                                                                 <span className="text-[10px] font-black text-white bg-amber-600 px-2 py-0.5 rounded uppercase tracking-wider">#{obfuscateTicket(order.ticket_number)}</span>
                                                                 <span className="text-[10px] text-gray-500 block mt-1 font-bold">{order.customer_name} ({order.dining_option})</span>
+                                                                {(order.dining_option === "Delivery" || order.delivery_address) && (
+                                                                    <div className="text-[10px] font-black text-amber-900 bg-amber-50 p-1.5 rounded-lg border border-amber-200 mt-1 flex items-start gap-1">
+                                                                        <span>📍</span>
+                                                                        <span className="truncate leading-tight">
+                                                                        <span className="truncate leading-tight">{order.delivery_address || (order.notes || "").replace("Delivery Address:", "").split("\n")[0].trim() || "Delivery Order"}</span>
+
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             <span className="font-mono font-black text-xs text-gray-900">KES {order.total_amount.toLocaleString()}</span>
                                                         </div>
@@ -5347,11 +5356,28 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                             {/* Unified Items Sold Report Sidebar Widget */}
                             {(() => {
                                 const itemTally = {};
-                                const EXCLUDE = (n) => /^delivery/i.test((n || '').trim()) || /^pack(age|aging)?\s*fee/i.test((n || '').trim());
+                                const isFeeOrDelivery = (n) => {
+                                    const raw = (n || "").trim().toLowerCase();
+                                    return (
+                                        raw.startsWith("delivery") ||
+                                        raw.includes("delivery fee") ||
+                                        raw.includes("delivery charge") ||
+                                        raw.startsWith("package") ||
+                                        raw.startsWith("packaging") ||
+                                        raw.startsWith("packing") ||
+                                        raw.includes("pack fee") ||
+                                        raw.includes("package fee") ||
+                                        raw.includes("packaging fee") ||
+                                        raw === "delivery" ||
+                                        raw === "package" ||
+                                        raw === "packaging" ||
+                                        raw === "packing"
+                                    );
+                                };
                                 historyOrders.forEach(order => {
                                     if (order.status === 'Cancelled' || order.status === 'Returned' || order.payment_status === 'Voided') return;
                                     (order.items || []).forEach(item => {
-                                        if (EXCLUDE(item.item_name)) return;
+                                        if (isFeeOrDelivery(item.item_name)) return;
                                         const key = item.item_name || 'Unknown';
                                         if (!itemTally[key]) itemTally[key] = { qty: 0, revenue: 0 };
                                         itemTally[key].qty += (item.quantity || 1);
@@ -5376,8 +5402,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                      <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
                                          <div className="flex items-center justify-between mb-3">
                                              <div>
-                                                 <p className="text-[10px] font-black text-gray-900 uppercase tracking-wider">🏆 Items Sold Report</p>
-                                                 <p className="text-[8px] font-bold text-gray-400 mt-0.5">{sorted.length} unique items sold</p>
+                                                 <p className="text-[10px] font-black text-gray-900 uppercase tracking-wider">🍽️ Dish Sales Velocity & Performance Analyzer</p>
+                                                 <p className="text-[8px] font-bold text-emerald-600 mt-0.5">{sorted.length} dishes · Excludes delivery & packaging fees</p>
                                              </div>
                                              <button
                                                  onClick={() => generateItemsSoldPDF(itemsForPDF, `${historyStartDate} to ${historyEndDate}`)}
@@ -6354,8 +6380,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                             <div>
                                                                 <div className="flex justify-between items-start">
                                                                     <span className="px-2.5 py-1 bg-black text-white text-[10px] font-mono font-black uppercase tracking-wider rounded-lg shadow-sm">
-                                                                        {disc.code}
+                                                                        {disc.code.replace(/\[ITEMS:.*\]/, "")}
                                                                     </span>
+                                                                    {disc.code.includes("[ITEMS:") && (
+                                                                        <span className="text-[8px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md block mt-1">
+                                                                            🎯 {disc.code.match(/\[ITEMS:(.*)\]/)?.[1]}
+                                                                        </span>
+                                                                    )}
                                                                     <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border ${
                                                                         disc.is_active 
                                                                             ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
@@ -6367,7 +6398,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
 
                                                                 <div className="mt-4 space-y-1">
                                                                     <p className="text-xs font-bold text-gray-900 text-left">
-                                                                        Discount: {disc.type === 'percentage' ? `${disc.value}%` : `KES ${disc.value.toLocaleString()}`}
+                                                                        Offer: {disc.type === "percentage" ? `${disc.value}% OFF` : disc.type === "fixed" ? `KES ${disc.value.toLocaleString()} OFF` : disc.type === "bogof" ? "BOGOF Free Item" : (disc.value > 0 ? `Free Delivery (max ${disc.value}km)` : "Free Delivery")}
                                                                     </p>
                                                                     <p className="text-[9px] font-bold text-gray-400 uppercase text-left">
                                                                         Min Order Amount: KES {disc.min_order_amount.toLocaleString()}
@@ -7010,16 +7041,99 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-white">
-                                    <div className="space-y-1 text-left">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo Code</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. WELCOME10"
-                                            value={editingDiscount.code}
-                                            onChange={(e) => setEditingDiscount({ ...editingDiscount, code: e.target.value.toUpperCase() })}
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none font-semibold font-mono uppercase"
-                                        />
-                                    </div>
+                                    {(() => {
+                                        const cleanCode = (editingDiscount.code || "").replace(/\[ITEMS:.*\]/, "");
+                                        const selectedItems = (editingDiscount.code || "").match(/\[ITEMS:(.*)\]/)?.[1]?.split(",").filter(Boolean) || [];
+                                        const isItemSpecific = selectedItems.length > 0 || editingDiscount._isItemSpecific;
+
+                                        const toggleItem = (name) => {
+                                            let next = [...selectedItems];
+                                            if (next.includes(name)) {
+                                                next = next.filter(i => i !== name);
+                                            } else {
+                                                next.push(name);
+                                            }
+                                            const updatedCode = next.length > 0 ? `${cleanCode}[ITEMS:${next.join(",")}]` : cleanCode;
+                                            setEditingDiscount({
+                                                ...editingDiscount,
+                                                code: updatedCode,
+                                                _isItemSpecific: true
+                                            });
+                                        };
+
+                                        return (
+                                            <>
+                                                <div className="space-y-1 text-left">
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Promo Code</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. LUNCH20, SAVE200"
+                                                        value={cleanCode}
+                                                        onChange={(e) => {
+                                                            const newClean = e.target.value.toUpperCase().replace(/\[.*\]/g, "");
+                                                            const newCode = selectedItems.length > 0 ? `${newClean}[ITEMS:${selectedItems.join(",")}]` : newClean;
+                                                            setEditingDiscount({ ...editingDiscount, code: newCode });
+                                                        }}
+                                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none font-semibold font-mono uppercase"
+                                                    />
+                                                </div>
+
+                                                {/* Item specific toggle */}
+                                                {(editingDiscount.type === "percentage" || editingDiscount.type === "fixed") && (
+                                                    <div className="space-y-2 p-3 bg-gray-50 rounded-2xl border border-gray-200 text-left">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-xs font-bold text-gray-800">Target Items</span>
+                                                            <div className="flex bg-gray-200 p-0.5 rounded-lg text-[10px] font-bold">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setEditingDiscount({ ...editingDiscount, code: cleanCode, _isItemSpecific: false })}
+                                                                    className={`px-2 py-0.5 rounded ${!isItemSpecific ? "bg-white text-black shadow-xs" : "text-gray-600"}`}
+                                                                >
+                                                                    All Items
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setEditingDiscount({ ...editingDiscount, _isItemSpecific: true })}
+                                                                    className={`px-2 py-0.5 rounded ${isItemSpecific ? "bg-white text-black shadow-xs" : "text-gray-600"}`}
+                                                                >
+                                                                    Specific Items
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {isItemSpecific && (
+                                                            <div className="space-y-2 pt-1">
+                                                                {selectedItems.length > 0 && (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {selectedItems.map(name => (
+                                                                            <span key={name} className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                                                                                <span>{name}</span>
+                                                                                <button type="button" onClick={() => toggleItem(name)} className="text-red-500 font-bold ml-1">✕</button>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                <div className="max-h-28 overflow-y-auto space-y-1 bg-white p-2 rounded-xl border border-gray-200 custom-scrollbar">
+                                                                    {menuItems.slice(0, 30).map(item => (
+                                                                        <div
+                                                                            key={item.id || item.name}
+                                                                            onClick={() => toggleItem(item.name)}
+                                                                            className={`flex justify-between items-center p-1.5 rounded text-[11px] font-medium cursor-pointer ${
+                                                                                selectedItems.includes(item.name) ? "bg-amber-50 text-amber-900 font-bold" : "hover:bg-gray-100 text-gray-700"
+                                                                            }`}
+                                                                        >
+                                                                            <span>{item.name}</span>
+                                                                            <span className="text-[9px] font-mono text-gray-400">KES {item.price}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1 text-left">
@@ -7030,7 +7144,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                 className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none font-semibold"
                                             >
                                                 <option value="percentage">Percentage (%)</option>
-                                                <option value="fixed">Fixed (KES)</option>
+                                                <option value="fixed">Fixed Amount Off (KES)</option>
+                                                <option value="free_delivery">Free Delivery Promo</option>
+                                                <option value="bogof">Buy 1 Get 1 Free (BOGOF)</option>
                                             </select>
                                         </div>
                                         <div className="space-y-1 text-left">
@@ -10196,7 +10312,7 @@ function printCashierSlips(receipt) {
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
         <div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div>
-        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>
+        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}
         <div class="divider"></div>
     `;
 
@@ -10229,7 +10345,7 @@ function printCashierSlips(receipt) {
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
         <div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div>
-        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>
+        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}
         <div class="divider"></div>
         <table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead>
         <tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>
@@ -10303,7 +10419,7 @@ function printCashierSlips(receipt) {
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
         <div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div>
-        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>
+        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}
         <div class="divider"></div>
         <table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead>
         <tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>
@@ -10404,7 +10520,7 @@ function printKitchenSlips(receipt) {
         <div class="meta"><span>TIME OUT:</span><span>___________________</span></div>
         <div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div>
         <div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div>
-        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>
+        <div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}
         <div class="divider"></div>
     `;
 
@@ -10515,7 +10631,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
 
     const itemRowsFull = dedupedItems.map(item => `<tr><td style="width:50%;max-width:50%;word-break:break-word;padding:2px 0;">${item.item_name}${item.instructions ? `<br><span style="font-size:9px;font-weight:700;">* ${item.instructions}</span>` : ''}</td><td class="c" style="width:10%;text-align:center;padding:2px 0;">${item.quantity}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${item.price.toLocaleString()}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('');
     const itemRowsPack = dedupedItems.map(item => `<tr><td class="c" style="font-size:12px;font-weight:900;padding:3px 0;width:15%;vertical-align:top;">[ &nbsp; ]</td><td style="font-size:12px;font-weight:900;padding:3px 0;word-break:break-word;width:70%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">➜ ${item.instructions}</span>` : ''}</td><td class="c" style="font-size:14px;font-weight:900;padding:3px 0;vertical-align:top;width:15%;">${item.quantity}</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}<div class="divider"></div>`;
     const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p><p class="sub">Tel: 0795384140 / 0799034617</p><p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;"><div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div><div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div><div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div></div>`}<div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
     const slip3 = `<div class="page"><div class="center"><div class="badge">PACKER / DISPATCH SLIP</div></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:25%;text-align:center;">PACKED</th><th style="font-size:12px;width:60%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:15%;text-align:center;">QTY</th></tr></thead><tbody><tr><td colspan="3"><div class="divider"></div></td></tr>${itemRowsPack}</tbody></table><div class="divider-solid"></div><div class="footer">PACKER SIGN: _______________</div></div>`;
     const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
@@ -10525,7 +10641,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
 function _buildKitchenHTML(receipt, dateFormatted) {
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
     const rows = receipt.items.map(item => `<tr><td style="font-size:13px;font-weight:900;padding:3px 0;word-break:break-word;width:80%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">[ ${item.instructions} ]</span>` : ''}</td><td class="c" style="font-size:16px;font-weight:900;padding:3px 0;vertical-align:top;width:20%;text-align:right;">${item.quantity}x</td></tr>`).join('');
-    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div><div class="divider"></div>`;
+    const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'POT OF JOLLOF' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}<div class="divider"></div>`;
     const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">Tel: 0795384140 / 0799034617</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
 }

@@ -526,6 +526,8 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
         </div>
       </section>
 
+
+
       {/* ── KDS SHOWCASE ── */}
       <section className="py-24 px-6 bg-white/[0.015] border-y border-white/[0.05]">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
