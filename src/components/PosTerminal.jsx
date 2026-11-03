@@ -8,6 +8,7 @@ import { generateZReportPDF, generateItemsSoldPDF } from '../lib/pdfGenerator';
 import { CampaignsView } from './CampaignsView';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { MenuItemSalesAnalyzer } from './MenuItemSalesAnalyzer';
+import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 
 const MUTE_LOGO_URL = '/logo.png';
 
@@ -327,21 +328,18 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
         setLockLoading(true);
         setLockError('');
         try {
-            const { data: staffList } = await supabase
-                .from('staff_access')
-                .select('name, pin, is_active')
-                .eq('pin', entered)
-                .eq('name', staffName)
-                .limit(1);
-            const match = staffList?.[0];
-            if (!match || match.is_active === false) {
-                setLockError('Incorrect PIN. Try again.');
-                setLockPin(['', '', '', '']);
-                document.getElementById('lock-pin-0')?.focus();
-            } else {
+            const { data } = await supabase.rpc('verify_staff_pin', {
+                p_name: staffName,
+                p_pin: entered,
+            });
+            if (data?.success) {
                 setIsLocked(false);
                 setLockPin(['', '', '', '']);
                 setLockError('');
+            } else {
+                setLockError(data?.error || 'Incorrect PIN. Try again.');
+                setLockPin(['', '', '', '']);
+                document.getElementById('lock-pin-0')?.focus();
             }
         } catch {
             setLockError('Could not verify. Check connection.');
@@ -354,11 +352,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     // Order info aligned with Google Sheets format
     const [customerName, setCustomerName] = useState('');
     const [customerNameText, setCustomerNameText] = useState('');
-    const [customerType, setCustomerType] = useState('New'); // 'New' or 'Returning'
+    const [customerType, setCustomerType] = useState(''); // '' (unselected), 'New', or 'Returning' // 'New' or 'Returning'
     const [selectedTable, setSelectedTable] = useState('');
     const [selectedBrand, setSelectedBrand] = useState('POT OF JOLLOF');
     const [orderChannel, setOrderChannel] = useState('Walk-in');
-    const [diningOption, setDiningOption] = useState('Dine-in'); // 'Dine-in', 'Takeaway', 'Delivery'
+    const [diningOption, setDiningOption] = useState(''); // '' (unselected), 'Dine-in', 'Takeaway', 'Delivery'
+    const [showForceSelectionModal, setShowForceSelectionModal] = useState(false); // 'Dine-in', 'Takeaway', 'Delivery'
     const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH', 'MPESA', 'CARD', etc.
     const [paymentStatus, setPaymentStatus] = useState('Paid'); // 'Paid', 'Pending'
     const [discountType, setDiscountType] = useState('none'); // 'none', 'percentage', 'flat'
@@ -2389,10 +2388,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     const fetchStaffList = async () => {
         setLoadingStaff(true);
         try {
-            const { data, error } = await supabase
-                .from('staff_access')
-                .select('*')
-                .order('name', { ascending: true });
+            const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            const { data, error } = await supabase.rpc('staff_list', {
+                p_actor_id: pinUser.id || null,
+            });
 
             if (error) throw error;
             setStaffList(data || []);
@@ -2797,14 +2796,21 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
         }
 
         try {
-            const { data, error } = await supabase
-                .from('staff_access')
-                .insert([{ name, pin, role, today_yesterday_only }])
-                .select()
-                .single();
+            const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            const { data, error } = await supabase.rpc('staff_upsert', {
+                p_actor_id: pinUser.id || null,
+                p_id: null,
+                p_restaurant_id: pinUser.restaurantId || pinUser.restaurant_id || null,
+                p_name: name,
+                p_email: `${name.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`,
+                p_role: role,
+                p_pin: pin,
+            });
 
             if (error) throw error;
-            setStaffList(prev => [...prev, data]);
+            if (data?.success === false) throw new Error(data.error || 'Could not create staff access.');
+
+            await fetchStaffList();
             alert('Staff member terminal access created successfully!');
             setShowAddStaffForm(false);
             e.target.reset();
@@ -2872,24 +2878,26 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     };
 
     const handleSaveStaff = async (staffId) => {
-        if (!editingStaffName.trim() || editingStaffPin.length !== 4) {
-            alert('Please enter a valid display name and 4-digit PIN.');
+        if (!editingStaffName.trim() || (editingStaffPin && editingStaffPin.length !== 4)) {
+            alert('Please enter a valid display name, or a 4-digit PIN to change it.');
             return;
         }
 
         try {
-            const { error } = await supabase
-                .from('staff_access')
-                .update({
-                    name: editingStaffName.trim(),
-                    pin: editingStaffPin,
-                    role: editingStaffRole,
-                    is_active: editingStaffActive,
-                    today_yesterday_only: editingStaffTodayYesterdayOnly
-                })
-                .eq('id', staffId);
+            const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            const { data, error } = await supabase.rpc('staff_upsert', {
+                p_actor_id: pinUser.id || null,
+                p_id: staffId,
+                p_restaurant_id: pinUser.restaurantId || pinUser.restaurant_id || null,
+                p_name: editingStaffName.trim(),
+                p_email: null,
+                p_role: editingStaffRole,
+                p_pin: editingStaffPin || null,
+                p_active: editingStaffActive,
+            });
 
             if (error) throw error;
+            if (data?.success === false) throw new Error(data.error || 'Update failed.');
 
             alert('Staff member updated successfully.');
             setEditingStaffId(null);
@@ -2903,12 +2911,15 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
     const handleDeleteStaff = async (staffId) => {
         if (!confirm('Remove this staff terminal access? They will lose access to logging in.')) return;
         try {
-            const { error } = await supabase
-                .from('staff_access')
-                .delete()
-                .eq('id', staffId);
+            const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            const { data, error } = await supabase.rpc('staff_delete', {
+                p_actor_id: pinUser.id || null,
+                p_id: staffId,
+            });
 
             if (error) throw error;
+            if (data?.success === false) throw new Error(data.error || 'Delete failed.');
+
             setStaffList(prev => prev.filter(s => s.id !== staffId));
             alert('Access removed.');
         } catch (err) {
@@ -3099,8 +3110,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             alert('Your cart is empty.');
             return;
         }
-        if ((diningOption === 'Dine-in' || diningOption === 'Dine Inn') && !selectedTable) {
-            alert('Please select a Table before punching a Dine-In order.');
+        if (!diningOption || !customerType || ((diningOption === 'Dine-in' || diningOption === 'Dine Inn') && !selectedTable)) {
+            setShowForceSelectionModal(true);
             return;
         }
         if (paymentMethod === 'Split' && !isSplitValid) {
@@ -3308,6 +3319,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
             setCustomerName('');
             setCustomerNameText('');
             setSelectedTable('');
+            setDiningOption('');
+            setCustomerType('');
             setDiscountValue('');
             setDiscountType('none');
             setSplitCash('');
@@ -5488,6 +5501,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                 >
                                     📊 Sales Velocity & Item Analytics
                                 </button>
+                                <button
+                                    onClick={() => { setMenuSettingsTab('customer_retention'); setEditingItem(null); setEditingModifierGroup(null); setEditingCategory(null); setEditingDiscount(null); }}
+                                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-all ${
+                                        menuSettingsTab === 'customer_retention' && !editingItem
+                                            ? 'bg-primary text-secondary border-transparent shadow-sm'
+                                            : 'bg-transparent border-transparent text-gray-400 hover:text-gray-600'
+                                    }`}
+                                >
+                                    👥 New vs. Return Retention
+                                </button>
                             </div>
                             
                             {!editingItem && (
@@ -6481,6 +6504,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         />
                                     </div>
                                 )}
+                                {menuSettingsTab === 'customer_retention' && (
+                                    <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar pb-12">
+                                        <CustomerRetentionDashboard />
+                                    </div>
+                                )}
                             </>
                         )}
 
@@ -7215,7 +7243,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                                                         <div>
                                                             <div className="font-bold text-sm text-gray-900 leading-tight">
                                                                 {staff.name}
-                                                                {staff.is_active === false && (
+                                                                {staff.active === false && (
                                                                     <span className="ml-2 text-rose-600 text-[10px] font-black uppercase bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-md">
                                                                         Terminated
                                                                     </span>
@@ -7228,7 +7256,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                     <div className="flex items-center gap-4 shrink-0">
                                                         {!isEditing && (
                                                             <>
-                                                                <div className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded font-black text-gray-700">PIN: {staff.pin}</div>
+                                                                <div className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded font-black text-gray-700">{staff.pin_set ? 'PIN: ••••' : 'NO PIN'}</div>
                                                                 <span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider ${
                                                                     staff.role === 'admin' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
                                                                     staff.role === 'cashier' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
@@ -7265,10 +7293,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                                     onClick={() => {
                                                                         setEditingStaffId(staff.id);
                                                                         setEditingStaffName(staff.name);
-                                                                        setEditingStaffPin(staff.pin);
+                                                                        setEditingStaffPin('');
                                                                         setEditingStaffRole(staff.role || 'staff');
-                                                                        setEditingStaffActive(staff.is_active !== false);
-                                                                        setEditingStaffTodayYesterdayOnly(staff.today_yesterday_only !== false);
+                                                                        setEditingStaffActive(staff.active !== false);
+                                                                        setEditingStaffTodayYesterdayOnly(false);
                                                                     }}
                                                                     className="text-gray-400 hover:text-gray-800 p-1"
                                                                     title="Edit Staff Member"
@@ -7575,22 +7603,111 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                     )}
                                 </div>
 
-                                {/* Order Details & Checkout Configuration */}
+                                                                {/* Order Details & Checkout Configuration */}
                                 <div className="p-3.5 bg-gray-50/70 space-y-2.5">
-                                    {/* New vs Returning Customer Classification Toggle */}
-                                    <div className="p-2 bg-white border border-gray-200/80 rounded-2xl shadow-xs space-y-1">
+                                    {/* 1. FORCED DINING OPTION SELECTOR (ALWAYS VISIBLE & REQUIRED) */}
+                                    <div className={`p-2.5 bg-white border rounded-2xl shadow-xs space-y-2 transition-all ${
+                                        !diningOption ? 'border-amber-400 bg-amber-50/30 ring-2 ring-amber-400/20' : 'border-gray-200/80'
+                                    }`}>
                                         <div className="flex justify-between items-center px-1">
-                                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Customer Status Tag *</label>
-                                            <span className="text-[8px] font-bold text-gray-400">1-Click Tag</span>
+                                            <label className="text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                                                <span>🍽️ Dining Option</span>
+                                                {!diningOption ? (
+                                                    <span className="text-[9px] text-amber-600 font-extrabold uppercase px-1.5 py-0.5 bg-amber-100 rounded-md animate-pulse">Required *</span>
+                                                ) : (
+                                                    <span className="text-[9px] text-emerald-600 font-extrabold uppercase px-1.5 py-0.5 bg-emerald-100 rounded-md">✓ Selected</span>
+                                                )}
+                                            </label>
+                                            {diningOption && <span className="text-[10px] font-bold text-gray-900">{diningOption}</span>}
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-1.5">
+                                            {[
+                                                { id: 'Dine-in', label: '🍽️ Dine-in', activeCls: 'bg-emerald-600 text-white border-emerald-600' },
+                                                { id: 'Takeaway', label: '🥡 Takeaway', activeCls: 'bg-amber-600 text-white border-amber-600' },
+                                                { id: 'Delivery', label: '🚚 Delivery', activeCls: 'bg-blue-600 text-white border-blue-600' }
+                                            ].map(opt => (
+                                                <button
+                                                    key={opt.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setDiningOption(opt.id);
+                                                        if (opt.id !== 'Dine-in') setSelectedTable('');
+                                                    }}
+                                                    className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center border cursor-pointer ${
+                                                        diningOption === opt.id
+                                                            ? `${opt.activeCls} shadow-sm scale-[1.02]`
+                                                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Dynamic Table Selector if Dine-in */}
+                                        {(diningOption === 'Dine-in' || diningOption === 'Dine Inn') && (
+                                            <div className={`mt-2 p-2 bg-gray-50 border rounded-xl space-y-1 ${
+                                                !selectedTable ? 'border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40' : 'border-gray-200'
+                                            }`}>
+                                                <div className="flex justify-between items-center">
+                                                    <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Select Table *</label>
+                                                    {!selectedTable && <span className="text-[8px] text-amber-600 font-black uppercase">Required</span>}
+                                                </div>
+                                                <select
+                                                    value={selectedTable}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setSelectedTable(val);
+                                                        setCustomerName(val);
+                                                    }}
+                                                    className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-black outline-none focus:border-emerald-600 text-gray-900"
+                                                >
+                                                    <option value="">-- Choose Table / Slot --</option>
+                                                    {TABLES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Dynamic Delivery Address if Delivery */}
+                                        {diningOption === 'Delivery' && (
+                                            <div className="mt-2 space-y-1">
+                                                <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Delivery Address / Destination</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter delivery location / apartment / notes..."
+                                                    value={deliveryAddress}
+                                                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                                                    className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] font-bold outline-none focus:border-blue-500"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 2. FORCED CUSTOMER STATUS (NEW VS RETURNING) */}
+                                    <div className={`p-2.5 bg-white border rounded-2xl shadow-xs space-y-2 transition-all ${
+                                        !customerType ? 'border-amber-400 bg-amber-50/30 ring-2 ring-amber-400/20' : 'border-gray-200/80'
+                                    }`}>
+                                        <div className="flex justify-between items-center px-1">
+                                            <label className="text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                                                <span>👥 Customer Status</span>
+                                                {!customerType ? (
+                                                    <span className="text-[9px] text-amber-600 font-extrabold uppercase px-1.5 py-0.5 bg-amber-100 rounded-md animate-pulse">Required *</span>
+                                                ) : (
+                                                    <span className="text-[9px] text-emerald-600 font-extrabold uppercase px-1.5 py-0.5 bg-emerald-100 rounded-md">✓ Selected</span>
+                                                )}
+                                            </label>
+                                            {customerType && (
+                                                <span className="text-[10px] font-bold text-gray-900">{customerType === 'New' ? '✨ New Customer' : '🔄 Returning'}</span>
+                                            )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-1.5">
                                             <button
                                                 type="button"
                                                 onClick={() => setCustomerType('New')}
-                                                className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+                                                className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
                                                     customerType === 'New'
-                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.01]'
-                                                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.02]'
+                                                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                                                 }`}
                                             >
                                                 <span>✨ New Customer</span>
@@ -7598,59 +7715,40 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                             <button
                                                 type="button"
                                                 onClick={() => setCustomerType('Returning')}
-                                                className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+                                                className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border cursor-pointer ${
                                                     customerType === 'Returning'
-                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.01]'
-                                                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.02]'
+                                                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                                                 }`}
                                             >
                                                 <span>🔄 Returning</span>
                                             </button>
                                         </div>
                                     </div>
-
                                     {/* Guest Name input + Register New Guest button */}
-                                    <div className="space-y-1.5">
+                                    <div className="space-y-1.5 pt-1">
                                         <div className="flex items-center justify-between">
-                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Customer / Guest Name</label>
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Customer Name (Optional)</label>
                                             <button
+                                                type="button"
                                                 onClick={() => setShowRegisterGuestModal(true)}
-                                                className="flex items-center gap-1.5 px-3 py-1 bg-[#18A07A] text-white rounded-full text-[10px] font-black uppercase hover:bg-[#128061] active:scale-95 transition-all shadow-sm"
+                                                className="flex items-center gap-1 px-2.5 py-0.5 bg-[#18A07A] text-white rounded-full text-[9px] font-black uppercase hover:bg-[#128061] active:scale-95 transition-all shadow-xs"
                                                 title="Register New Guest to CRM"
                                             >
-                                                <UserPlus size={11} /> New Customer
+                                                <UserPlus size={10} /> + Add to CRM
                                             </button>
                                         </div>
                                         <input
                                             type="text"
-                                            placeholder="Enter customer name..."
+                                            placeholder="Enter guest name..."
                                             value={customerNameText}
                                             onChange={(e) => setCustomerNameText(e.target.value)}
-                                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-[12px] font-bold outline-none focus:border-[#18A07A] focus:ring-2 focus:ring-[#18A07A]/10 transition-all text-gray-900 shadow-sm"
+                                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-[11px] font-bold outline-none focus:border-[#18A07A] focus:ring-2 focus:ring-[#18A07A]/10 transition-all text-gray-900 shadow-xs"
                                         />
                                     </div>
                                     {guestSuccessMsg && (
-                                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-[11px] font-bold rounded-xl flex items-center gap-2">
+                                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-[10px] font-bold rounded-xl flex items-center gap-2">
                                             ✅ {guestSuccessMsg}
-                                        </div>
-                                    )}
-
-                                    {/* Force Table Selection Dropdown if Dine-in is selected */}
-                                    {(diningOption === 'Dine-in' || diningOption === 'Dine Inn') && (
-                                        <div className="flex gap-2 items-center bg-white border border-gray-250/60 p-2 rounded-2xl shadow-sm">
-                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Select Table *:</label>
-                                            <select
-                                                value={selectedTable}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    setSelectedTable(val);
-                                                    setCustomerName(val); // Sync to customerName state
-                                                }}
-                                                className="flex-1 bg-gray-50/50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-[11px] font-black outline-none focus:border-primary focus:bg-white transition-all text-gray-900"
-                                            >
-                                                <option value="">-- Select Table --</option>
-                                                {TABLES.map(t => <option key={t} value={t}>{t}</option>)}
-                                            </select>
                                         </div>
                                     )}
 
@@ -7661,32 +7759,30 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         className="w-full flex justify-between items-center py-2 px-3 bg-white hover:bg-gray-100 border border-gray-200 text-[11px] font-black text-gray-700 transition-all rounded-xl shadow-xs cursor-pointer"
                                     >
                                         <span className="flex items-center gap-1.5 truncate">
-                                            ⚙️ {selectedBrand.split(' ')[0]} • {orderChannel} • {diningOption}
+                                            ⚙️ {selectedBrand.split(' ')[0]} • {orderChannel}
                                         </span>
                                         <span className="text-[8px] text-gray-400 font-bold uppercase tracking-wider shrink-0 ml-2">
-                                            {showCartConfig ? '▲ Hide Settings' : '▼ Expand Settings'}
+                                            {showCartConfig ? '▲ Hide Settings' : '▼ More Settings (Brand, Channel, Pay)'}
                                         </span>
                                     </button>
 
                                     {showCartConfig && (
                                         <div className="space-y-2 animate-in slide-in-from-top-2 duration-150">
-                                            {/* Brand Selection */}
-                                            <div>
-                                                <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Brand</label>
-                                                <select
-                                                    value={selectedBrand}
-                                                    onChange={(e) => setSelectedBrand(e.target.value)}
-                                                    className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
-                                                >
-                                                    <option value="POT OF JOLLOF">POT OF JOLLOF</option>
-                                                    <option value="LITTLE LAGOS">LITTLE LAGOS</option>
-                                                    <option value="CAFE SWAHILI">CAFE SWAHILI</option>
-                                                    <option value="SAMAKI STREET">SAMAKI STREET</option>
-                                                </select>
-                                            </div>
-
-                                            {/* Channel & Service Model */}
+                                            {/* Brand & Channel Selection */}
                                             <div className="grid grid-cols-2 gap-2.5">
+                                                <div>
+                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Brand</label>
+                                                    <select
+                                                        value={selectedBrand}
+                                                        onChange={(e) => setSelectedBrand(e.target.value)}
+                                                        className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                    >
+                                                        <option value="POT OF JOLLOF">POT OF JOLLOF</option>
+                                                        <option value="LITTLE LAGOS">LITTLE LAGOS</option>
+                                                        <option value="CAFE SWAHILI">CAFE SWAHILI</option>
+                                                        <option value="SAMAKI STREET">SAMAKI STREET</option>
+                                                    </select>
+                                                </div>
                                                 <div>
                                                     <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Order Channel</label>
                                                     <select
@@ -7708,31 +7804,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                         <option value="Ando">Ando</option>
                                                     </select>
                                                 </div>
-                                                <div>
-                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Dining Option</label>
-                                                    <select
-                                                        value={diningOption}
-                                                        onChange={(e) => setDiningOption(e.target.value)}
-                                                        disabled={['Uber Eats', 'Glovo', 'Bolt Food', 'Ando'].includes(orderChannel)}
-                                                        className="w-full bg-white disabled:bg-gray-100 disabled:text-gray-400 border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
-                                                    >
-                                                        <option value="Dine-in">Dine-in</option>
-                                                        <option value="Takeaway">Takeaway</option>
-                                                        <option value="Delivery">Delivery</option>
-                                                    </select>
-                                                </div>
-                                                {diningOption === 'Delivery' && !['ubereats', 'uber eats', 'glovo', 'bolt food', 'boltfood', 'ando'].includes((orderChannel || '').toLowerCase().trim()) && (
-                                                    <div className="col-span-2 pt-1">
-                                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Delivery Address</label>
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Enter full delivery address..."
-                                                            value={deliveryAddress}
-                                                            onChange={(e) => setDeliveryAddress(e.target.value)}
-                                                            className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
-                                                        />
-                                                    </div>
-                                                )}
                                             </div>
 
                                             {/* Payment Method & Status */}
@@ -7929,6 +8000,149 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                     </>
                 )}
             </div>
+
+            
+            {/* ═══════════════════════════════════════════════════════════════════
+                FORCED ORDER DETAILS SELECTION MODAL (POPUP GATEKEEPER)
+               ═══════════════════════════════════════════════════════════════════ */}
+            <AnimatePresence>
+                {showForceSelectionModal && (
+                    <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-gray-100 space-y-4 p-6"
+                        >
+                            <div className="text-center space-y-1">
+                                <span className="px-3 py-1 bg-amber-100 text-amber-900 text-[10px] font-black uppercase rounded-full tracking-wider">
+                                    Action Required Before Punching
+                                </span>
+                                <h3 className="text-xl font-black text-gray-950">Select Order Details</h3>
+                                <p className="text-xs text-gray-500 font-medium">Please confirm dining option and customer classification.</p>
+                            </div>
+
+                            <div className="space-y-4 pt-1">
+                                {/* Step 1: Dining Option */}
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-[10px] font-black uppercase text-gray-700 tracking-wider">1. Dining Option *</label>
+                                        {!diningOption && <span className="text-[9px] text-red-600 font-bold">Select One</span>}
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'Dine-in', label: '🍽️ Dine-in', color: 'bg-emerald-600 text-white border-emerald-600' },
+                                            { id: 'Takeaway', label: '🥡 Takeaway', color: 'bg-amber-600 text-white border-amber-600' },
+                                            { id: 'Delivery', label: '🚚 Delivery', color: 'bg-blue-600 text-white border-blue-600' }
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setDiningOption(opt.id);
+                                                    if (opt.id !== 'Dine-in') setSelectedTable('');
+                                                }}
+                                                className={`py-3 px-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 border cursor-pointer ${
+                                                    diningOption === opt.id
+                                                        ? `${opt.color} shadow-md scale-[1.02]`
+                                                        : 'bg-gray-50 text-gray-800 border-gray-200 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Step 1.5: If Dine-in, Select Table */}
+                                {(diningOption === 'Dine-in' || diningOption === 'Dine Inn') && (
+                                    <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 space-y-1.5">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-black uppercase text-gray-700 tracking-wider">Select Table / Slot *</label>
+                                            {!selectedTable && <span className="text-[9px] text-red-600 font-bold">Required</span>}
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                                            {TABLES.map(t => (
+                                                <button
+                                                    key={t}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedTable(t);
+                                                        setCustomerName(t);
+                                                    }}
+                                                    className={`py-2 px-1 text-[11px] font-black rounded-xl border transition-all ${
+                                                        selectedTable === t
+                                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                            : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    {t}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Step 2: Customer Status (New vs Returning) */}
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-[10px] font-black uppercase text-gray-700 tracking-wider">2. Customer Classification *</label>
+                                        {!customerType && <span className="text-[9px] text-red-600 font-bold">Select One</span>}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomerType('New')}
+                                            className={`py-3 px-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
+                                                customerType === 'New'
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02]'
+                                                    : 'bg-gray-50 text-gray-800 border-gray-200 hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            <span>✨ New Customer</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomerType('Returning')}
+                                            className={`py-3 px-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
+                                                customerType === 'Returning'
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-[1.02]'
+                                                    : 'bg-gray-50 text-gray-800 border-gray-200 hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            <span>🔄 Returning Guest</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Action Buttons */}
+                            <div className="pt-2 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowForceSelectionModal(false)}
+                                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-2xl transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={!diningOption || !customerType || ((diningOption === 'Dine-in' || diningOption === 'Dine Inn') && !selectedTable)}
+                                    onClick={() => {
+                                        setShowForceSelectionModal(false);
+                                        setTimeout(() => {
+                                            handleCheckout();
+                                        }, 50);
+                                    }}
+                                    className="flex-1 py-3 bg-gray-950 hover:bg-black text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    Confirm & Punch (KES {total.toLocaleString()})
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             {/* Thermal Print Receipt Dialog */}
             <AnimatePresence>
@@ -9096,6 +9310,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                         <span>KES ${Math.round(share.amount).toLocaleString()}</span>
                                     </div>
                                     <div class="divider"></div>
+                                    <div style="border:2px solid #000;margin:6px 0;padding:5px 6px;border-radius:2px;text-align:center;">
+                                        <div style="font-size:10px;font-weight:900;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
+                                        <div class="meta" style="font-size:12px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">542542</span></div>
+                                        <div class="meta" style="font-size:12px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">992422</span></div>
+                                    </div>
+                                    <div class="divider"></div>
 
                                     <div class="footer">
                                         <p style="font-weight:900;text-transform:uppercase;">THANK YOU FOR DINING WITH US!</p>
@@ -9681,6 +9901,18 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut }
                                                 <span>KES {Math.round(share.amount).toLocaleString()}</span>
                                             </div>
                                             <div className="border-b border-dashed border-black pt-2"></div>
+                                        </div>
+
+                                        <div className="border-2 border-black my-2 p-1.5 rounded text-center space-y-0.5">
+                                            <div className="text-[8px] font-black tracking-wider uppercase">— PAY VIA MPESA —</div>
+                                            <div className="flex justify-between text-[11px] font-black">
+                                                <span>PAYBILL NO:</span>
+                                                <span className="font-mono">542542</span>
+                                            </div>
+                                            <div className="flex justify-between text-[11px] font-black">
+                                                <span>ACCT NO:</span>
+                                                <span className="font-mono">992422</span>
+                                            </div>
                                         </div>
 
                                         <div className="text-center pt-1 text-[9px] space-y-1">
@@ -10473,6 +10705,13 @@ ${receipt.discount > 0 ? `<div class="meta-row"><span class="meta-label">DISCOUN
 <div class="meta-row" style="margin-top:4px;"><span class="meta-label">PAYMENT METHOD:</span><span class="meta-value">${receipt.payment_method.toUpperCase()}</span></div>
 <div class="meta-row"><span class="meta-label">PAYMENT STATUS:</span><span class="meta-value">${receipt.payment_status.toUpperCase()}</span></div>
 ${splitNote}
+${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `
+<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;">
+  <div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
+  <div class="meta-row" style="font-size:12px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">542542</span></div>
+  <div class="meta-row" style="font-size:12px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">992422</span></div>
+</div>
+`}
 
 <div class="divider"></div>
 <div class="footer">
@@ -10621,6 +10860,20 @@ ${splitNote}
                             <p className="text-[8px] font-bold text-left italic text-gray-600 mt-1">{receipt.splitDetails}</p>
                         )}
                     </div>
+
+                    {!(receipt.payment_method || '').toLowerCase().includes('app') && (
+                        <div className="border-2 border-black my-4 p-2 rounded text-center space-y-0.5">
+                            <div className="text-[9px] font-black tracking-wider uppercase">— PAY VIA MPESA —</div>
+                            <div className="flex justify-between text-xs font-black">
+                                <span>PAYBILL NO:</span>
+                                <span className="text-sm tracking-wider font-mono">542542</span>
+                            </div>
+                            <div className="flex justify-between text-xs font-black">
+                                <span>ACCT NO:</span>
+                                <span className="text-sm tracking-wider font-mono">992422</span>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="text-center space-y-1 pt-2">
                         <p className="font-black uppercase tracking-tight">THANK YOU FOR DINING WITH US!</p>

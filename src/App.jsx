@@ -12,7 +12,71 @@ import { FeedbackForm } from './components/FeedbackForm';
 import { RestaurantLinkHub } from './components/RestaurantLinkHub';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { AuthenticatedHome } from './components/AuthenticatedHome';
-import { getTenantInfo, getPosLoginUrl, getMarketingUrl, getRetailMarketingUrl, getRetailPosLoginUrl } from './lib/tenant';
+import { KitchenDisplay } from './components/KitchenDisplay';
+import { FloorPlanView } from './components/FloorPlanView';
+import { InventoryView } from './components/InventoryView';
+import { RestaurantDirectory } from './components/RestaurantDirectory';
+import { StatusPage, LegalPage } from './components/PublicPages';
+import {
+  getTenantInfo,
+  getPosLoginUrl,
+  getRetailPosLoginUrl,
+} from './lib/tenant';
+import { loadTenant, getActiveTenantSlug, getMicrositeUrl } from './lib/tenantConfig';
+
+const PAGE_ROUTES = {
+  superadmin: 'superadmin',
+  app: 'app',
+  onboarding: 'onboarding',
+  dashboard: 'dashboard',
+  feedback: 'feedback',
+  links: 'links',
+  'retail-terminal': 'retail-terminal',
+  retail: 'retail-home',
+  pos: 'terminal',
+  terminal: 'terminal',
+  menu: 'microsite',
+  microsite: 'microsite',
+  restaurants: 'restaurants',
+  directory: 'restaurants',
+  kds: 'kds',
+  kitchen: 'kds',
+  floor: 'floor',
+  tables: 'floor',
+  reservations: 'floor',
+  inventory: 'inventory',
+  stock: 'inventory',
+  status: 'status',
+  privacy: 'privacy',
+  terms: 'terms',
+};
+
+function resolveRoute() {
+  const info = getTenantInfo();
+  const params = new URLSearchParams(window.location.search);
+  const page = (params.get('page') || '').toLowerCase();
+  const mode = (params.get('mode') || params.get('type') || '').toLowerCase();
+  const path = window.location.pathname;
+  const hash = window.location.hash;
+
+  // Explicit page routing wins so new modules work on every host.
+  if (page && PAGE_ROUTES[page]) return PAGE_ROUTES[page];
+
+  if (path === '/superadmin' || hash === '#/superadmin') return 'superadmin';
+  if (path === '/app' || hash === '#/app') return 'app';
+  if (hash === '#/onboarding') return 'onboarding';
+  if (path === '/dashboard' || hash === '#/dashboard') return 'dashboard';
+  if (info.isFeedbackDomain || path === '/feedback' || hash === '#/feedback') return 'feedback';
+  if (path === '/links' || hash === '#/links') return 'links';
+  if (info.isLinkHubDomain) return 'links';
+  if (info.isRetailPosDomain || path === '/retail-terminal' || hash === '#/retail-terminal') return 'retail-terminal';
+  if (info.isRetailMarketingDomain || mode === 'retail' || path === '/retail' || hash === '#/retail') return 'retail-home';
+  if (info.isPosDomain || path === '/terminal' || hash === '#/terminal' || hash === '#/pos') return 'terminal';
+  if (info.isGuestMicrosite || path === '/menu' || hash === '#/menu') return 'microsite';
+  return 'home';
+}
+
+const OPERATIONAL_ROUTES = new Set(['kds', 'floor', 'inventory']);
 
 function App() {
   const [session, setSession] = useState(() => {
@@ -25,45 +89,36 @@ function App() {
   });
   const [loading, setLoading] = useState(true);
   const [tenantInfo, setTenantInfo] = useState(() => getTenantInfo());
-
-  // Clean router supporting subdomain detection, subpaths, hashes, and search queries
-  const [currentRoute, setCurrentRoute] = useState(() => {
-    const info = getTenantInfo();
-    const queryPage = new URLSearchParams(window.location.search).get('page');
-    const queryMode = new URLSearchParams(window.location.search).get('mode') || new URLSearchParams(window.location.search).get('type');
-    
-    if (queryPage === 'superadmin' || window.location.pathname === '/superadmin' || window.location.hash === '#/superadmin') {
-      return 'superadmin';
-    }
-    if (queryPage === 'app' || window.location.pathname === '/app' || window.location.hash === '#/app') {
-      return 'app';
-    }
-    if (queryPage === 'onboarding' || window.location.hash === '#/onboarding') {
-      return 'onboarding';
-    }
-    if (queryPage === 'dashboard' || window.location.pathname === '/dashboard' || window.location.hash === '#/dashboard') {
-      return 'dashboard';
-    }
-    if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
-      return 'feedback';
-    }
-    if (info.isRetailPosDomain || queryPage === 'retail-terminal' || window.location.pathname === '/retail-terminal' || window.location.hash === '#/retail-terminal') {
-      return 'retail-terminal';
-    }
-    if (info.isRetailMarketingDomain || queryMode === 'retail' || queryPage === 'retail' || window.location.pathname === '/retail' || window.location.hash === '#/retail') {
-      return 'retail-home';
-    }
-    if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
-      return 'terminal';
-    }
-    if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu' || queryPage === 'menu') {
-      return 'microsite';
-    }
-    return 'home';
-  });
-
+  const [tenant, setTenant] = useState(null);
+  const [currentRoute, setCurrentRoute] = useState(() => resolveRoute());
   const [storeStatus, setStoreStatus] = useState('approved');
   const [businessType, setBusinessType] = useState('restaurant');
+
+  // Load tenant configuration (DB first, static registry fallback).
+  useEffect(() => {
+    let cancelled = false;
+    const slug = getActiveTenantSlug() || tenantInfo.tenantSlug ||
+      (currentRoute === 'kds' || currentRoute === 'floor' || currentRoute === 'inventory' ? 'chopnownow' : null);
+    if (!slug) {
+      setTenant(null);
+      return undefined;
+    }
+    loadTenant(slug).then((resolved) => {
+      if (!cancelled) setTenant(resolved);
+    });
+    return () => { cancelled = true; };
+  }, [tenantInfo.tenantSlug, currentRoute]);
+
+  // Keep the browser title tenant-aware for shared menu links.
+  useEffect(() => {
+    if (tenant?.name && (currentRoute === 'microsite')) {
+      document.title = `${tenant.name} · Order online`;
+    } else if (currentRoute === 'restaurants') {
+      document.title = 'Restaurant Directory · ManiPOS';
+    } else if (!tenant?.name || currentRoute === 'home') {
+      document.title = 'ManiPOS · Cloud POS for African restaurants';
+    }
+  }, [tenant?.name, currentRoute]);
 
   useEffect(() => {
     const fetchStoreStatus = async () => {
@@ -73,7 +128,7 @@ function App() {
         const storeId = pinUser.restaurantId || pinUser.restaurant_id;
 
         if (!storeSlug && !storeId) {
-          if (session && currentRoute !== 'home' && currentRoute !== 'retail-home' && currentRoute !== 'superadmin' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite') {
+          if (session && currentRoute !== 'home' && currentRoute !== 'retail-home' && currentRoute !== 'superadmin' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite' && currentRoute !== 'restaurants' && currentRoute !== 'status' && currentRoute !== 'privacy' && currentRoute !== 'terms') {
             handleGlobalSignOut();
           }
           return;
@@ -152,47 +207,22 @@ function App() {
   // Listen to browser navigation changes
   useEffect(() => {
     const handleLocationChange = () => {
-      const info = getTenantInfo();
-      const queryPage = new URLSearchParams(window.location.search).get('page');
-      const queryMode = new URLSearchParams(window.location.search).get('mode') || new URLSearchParams(window.location.search).get('type');
-      setTenantInfo(info);
-      
-      if (queryPage === 'superadmin' || window.location.pathname === '/superadmin' || window.location.hash === '#/superadmin') {
-        setCurrentRoute('superadmin');
-      } else if (queryPage === 'app' || window.location.pathname === '/app' || window.location.hash === '#/app') {
-        setCurrentRoute('app');
-      } else if (queryPage === 'onboarding' || window.location.hash === '#/onboarding') {
-        setCurrentRoute('onboarding');
-      } else if (queryPage === 'dashboard' || window.location.pathname === '/dashboard' || window.location.hash === '#/dashboard') {
-        setCurrentRoute('dashboard');
-      } else if (info.isFeedbackDomain || window.location.pathname === '/feedback' || window.location.hash === '#/feedback' || queryPage === 'feedback') {
-        setCurrentRoute('feedback');
-      } else if (info.isRetailPosDomain || queryPage === 'retail-terminal' || window.location.pathname === '/retail-terminal' || window.location.hash === '#/retail-terminal') {
-        setCurrentRoute('retail-terminal');
-      } else if (info.isRetailMarketingDomain || queryMode === 'retail' || queryPage === 'retail' || window.location.pathname === '/retail' || window.location.hash === '#/retail') {
-        setCurrentRoute('retail-home');
-      } else if (info.isPosDomain || window.location.pathname === '/terminal' || window.location.hash === '#/terminal' || window.location.hash === '#/pos' || queryPage === 'pos' || queryPage === 'terminal') {
-        setCurrentRoute('terminal');
-      } else if (info.isGuestMicrosite || window.location.pathname === '/menu' || window.location.hash === '#/menu' || queryPage === 'menu') {
-        setCurrentRoute('microsite');
-      } else {
-        setCurrentRoute('home');
-      }
+      setTenantInfo(getTenantInfo());
+      setCurrentRoute(resolveRoute());
     };
 
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
-  const navigateToHome = () => {
-    setCurrentRoute('home');
-    window.history.pushState({}, '', '/');
+  const goTo = (route, url) => {
+    setCurrentRoute(route);
+    if (url) window.history.pushState({}, '', url);
   };
 
-  const navigateToRetailHome = () => {
-    setCurrentRoute('retail-home');
-    window.history.pushState({}, '', '/?mode=retail');
-  };
+  const navigateToHome = () => goTo('home', '/');
+
+  const navigateToRetailHome = () => goTo('retail-home', '/?mode=retail');
 
   const navigateToLogin = (slug = null) => {
     const url = getPosLoginUrl(slug);
@@ -202,6 +232,17 @@ function App() {
   const navigateToRetailLogin = (slug = null) => {
     const url = getRetailPosLoginUrl(slug);
     window.location.href = url;
+  };
+
+  const openModule = (page) => goTo(page, `/?page=${page}`);
+
+  const openMicrosite = (slug) => {
+    const url = getMicrositeUrl(slug);
+    if (url.startsWith('/')) {
+      goTo('microsite', url);
+    } else {
+      window.location.href = url;
+    }
   };
 
   const handleGlobalSignOut = async () => {
@@ -238,6 +279,28 @@ function App() {
     return <RestaurantLinkHub />;
   }
 
+  // ROUTE 0.6: Public restaurant marketplace
+  if (currentRoute === 'restaurants') {
+    return (
+      <RestaurantDirectory
+        onBack={navigateToHome}
+        onOpenTenant={(restaurant) => openMicrosite(restaurant.slug)}
+        onListRestaurant={() => {
+          goTo('home', '/');
+          setTimeout(() => window.dispatchEvent(new CustomEvent('manipos:open-onboarding')), 150);
+        }}
+      />
+    );
+  }
+
+  // ROUTE 0.7: Trust, legal and status pages
+  if (currentRoute === 'status') {
+    return <StatusPage onBack={navigateToHome} />;
+  }
+  if (currentRoute === 'privacy' || currentRoute === 'terms') {
+    return <LegalPage kind={currentRoute} onBack={navigateToHome} />;
+  }
+
   // STRICT DOMAIN BOUNDARY (GEMINI.md Rule 1):
   // manipos.com and www.manipos.com must exclusively serve the ManiPOS SaaS marketing landing page
   // and must NEVER route to tenant microsites unless explicitly scoped by subdomain or tenant query.
@@ -248,6 +311,7 @@ function App() {
         <LandingPage 
           onProceedToLogin={(slug) => navigateToLogin(slug)} 
           onSwitchToRetail={navigateToRetailHome}
+          onBrowseRestaurants={() => goTo('restaurants', '/?page=restaurants')}
         />
       );
     }
@@ -256,11 +320,13 @@ function App() {
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
   if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
     const queryParams = new URLSearchParams(window.location.search);
-    if (queryParams.get('view') === 'legacy' || queryParams.get('mode') === 'classic') {
+    const wantsLegacy = queryParams.get('view') === 'legacy' || queryParams.get('mode') === 'classic';
+    if (wantsLegacy && (tenantInfo.tenantSlug === 'potofjollof' || tenant?.slug === 'potofjollof')) {
       return <MenuMicrosite onBack={navigateToHome} tenantSlug={tenantInfo.tenantSlug || 'potofjollof'} />;
     }
     return (
-      <UberEatsMicrosite 
+      <UberEatsMicrosite
+        tenant={tenant}
         onBack={navigateToHome} 
         onStaffLogin={() => navigateToLogin(tenantInfo.tenantSlug)}
         onAdminLogin={() => navigateToLogin(tenantInfo.tenantSlug)}
@@ -306,13 +372,55 @@ function App() {
     if (!isAdmin && (currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding')) {
       return (
         <div className="min-h-screen bg-slate-50 relative">
-          <PosTerminal 
-            staffName={staffUser.name} 
-            staffRole={staffUser.role} 
-            onSignOut={handleGlobalSignOut} 
+          <PosTerminal
+            staffName={staffUser.name}
+            staffRole={staffUser.role}
+            onSignOut={handleGlobalSignOut}
             tenantSlug={tenantInfo.tenantSlug}
           />
         </div>
+      );
+    }
+
+    // Operational modules: Kitchen Display, Floor & Reservations, Inventory & Recipes
+    if (OPERATIONAL_ROUTES.has(currentRoute)) {
+      if (!isAdmin) {
+        return (
+          <div className="min-h-screen bg-slate-50 relative">
+            <PosTerminal 
+              staffName={staffUser.name} 
+              staffRole={staffUser.role} 
+              onSignOut={handleGlobalSignOut} 
+              tenantSlug={tenantInfo.tenantSlug}
+            />
+          </div>
+        );
+      }
+      if (currentRoute === 'kds') {
+        return (
+          <KitchenDisplay
+            tenant={tenant}
+            staffName={staffUser.name}
+            onBack={() => goTo('app', '/?page=app')}
+          />
+        );
+      }
+      if (currentRoute === 'floor') {
+        return (
+          <FloorPlanView
+            tenant={tenant}
+            staffName={staffUser.name}
+            onBack={() => goTo('app', '/?page=app')}
+            onOpenPos={() => goTo(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
+          />
+        );
+      }
+      return (
+        <InventoryView
+          tenant={tenant}
+          staffName={staffUser.name}
+          onBack={() => goTo('app', '/?page=app')}
+        />
       );
     }
 
@@ -324,6 +432,7 @@ function App() {
           <AdminDashboard 
             onBackToTerminal={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
             onOpenAppHome={() => setCurrentRoute('app')}
+            onOpenModule={openModule}
             onSignOut={handleGlobalSignOut}
             tenantSlug={tenantInfo.tenantSlug} 
           />
@@ -332,11 +441,13 @@ function App() {
 
       return (
         <AuthenticatedHome
-          restaurantName={staffUser.restaurantName}
+          restaurantName={tenant?.name || staffUser.restaurantName}
           tenantSlug={tenantInfo.tenantSlug}
           staffName={staffUser.name}
+          staffRole={staffUser.role}
           onOpenDashboard={() => setCurrentRoute('dashboard')}
           onOpenPOS={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
+          onOpenModule={openModule}
           onSignOut={handleGlobalSignOut}
         />
       );
@@ -348,6 +459,7 @@ function App() {
         <AdminDashboard 
           onBackToTerminal={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
           onOpenAppHome={() => setCurrentRoute('app')}
+          onOpenModule={openModule}
           onSignOut={handleGlobalSignOut}
           tenantSlug={tenantInfo.tenantSlug} 
         />
@@ -420,7 +532,7 @@ function App() {
   }
 
   // ROUTE 2: Standalone POS Terminal Login (pos.manipos.com or <tenant>.pos.manipos.com)
-  if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding') {
+  if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding' || OPERATIONAL_ROUTES.has(currentRoute)) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative font-sans">
         <button
@@ -473,6 +585,7 @@ function App() {
     <LandingPage 
       onProceedToLogin={(slug) => navigateToLogin(slug)} 
       onSwitchToRetail={navigateToRetailHome}
+      onBrowseRestaurants={() => goTo('restaurants', '/?page=restaurants')}
     />
   );
 }

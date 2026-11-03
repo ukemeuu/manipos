@@ -45,9 +45,11 @@ export function getTenantInfo() {
 
   // 2. Check Hostname / Subdomains
   const parts = hostname.split('.');
+  // Local development and raw IPs must never be parsed as tenant subdomains.
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || /^(127|10|192\.168)\./.test(hostname);
 
   // e.g. retail.manipos.com or retail.pos.manipos.com or mystore.retail.manipos.com
-  if (hostname.includes('manipos.com') || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+  if (!isLocalHost && hostname.includes('manipos.com')) {
     if (parts.length >= 3) {
       if (parts[1] === 'retail') {
         tenantSlug = parts[0];

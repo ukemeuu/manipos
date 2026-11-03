@@ -9,6 +9,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "onboard": "node scripts/onboard-tenant.mjs",
     "electron": "NODE_ENV=development electron .",
     "dist": "vite build && npx electron-builder"
   },

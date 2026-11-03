@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Chop Now Now</title>
+  <desc id="desc">Chop Now Now Nigerian Restaurant logo</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B6B3A"/>
+      <stop offset="1" stop-color="#064D29"/>
+    </linearGradient>
+    <linearGradient id="pot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FB923C"/>
+      <stop offset="1" stop-color="#EA580C"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g fill="none" stroke="#FDE68A" stroke-width="14" stroke-linecap="round" opacity=".9">
+    <path d="M196 150c-22-26 22-32 0-58"/>
+    <path d="M256 142c-22-26 22-32 0-58"/>
+    <path d="M316 150c-22-26 22-32 0-58"/>
+  </g>
+  <path d="M120 248h272v34a92 92 0 0 1-92 92h-88a92 92 0 0 1-92-92z" fill="url(#pot)"/>
+  <rect x="96" y="228" width="320" height="34" rx="17" fill="#FDBA74"/>
+  <path d="M92 282c-30 0-44 18-44 40s16 42 46 42" fill="none" stroke="#FDBA74" stroke-width="22" stroke-linecap="round"/>
+  <path d="M420 282c30 0 44 18 44 40s-16 42-46 42" fill="none" stroke="#FDBA74" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="256" cy="318" r="34" fill="#FFF7ED"/>
+  <path d="M234 318h44M256 296v44" stroke="#0B6B3A" stroke-width="12" stroke-linecap="round"/>
+</svg>

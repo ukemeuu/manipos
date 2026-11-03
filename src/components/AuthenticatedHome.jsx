@@ -7,7 +7,10 @@ import {
   Store, 
   Sparkles,
   MapPin,
-  UserCheck
+  UserCheck,
+  ChefHat,
+  Armchair,
+  Package
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -18,7 +21,8 @@ export function AuthenticatedHome({
   staffRole,
   branchName = 'Main Branch',
   onOpenDashboard, 
-  onOpenPOS, 
+  onOpenPOS,
+  onOpenModule,
   onSignOut 
 }) {
   return (
@@ -141,6 +145,29 @@ export function AuthenticatedHome({
               </div>
             </motion.div>
 
+          </div>
+
+          {/* Operations Modules */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+            {[
+              { page: 'kds', label: 'Kitchen Display', desc: 'Live tickets, prep timers and station filters.', Icon: ChefHat, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
+              { page: 'floor', label: 'Floor & Reservations', desc: 'Tables, seating zones and guest bookings.', Icon: Armchair, tone: 'text-sky-400 border-sky-500/30 hover:border-sky-400/60', bg: 'bg-sky-500/10' },
+              { page: 'inventory', label: 'Inventory & Recipes', desc: 'Stock levels, reorder alerts and recipe links.', Icon: Package, tone: 'text-emerald-400 border-emerald-500/30 hover:border-emerald-400/60', bg: 'bg-emerald-500/10' },
+            ].map((mod) => (
+              <motion.button
+                key={mod.page}
+                whileHover={{ scale: 1.02, y: -3 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => onOpenModule ? onOpenModule(mod.page) : (window.location.href = `/?page=${mod.page}`)}
+                className={`bg-slate-900/80 border ${mod.tone} p-5 rounded-2xl text-left transition-all cursor-pointer group`}
+              >
+                <div className={`w-10 h-10 rounded-xl ${mod.bg} ${mod.tone.split(' ')[0]} flex items-center justify-center mb-4`}>
+                  <mod.Icon size={20} />
+                </div>
+                <h4 className="font-black text-sm text-white group-hover:text-white">{mod.label}</h4>
+                <p className="text-[11px] text-slate-400 font-medium mt-1 leading-relaxed">{mod.desc}</p>
+              </motion.button>
+            ))}
           </div>
 
         </div>

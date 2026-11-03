@@ -33,44 +33,24 @@ export function SuperAdminDashboard() {
   const fetchPlatformData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch all restaurants
-      const { data: stores, error: storesErr } = await supabase
-        .from('restaurants')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (storesErr) throw storesErr;
-
-      // 2. Fetch settings and staff access metadata
-      const { data: settingsList } = await supabase.from('restaurant_settings').select('restaurant_id, phone, locations_count, brands_count');
-      const { data: staffList } = await supabase.from('staff_access').select('restaurant_id, name, email, role');
-
-      const settingsMap = {};
-      (settingsList || []).forEach(s => { settingsMap[s.restaurant_id] = s; });
-
-      const ownerMap = {};
-      (staffList || []).forEach(st => {
-        if (!ownerMap[st.restaurant_id] || st.role === 'admin') {
-          ownerMap[st.restaurant_id] = st;
-        }
+      const { data: stores, error: storesErr } = await supabase.rpc('admin_list_restaurants', {
+        p_passcode: passcode,
       });
 
-      const enrichedStores = (stores || []).map(st => ({
-        ...st,
-        settings: settingsMap[st.id] || {},
-        owner: ownerMap[st.id] || {}
-      }));
+      if (storesErr) throw storesErr;
+      setRestaurants(stores || []);
 
-      setRestaurants(enrichedStores);
-
-      // 3. Fetch total orders across platform
-      const { count, error: countErr } = await supabase
-        .from('pos_orders')
-        .select('*', { count: 'exact', head: true });
-
-      if (!countErr) setOrdersCount(count || 0);
+      const { data: metrics, error: metricsErr } = await supabase.rpc('admin_platform_metrics', {
+        p_passcode: passcode,
+      });
+      if (!metricsErr && metrics) {
+        setOrdersCount(metrics.orders_count || 0);
+      }
     } catch (err) {
       console.error('[SuperAdmin] Error fetching platform data:', err);
+      if (err?.message?.includes('passcode')) {
+        setPasscodeError('Invalid platform passcode.');
+      }
     } finally {
       setLoading(false);
     }
@@ -82,25 +62,68 @@ export function SuperAdminDashboard() {
     }
   }, [authenticated]);
 
-  const handlePasscodeSubmit = (e) => {
+  const handlePasscodeSubmit = async (e) => {
     e.preventDefault();
-    if (passcode === '7777' || passcode === 'manipos2026' || passcode === 'admin') {
-      setAuthenticated(true);
-      setPasscodeError('');
-    } else {
-      setPasscodeError('Invalid Super Admin Master Passcode.');
+    setPasscodeError('');
+
+    const adminEmails = String(import.meta.env.VITE_SUPER_ADMIN_EMAILS || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+    const configuredPasscode = import.meta.env.VITE_SUPER_ADMIN_PASSCODE || '';
+
+    // Preferred: an authenticated Supabase user on the platform-admin allow-list.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = session?.user?.email?.toLowerCase();
+      if (email && adminEmails.includes(email)) {
+        setAuthenticated(true);
+        return;
+      }
+    } catch (_) {
+      // Fall through to the passcode check.
     }
+
+    // Server-side passcode verification against the bcrypt hash in
+    // platform_settings. This keeps the secret out of the bundle.
+    try {
+      const { data: valid, error: rpcError } = await supabase.rpc('admin_verify_passcode', {
+        p_passcode: passcode,
+      });
+      if (!rpcError && valid) {
+        setAuthenticated(true);
+        return;
+      }
+    } catch (_) {
+      // Fall through to the deployment-configured fallback.
+    }
+
+    if (configuredPasscode && passcode === configuredPasscode) {
+      setAuthenticated(true);
+      return;
+    }
+
+    if (!configuredPasscode && adminEmails.length === 0) {
+      setPasscodeError('Super Admin access is not configured on this deployment. Set VITE_SUPER_ADMIN_PASSCODE or sign in with a platform admin account.');
+      return;
+    }
+
+    setPasscodeError('Invalid Super Admin credentials.');
   };
 
   const handleUpdateStatus = async (restaurantId, newStatus, isActive) => {
     setActionLoadingId(restaurantId);
     try {
-      const { error } = await supabase
-        .from('restaurants')
-        .update({ status: newStatus, is_active: isActive })
-        .eq('id', restaurantId);
+      const { data, error } = await supabase.rpc('admin_update_restaurant_status', {
+        p_restaurant_id: restaurantId,
+        p_status: newStatus,
+        p_is_active: isActive,
+        p_passcode: passcode,
+      });
 
       if (error) throw error;
+      if (data?.success === false) throw new Error(data.error || 'Update failed.');
+
       setRestaurants(prev => prev.map(r => r.id === restaurantId ? { ...r, status: newStatus, is_active: isActive } : r));
     } catch (err) {
       alert('Error updating status: ' + err.message);
@@ -112,17 +135,16 @@ export function SuperAdminDashboard() {
   const handleExtendTrial = async (restaurantId, daysToAdd = 14) => {
     setActionLoadingId(restaurantId);
     try {
-      const targetStore = restaurants.find(r => r.id === restaurantId);
-      const currentExpiry = targetStore && targetStore.trial_ends_at ? new Date(targetStore.trial_ends_at) : new Date();
-      const newExpiry = new Date(currentExpiry.getTime() + daysToAdd * 24 * 60 * 60 * 1000).toISOString();
-
-      const { error } = await supabase
-        .from('restaurants')
-        .update({ trial_ends_at: newExpiry, status: 'approved', is_active: true })
-        .eq('id', restaurantId);
+      const { data, error } = await supabase.rpc('admin_extend_trial', {
+        p_restaurant_id: restaurantId,
+        p_days: daysToAdd,
+        p_passcode: passcode,
+      });
 
       if (error) throw error;
-      setRestaurants(prev => prev.map(r => r.id === restaurantId ? { ...r, trial_ends_at: newExpiry, status: 'approved', is_active: true } : r));
+      if (data?.success === false) throw new Error(data.error || 'Could not extend trial.');
+
+      setRestaurants(prev => prev.map(r => r.id === restaurantId ? { ...r, trial_ends_at: data.trial_ends_at, status: 'approved', is_active: true } : r));
       alert(`Trial extended by ${daysToAdd} days!`);
     } catch (err) {
       alert('Error extending trial: ' + err.message);

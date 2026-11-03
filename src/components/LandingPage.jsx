@@ -29,9 +29,9 @@ import {
   X,
   AlertTriangle,
 } from 'lucide-react';
-import { getPublicFeatures } from '../config/features';
-import { FeatureCard } from './FeatureCard';
 import { authenticateStaffLogin } from '../services/data/staffService';
+import { provisionTenant, slugify } from '../services/tenantProvisioning';
+import { getMicrositeUrl, getTenantPosUrl } from '../lib/tenantConfig';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
@@ -43,13 +43,20 @@ const stagger = {
   visible: { transition: { staggerChildren: 0.12 } },
 };
 
-export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
+export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestaurants }) {
   const [formData, setFormData] = useState({
     restaurantName: '',
     email: '',
     phone: '',
     location: '',
   });
+
+  useEffect(() => {
+    const openOnboarding = () => setShowOnboardModal(true);
+    window.addEventListener('manipos:open-onboarding', openOnboarding);
+    return () => window.removeEventListener('manipos:open-onboarding', openOnboarding);
+  }, []);
+
   const [leadLoading, setLeadLoading] = useState(false);
   const [leadSuccess, setLeadSuccess] = useState(false);
   const [leadError, setLeadError] = useState('');
@@ -72,7 +79,9 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
     managerName: '', 
     locationsCount: '1 Location', 
     brandsCount: 'Single Brand (1)', 
-    phone: '' 
+    phone: '',
+    plan: 'growth',
+    cuisine: 'Nigerian'
   });
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardError, setOnboardError] = useState('');
@@ -95,111 +104,32 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
     setOnboardLoading(true);
     setOnboardError('');
     try {
-      const cleanSlug = onboardData.slug.toLowerCase().trim();
-      const cleanEmail = onboardData.email.toLowerCase().trim();
-      const managerName = onboardData.managerName || 'Store Owner';
-      let resultData = null;
+      const result = await provisionTenant({
+        name: onboardData.name,
+        slug: slugify(onboardData.slug),
+        email: onboardData.email,
+        password: onboardData.password,
+        managerName: onboardData.managerName || 'Store Owner',
+        locations: onboardData.locationsCount,
+        brands: onboardData.brandsCount,
+        phone: onboardData.phone,
+        plan: onboardData.plan || 'growth',
+        cuisine: onboardData.cuisine || null,
+        seedDemoData: true,
+      });
 
-      try {
-        const { data, error } = await supabase.rpc('create_new_restaurant_tenant', {
-          p_name: onboardData.name,
-          p_slug: cleanSlug,
-          p_email: cleanEmail,
-          p_password: onboardData.password,
-          p_manager_name: managerName,
-          p_locations: onboardData.locationsCount,
-          p_brands: onboardData.brandsCount,
-          p_phone: onboardData.phone || null
-        });
-
-        if (!error && data && data.success) {
-          resultData = data;
-        } else if (data && !data.success && data.error) {
-          throw new Error(data.error);
-        }
-      } catch (rpcErr) {
-        if (rpcErr.message && (rpcErr.message.includes('already taken') || rpcErr.message.includes('already exists') || rpcErr.message.includes('at least 8'))) {
-          throw rpcErr;
-        }
-        console.warn('[Onboarding] RPC notice, using direct table fallback:', rpcErr);
+      if (!result.success) {
+        throw new Error(result.error || 'Error creating store account.');
       }
 
-      // Direct Table Insertion Fallback if RPC is not available in schema cache
-      if (!resultData) {
-        const { data: existingStore } = await supabase
-          .from('restaurants')
-          .select('id')
-          .eq('slug', cleanSlug)
-          .maybeSingle();
-
-        if (existingStore) {
-          throw new Error('Restaurant subdomain slug is already taken. Please choose another name.');
-        }
-
-        const { data: existingStaff } = await supabase
-          .from('staff_access')
-          .select('id')
-          .eq('email', cleanEmail)
-          .maybeSingle();
-
-        if (existingStaff) {
-          throw new Error('An account with this email address already exists. Please sign in.');
-        }
-
-        const { data: newStore, error: createStoreErr } = await supabase
-          .from('restaurants')
-          .insert([{
-            name: onboardData.name,
-            slug: cleanSlug,
-            status: 'pending',
-            is_active: true
-          }])
-          .select()
-          .single();
-
-        if (createStoreErr) throw new Error(createStoreErr.message || 'Error creating restaurant account.');
-
-        await supabase.from('staff_access').insert([{
-          restaurant_id: newStore.id,
-          name: managerName,
-          email: cleanEmail,
-          role: 'admin',
-          pin_code: null
-        }]);
-
-        await supabase.from('restaurant_settings').insert([{
-          restaurant_id: newStore.id,
-          phone: onboardData.phone || null,
-          locations_count: onboardData.locationsCount,
-          brands_count: onboardData.brandsCount
-        }]);
-
-        resultData = {
-          success: true,
-          restaurant_id: newStore.id,
-          restaurant_slug: cleanSlug,
-          restaurant_name: onboardData.name,
-          manager_name: managerName
-        };
-      }
-
-      // Registration submitted: Require Super Admin approval before granting session
-      setOnboardSuccess(resultData);
+      setOnboardSuccess({
+        ...result,
+        micrositeUrl: getMicrositeUrl(result.restaurant_slug),
+        posUrl: getTenantPosUrl(result.restaurant_slug),
+      });
       localStorage.removeItem('pin_staff_user');
     } catch (err) {
-      const errMsg = err.message || 'Error creating store account.';
-      if (errMsg.includes('schema cache')) {
-        const pendingFallback = {
-          success: true,
-          restaurant_name: onboardData.name,
-          restaurant_slug: onboardData.slug.toLowerCase().trim(),
-          manager_name: onboardData.managerName || 'Store Owner'
-        };
-        setOnboardSuccess(pendingFallback);
-        localStorage.removeItem('pin_staff_user');
-      } else {
-        setOnboardError(errMsg);
-      }
+      setOnboardError(err.message || 'Error creating store account.');
     } finally {
       setOnboardLoading(false);
     }
@@ -286,11 +216,51 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
     },
   ];
 
+  const pricingPlans = [
+    {
+      name: 'Starter',
+      price: '2,500',
+      period: '/month',
+      tagline: 'For one outlet finding its feet.',
+      features: ['1 outlet & 1 brand', 'Cloud POS + offline mode', 'Digital QR menu & online ordering', 'Kitchen display (1 screen)', 'M-Pesa & card reconciliation', 'Daily sales reports'],
+      cta: 'Start 14-day trial',
+      highlight: false,
+    },
+    {
+      name: 'Growth',
+      price: '5,500',
+      period: '/month',
+      tagline: 'For busy restaurants scaling service.',
+      features: ['Up to 3 outlets & 5 brands', 'Everything in Starter', 'Floor plan & reservations', 'Inventory + recipe deduction', 'Customer CRM & loyalty campaigns', 'Staff roles, shifts & audit logs', 'Priority WhatsApp support'],
+      cta: 'Start 14-day trial',
+      highlight: true,
+    },
+    {
+      name: 'Pro',
+      price: '12,500',
+      period: '/month',
+      tagline: 'For restaurant groups and franchises.',
+      features: ['Unlimited outlets & brands', 'Everything in Growth', 'Multi-branch consolidation', 'Delivery channel integrations', 'API & webhook access', 'Dedicated onboarding manager', '99.9% uptime SLA'],
+      cta: 'Talk to sales',
+      highlight: false,
+    },
+  ];
+
+  const integrations = [
+    { name: 'M-Pesa Paybill', desc: 'Reconcile Paybill & Till payments automatically.', color: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/20' },
+    { name: 'Uber Eats', desc: 'Menu sync and order intake in one queue.', color: 'from-white/10 to-white/[0.02] border-white/10' },
+    { name: 'Glovo', desc: 'Delivery orders without a second tablet.', color: 'from-yellow-500/20 to-yellow-500/5 border-yellow-500/20' },
+    { name: 'Bolt Food', desc: 'Push menus and accept orders instantly.', color: 'from-lime-500/20 to-lime-500/5 border-lime-500/20' },
+    { name: 'Thermal printers', desc: 'ESC/POS receipts & kitchen tickets over QZ Tray.', color: 'from-sky-500/20 to-sky-500/5 border-sky-500/20' },
+    { name: 'WhatsApp', desc: 'Order confirmations, receipts and feedback links.', color: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/20' },
+  ];
+
+
   const stats = [
-    { value: '4', label: 'Core Modules', suffix: '' },
+    { value: '4', label: 'Connected workspaces', suffix: '' },
     { value: '99.9', label: 'Uptime SLA', suffix: '%' },
-    { value: '0', label: 'Hardware Lock-In', prefix: '$' },
-    { value: '24/7', label: 'Support Access', suffix: '' },
+    { value: '0', label: 'Hardware lock-in', suffix: '' },
+    { value: '24/7', label: 'Support access', suffix: '' },
   ];
 
   return (
@@ -306,14 +276,21 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
           </div>
 
           {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold text-white/60">
+          <nav className="hidden lg:flex items-center gap-7 text-sm font-semibold text-white/60">
             <a href="#features" className="hover:text-amber-400 transition-colors">Features</a>
-            <a href="#outlets" className="hover:text-amber-400 transition-colors">Whom We Serve</a>
-            <a href="#why" className="hover:text-amber-400 transition-colors">Why ManiPOS</a>
+            <a href="#pricing" className="hover:text-amber-400 transition-colors">Pricing</a>
+            <a href="#outlets" className="hover:text-amber-400 transition-colors">Who it’s for</a>
+            <a href="#integrations" className="hover:text-amber-400 transition-colors">Integrations</a>
             <a href="#faq" className="hover:text-amber-400 transition-colors">FAQ</a>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={onBrowseRestaurants}
+              className="hidden md:flex bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer items-center gap-1.5 border border-white/10"
+            >
+              <Utensils size={14} /> Order food
+            </button>
             <button
               onClick={() => setShowSignInModal(true)}
               className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
@@ -322,16 +299,10 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
             </button>
             <button
               onClick={() => setShowOnboardModal(true)}
-              className="bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-white/10"
+              className="hidden sm:flex bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer items-center gap-1.5 border border-white/10"
             >
               <span>+ Create Restaurant</span>
             </button>
-            <a
-              href="#signup"
-              className="hidden sm:flex bg-white/10 hover:bg-white/20 text-white/80 hover:text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all items-center gap-1.5"
-            >
-              Demo <ArrowRight size={14} />
-            </a>
             <button
               className="lg:hidden text-white/60 hover:text-white cursor-pointer"
               onClick={() => setMobileMenuOpen(v => !v)}
@@ -352,9 +323,12 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
             >
               <div className="px-6 py-4 flex flex-col gap-4 text-sm font-semibold text-white/60">
                 <a href="#features" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Features</a>
-                <a href="#outlets" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Whom We Serve</a>
-                <a href="#why" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Why ManiPOS</a>
+                <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Pricing</a>
+                <a href="#outlets" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Who it’s for</a>
+                <a href="#integrations" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Integrations</a>
                 <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">FAQ</a>
+                <button onClick={() => { setMobileMenuOpen(false); onBrowseRestaurants?.(); }} className="text-left text-amber-400 font-bold">Order food →</button>
+                <button onClick={() => { setMobileMenuOpen(false); setShowOnboardModal(true); }} className="text-left text-white font-bold">Create restaurant →</button>
               </div>
             </motion.div>
           )}
@@ -391,13 +365,19 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
                 A cloud-based POS and restaurant management software system that helps you grow your sales. Built for single outlets, multi-brand cloud kitchens, and multi-location dining groups to manage billing, kitchen displays, and guest menus in real time.
               </motion.p>
 
-              <motion.div variants={fadeUp} className="flex flex-wrap gap-4">
-                <a
-                  href="#signup"
-                  className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-black font-black text-sm px-7 py-4 rounded-xl transition-all shadow-2xl shadow-amber-400/20"
+              <motion.div variants={fadeUp} className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setShowOnboardModal(true)}
+                  className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-black font-black text-sm px-7 py-4 rounded-xl transition-all shadow-2xl shadow-amber-400/20 cursor-pointer"
                 >
-                  Request a Live Demo <ArrowRight size={16} />
-                </a>
+                  Start free trial <ArrowRight size={16} />
+                </button>
+                <button
+                  onClick={onBrowseRestaurants}
+                  className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-black text-sm px-7 py-4 rounded-xl transition-all border border-white/10 cursor-pointer"
+                >
+                  <Utensils size={16} /> Order from a kitchen
+                </button>
               </motion.div>
 
               {/* Trust badges */}
@@ -543,29 +523,6 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
               ) : null
             )}
           </AnimatePresence>
-        </div>
-      </section>
-
-      {/* ── MORE FEATURES GRID ── */}
-      <section className="py-10 pb-28 px-6">
-        <div className="max-w-7xl mx-auto space-y-10">
-          <div className="text-center space-y-3">
-            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
-              System Capabilities & Development Roadmap
-            </div>
-            <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-              Production Capabilities & Feature Roadmap
-            </h3>
-            <p className="text-white/50 text-base max-w-xl mx-auto font-medium">
-              Features marked LIVE are ready for production store operations. Modules in active development are clearly marked as Coming Soon.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {getPublicFeatures().map((feat, i) => (
-              <FeatureCard key={feat.id} feature={feat} index={i} />
-            ))}
-          </div>
         </div>
       </section>
 
@@ -746,6 +703,106 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
         </div>
       </section>
 
+      {/* ── PRICING ── */}
+      <section id="pricing" className="py-24 px-6 border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto space-y-12">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
+              Simple pricing
+            </div>
+            <h2 className="text-4xl sm:text-5xl font-black tracking-tight">One flat price. No commissions.</h2>
+            <p className="text-white/50 text-lg max-w-2xl mx-auto font-medium">
+              Every plan includes unlimited staff, offline mode, M-Pesa reconciliation and free updates. Cancel anytime.
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
+            {pricingPlans.map((plan, index) => (
+              <motion.div
+                key={plan.name}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.08 }}
+                className={`relative rounded-3xl border p-7 flex flex-col gap-5 ${plan.highlight ? 'bg-gradient-to-b from-amber-400/15 to-white/[0.03] border-amber-400/50 shadow-2xl shadow-amber-400/10' : 'bg-white/[0.03] border-white/[0.08]'}`}
+              >
+                {plan.highlight && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
+                    Most popular
+                  </span>
+                )}
+                <div>
+                  <h3 className="text-lg font-black">{plan.name}</h3>
+                  <p className="text-xs text-white/45 font-medium mt-1">{plan.tagline}</p>
+                </div>
+                <div className="flex items-end gap-1">
+                  <span className="text-4xl font-black text-amber-400">KSh {plan.price}</span>
+                  <span className="text-xs font-bold text-white/40 mb-1">{plan.period}</span>
+                </div>
+                <ul className="space-y-2.5 flex-1">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-xs font-semibold text-white/70">
+                      <CheckCircle2 size={14} className="text-emerald-400 mt-0.5 shrink-0" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => setShowOnboardModal(true)}
+                  className={`w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer ${plan.highlight ? 'bg-amber-400 hover:bg-amber-300 text-slate-950' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
+                >
+                  {plan.cta}
+                </button>
+              </motion.div>
+            ))}
+          </div>
+
+          <p className="text-center text-[11px] text-white/35 font-semibold">
+            Prices exclude VAT. Restaurant groups above 10 outlets: custom pricing & SLA. All plans include a 14-day free trial.
+          </p>
+        </div>
+      </section>
+
+      {/* ── INTEGRATIONS ── */}
+      <section id="integrations" className="py-24 px-6 bg-white/[0.015] border-y border-white/[0.05]">
+        <div className="max-w-7xl mx-auto space-y-12">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center space-y-3"
+          >
+            <div className="inline-block bg-amber-400/10 text-amber-400 font-bold text-xs px-4 py-1.5 rounded-full uppercase tracking-wider border border-amber-400/20">
+              Connected stack
+            </div>
+            <h2 className="text-4xl sm:text-5xl font-black tracking-tight">Plays nicely with your kitchen</h2>
+            <p className="text-white/50 text-lg max-w-2xl mx-auto font-medium">
+              Payments, delivery marketplaces, printers and messaging — synced into one operating picture.
+            </p>
+          </motion.div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {integrations.map((integration, index) => (
+              <motion.div
+                key={integration.name}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05 }}
+                className={`rounded-2xl border bg-gradient-to-br p-5 ${integration.color}`}
+              >
+                <h3 className="font-black text-sm">{integration.name}</h3>
+                <p className="text-xs text-white/45 font-medium mt-1 leading-relaxed">{integration.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA BANNER ── */}
       <section className="py-12 px-6">
         <div className="max-w-7xl mx-auto">
@@ -766,12 +823,18 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
                 Join fast-growing restaurants leveraging ManiPOS to boost revenue and streamline kitchen operations.
               </p>
               <div className="flex flex-wrap justify-center gap-4 pt-2">
-                <a
-                  href="#signup"
-                  className="inline-flex items-center gap-2 bg-black hover:bg-zinc-900 text-white font-black text-sm px-8 py-4 rounded-xl transition-all shadow-xl"
+                <button
+                  onClick={() => setShowOnboardModal(true)}
+                  className="inline-flex items-center gap-2 bg-black hover:bg-zinc-900 text-white font-black text-sm px-8 py-4 rounded-xl transition-all shadow-xl cursor-pointer"
                 >
-                  Request Demo <ArrowRight size={16} />
-                </a>
+                  Start free trial <ArrowRight size={16} />
+                </button>
+                <button
+                  onClick={onBrowseRestaurants}
+                  className="inline-flex items-center gap-2 bg-white/30 hover:bg-white/50 text-black font-black text-sm px-8 py-4 rounded-xl transition-all border border-black/10 cursor-pointer"
+                >
+                  <Utensils size={16} /> Order from a kitchen
+                </button>
               </div>
             </div>
           </motion.div>
@@ -943,23 +1006,35 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
 
       {/* ── FOOTER ── */}
       <footer className="border-t border-white/[0.06] py-10 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5 text-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center font-black text-black text-sm">M</div>
-            <span className="font-extrabold text-white">ManiPOS</span>
-            <span className="text-white/30">• Cloud Restaurant POS & Management System</span>
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-5 text-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center font-black text-black text-sm">M</div>
+              <span className="font-extrabold text-white">ManiPOS</span>
+              <span className="text-white/30 hidden sm:inline">• Cloud Restaurant POS & Management System</span>
+            </div>
+            <div className="flex items-center gap-5 flex-wrap justify-center">
+              <button onClick={onBrowseRestaurants} className="text-xs font-bold text-white/50 hover:text-amber-400 transition-colors cursor-pointer">Order food</button>
+              <a href="#pricing" className="text-xs font-bold text-white/50 hover:text-amber-400 transition-colors">Pricing</a>
+              <a href="?page=status" className="text-xs font-bold text-white/50 hover:text-amber-400 transition-colors">Status</a>
+              <button
+                onClick={() => {
+                  if (onSwitchToRetail) onSwitchToRetail();
+                  else window.location.href = '/?mode=retail';
+                }}
+                className="text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                Retail POS &rarr;
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => {
-                if (onSwitchToRetail) onSwitchToRetail();
-                else window.location.href = '/?mode=retail';
-              }}
-              className="text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>Looking for Retail POS (Supermarkets & Shops)? &rarr;</span>
-            </button>
-            <p className="text-white/30 font-semibold text-xs">© {new Date().getFullYear()} ManiPOS. All rights reserved.</p>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/[0.05] text-[11px] text-white/30 font-semibold">
+            <p>© {new Date().getFullYear()} ManiPOS. All rights reserved. Built in Nairobi for African restaurants.</p>
+            <div className="flex items-center gap-4">
+              <a href="?page=privacy" className="hover:text-white/60">Privacy</a>
+              <a href="?page=terms" className="hover:text-white/60">Terms</a>
+              <a href="mailto:support@manipos.com" className="hover:text-white/60">support@manipos.com</a>
+            </div>
           </div>
         </div>
       </footer>
@@ -989,15 +1064,38 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
               </div>
 
               {onboardSuccess ? (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6 text-center space-y-3">
-                  <div className="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-xl font-black">⏳</div>
-                  <h4 className="text-lg font-bold text-white">Registration Submitted Successfully!</h4>
-                  <p className="text-slate-300 text-xs leading-relaxed">
-                    Thank you <span className="font-bold text-amber-400">{onboardSuccess.restaurant_name}</span>. Your restaurant account has been created with status <span className="font-mono text-amber-400 font-bold">PENDING APPROVAL</span>.
-                  </p>
-                  <p className="text-slate-400 text-xs bg-slate-950 p-3 rounded-xl border border-slate-800">
-                    ManiPOS Platform Super Admin review is required before logging into POS or Management Workspaces.
-                  </p>
+                <div className="space-y-4">
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-2">
+                    <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+                      <CheckCircle2 size={24} />
+                    </div>
+                    <h4 className="text-lg font-bold text-white">Your restaurant is ready</h4>
+                    <p className="text-slate-300 text-xs leading-relaxed">
+                      <span className="font-bold text-emerald-400">{onboardSuccess.restaurant_name}</span> was created with a 14-day trial. Your storefront code is <span className="font-mono text-amber-400 font-bold">{onboardSuccess.restaurant_slug}</span>.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
+                    <p className="font-black text-white uppercase tracking-wider text-[10px]">Your links</p>
+                    <a href={onboardSuccess.micrositeUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 text-slate-300 hover:text-amber-400 font-semibold">
+                      <span className="truncate">Guest menu & ordering</span>
+                      <ArrowRight size={13} className="shrink-0" />
+                    </a>
+                    <a href={onboardSuccess.posUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 text-slate-300 hover:text-amber-400 font-semibold">
+                      <span className="truncate">POS terminal login</span>
+                      <ArrowRight size={13} className="shrink-0" />
+                    </a>
+                    <p className="text-slate-500 leading-relaxed pt-1 border-t border-slate-800">
+                      Next: sign in, add your menu items, connect your M-Pesa Paybill, and invite staff. Accounts are reviewed within 24 hours for card payments; POS and online ordering work immediately.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => { setShowOnboardModal(false); setShowSignInModal(true); setSignInEmail(onboardData.email); }}
+                    className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    Sign in to your workspace <ArrowRight size={16} />
+                  </button>
                 </div>
               ) : (
                 <form onSubmit={handleSelfServiceOnboard} className="space-y-4">
@@ -1089,6 +1187,31 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail }) {
                         <option value="Single Brand (1)">Single Brand (1)</option>
                         <option value="2 - 5 Brands (Virtual Kitchens)">2 - 5 Brands (Virtual Kitchens)</option>
                         <option value="6+ Brands">6+ Brands (Enterprise)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Plan</label>
+                      <select
+                        value={onboardData.plan}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, plan: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
+                      >
+                        <option value="starter">Starter — KSh 2,500/mo</option>
+                        <option value="growth">Growth — KSh 5,500/mo</option>
+                        <option value="pro">Pro — KSh 12,500/mo</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Cuisine</label>
+                      <select
+                        value={onboardData.cuisine}
+                        onChange={(e) => setOnboardData(prev => ({ ...prev, cuisine: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
+                      >
+                        {['Nigerian', 'Kenyan', 'East African', 'Italian', 'Indian', 'Chinese', 'Cafe & Bakery', 'Fast Food', 'Fine Dining', 'Other'].map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </div>

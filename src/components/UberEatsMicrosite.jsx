@@ -11,17 +11,55 @@ import { supabase } from '../lib/supabase';
 import ubereatsMenuData from '../data/ubereats_menu.json';
 
 const CONFIG_ROW_ID = '00000000-0000-0000-0000-000000000001';
-const CACHE_KEY = 'poj_microsite_overrides_cache';
+
+function normaliseTenantMenu(tenant) {
+    if (!tenant?.menu?.length) return null;
+    const groups = new Map();
+    tenant.menu.forEach((item, index) => {
+        if (item.is_available === false) return;
+        const category = item.category || 'Menu';
+        if (!groups.has(category)) groups.set(category, []);
+        groups.get(category).push({
+            id: item.id || `tenant-item-${index}`,
+            title: item.name || item.title || 'Menu item',
+            description: item.description || '',
+            price: Number(item.price) || 0,
+            image_url: item.image_url || tenant.logo,
+            category,
+            hasCustomizations: false,
+            modifiers: [],
+            isSoldOut: false,
+            isPopular: false,
+            rating: null,
+        });
+    });
+    return {
+        store: {
+            name: tenant.name,
+            subtitle: [tenant.cuisine, tenant.city].filter(Boolean).join(' • ') || 'Fresh food, made to order',
+            rating: tenant.rating || 4.8,
+            delivery_time: `Delivery in ${tenant.etaMinutes || '30–45 min'}`,
+            delivery_fee: tenant.freeDeliveryOver
+                ? `Free delivery over ${tenant.currencySymbol || 'KSh'} ${Number(tenant.freeDeliveryOver).toLocaleString()}`
+                : `Delivery from ${tenant.currencySymbol || 'KSh'} ${Number(tenant.deliveryFee || 0).toLocaleString()}`,
+            address: tenant.address || tenant.city || '',
+            hero_image: tenant.cover,
+            logo: tenant.logo,
+        },
+        categories: Array.from(groups.entries()).map(([name, items]) => ({ name, items })),
+    };
+}
+
 
 // ─── Order Rating Widget (Integrated Feedback Infrastructure) ───
-export function OrderRatingWidget({ order, onRated }) {
+export function OrderRatingWidget({ order, tenant, onRated }) {
     const [rating, setRating] = useState(5);
     const [hoverRating, setHoverRating] = useState(0);
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const orderTicket = order?.ticketNumber || order?.ticket_number || 'ONLINE';
     const [submitted, setSubmitted] = useState(() => {
-        return typeof window !== 'undefined' && localStorage.getItem(`poj_rated_order_${orderTicket}`) === 'true';
+        return typeof window !== 'undefined' && localStorage.getItem(`manipos_rated_${tenant?.slug || 'online'}_${orderTicket}`) === 'true';
     });
 
     const RATING_EMOJIS = [
@@ -39,12 +77,12 @@ export function OrderRatingWidget({ order, onRated }) {
         const dining = order?.diningOption || order?.dining_option || 'Delivery';
         const customer = order?.customerName || order?.customer_name || 'Online Guest';
         const contact = order?.customerPhone || order?.customer_contact || 'N/A';
-        const brand = 'Pot of Jollof Kitchen';
+        const brand = tenant?.name || 'Restaurant';
 
         try {
             // 1. Live Supabase pos_feedback (core POS & CRM feedback table)
             const posPayload = {
-                tenant_id: 'potofjollof',
+                tenant_id: tenant?.slug || 'online',
                 rating: rating || 5,
                 category: brand,
                 comment: `[Method: ${dining}] [Ticket: #${ticket}] ${comment.trim() || 'Order completed via microsite'}`,
@@ -73,7 +111,7 @@ export function OrderRatingWidget({ order, onRated }) {
             } catch (_) {}
 
             if (typeof window !== 'undefined') {
-                localStorage.setItem(`poj_rated_order_${ticket}`, 'true');
+                localStorage.setItem(`manipos_rated_${tenant?.slug || 'online'}_${ticket}`, 'true');
             }
             setSubmitted(true);
             if (onRated) onRated(rating);
@@ -161,15 +199,16 @@ export function OrderRatingWidget({ order, onRated }) {
 }
 
 // Interactive Order Success & M-Pesa Payment Verification Modal Component
-const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSettings }) => {
+const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSettings, tenant }) => {
     const [copiedPaybill, setCopiedPaybill] = useState(false);
     const [copiedAccount, setCopiedAccount] = useState(false);
     const [inputMpesaCode, setInputMpesaCode] = useState(orderSuccess?.mpesaCode || '');
     const [isUpdating, setIsUpdating] = useState(false);
 
-    const paybillNo = whatsappSettings?.paybill_number || '542542';
-    const accountNo = whatsappSettings?.account_number || '992422';
-    const whatsappPhone = '254795384140';
+    const paybillNo = whatsappSettings?.paybill_number || tenant?.paybill || '';
+    const accountNo = whatsappSettings?.account_number || tenant?.account || '';
+    const whatsappPhone = (tenant?.whatsapp || '').replace(/[^0-9]/g, '');
+    const currency = tenant?.currencySymbol || 'KES';
 
     // Realtime WebSockets + 2s Polling Engine to automatically update customer screen when cashier accepts order
     useEffect(() => {
@@ -308,7 +347,7 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex justify-between items-center text-left">
                             <div>
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">Total Amount Due</span>
-                                <span className="text-2xl font-black text-black font-mono">KES {orderSuccess.total.toLocaleString()}</span>
+                                <span className="text-2xl font-black text-black font-mono">{currency} {orderSuccess.total.toLocaleString()}</span>
                             </div>
                             <span className="px-2.5 py-1 bg-amber-500/10 text-amber-700 border border-amber-500/20 text-[10px] font-black uppercase rounded-lg">
                                 Pending M-Pesa
@@ -317,45 +356,56 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
 
                         {/* Paybill & Account Number Card */}
                         <div className="bg-amber-50/70 border-2 border-amber-300/50 rounded-2xl p-4 text-left space-y-3">
-                            <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
-                                <div>
-                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">M-Pesa Paybill</span>
-                                    <span className="text-xl font-black text-black font-mono">{paybillNo}</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(paybillNo);
-                                        setCopiedPaybill(true);
-                                        setTimeout(() => setCopiedPaybill(false), 2000);
-                                    }}
-                                    className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
-                                >
-                                    {copiedPaybill ? '✓ Copied' : 'Copy Paybill'}
-                                </button>
-                            </div>
+                            {paybillNo && accountNo ? (
+                                <>
+                                    <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
+                                        <div>
+                                            <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">M-Pesa Paybill</span>
+                                            <span className="text-xl font-black text-black font-mono">{paybillNo}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(paybillNo);
+                                                setCopiedPaybill(true);
+                                                setTimeout(() => setCopiedPaybill(false), 2000);
+                                            }}
+                                            className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
+                                        >
+                                            {copiedPaybill ? '✓ Copied' : 'Copy Paybill'}
+                                        </button>
+                                    </div>
 
-                            <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
-                                <div>
-                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">Account Number</span>
-                                    <span className="text-xl font-black text-black font-mono">{accountNo}</span>
+                                    <div className="flex items-center justify-between bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
+                                        <div>
+                                            <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">Account Number</span>
+                                            <span className="text-xl font-black text-black font-mono">{accountNo}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(accountNo);
+                                                setCopiedAccount(true);
+                                                setTimeout(() => setCopiedAccount(false), 2000);
+                                            }}
+                                            className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
+                                        >
+                                            {copiedAccount ? '✓ Copied' : 'Copy Account'}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="bg-white border border-amber-200 rounded-xl p-3 shadow-xs">
+                                    <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest">Payment</span>
+                                    <p className="text-xs font-bold text-gray-800 mt-1">
+                                        Pay on delivery or at the counter. Tap “Mark Paid” once you have paid, and our team will confirm your order.
+                                    </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(accountNo);
-                                        setCopiedAccount(true);
-                                        setTimeout(() => setCopiedAccount(false), 2000);
-                                    }}
-                                    className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
-                                >
-                                    {copiedAccount ? '✓ Copied' : 'Copy Account'}
-                                </button>
-                            </div>
+                            )}
 
                             {/* Optional Confirmation Code Field */}
                             <div className="pt-1">
-                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wider block mb-1">M-Pesa Confirmation Code (Optional)</label>
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wider block mb-1">Payment Confirmation Code (Optional)</label>
                                 <input
                                     type="text"
                                     placeholder="e.g. QGH8912X4"
@@ -413,7 +463,7 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                             </div>
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-gray-400 font-bold uppercase tracking-wider">Total Amount</span>
-                                <span className="font-mono font-black text-emerald-600 text-sm">KES {orderSuccess.total.toLocaleString()}</span>
+                                <span className="font-mono font-black text-emerald-600 text-sm">{currency} {orderSuccess.total.toLocaleString()}</span>
                             </div>
                             {orderSuccess.mpesaCode && (
                                 <div className="flex justify-between items-center text-xs pt-1.5 border-t border-gray-200">
@@ -426,7 +476,7 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                         {/* Share Confirmation Code to WhatsApp Button */}
                         <a
                             href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
-                                `Hello Pot of Jollof! I have sent M-Pesa payment of KES ${orderSuccess.total.toLocaleString()} for Order #${orderSuccess.ticketNumber}${orderSuccess.mpesaCode ? ` (M-Pesa Code: ${orderSuccess.mpesaCode})` : ''}. Please verify and accept my order!`
+                                `Hello ${tenant?.name || 'there'}! I have sent ${currency} ${orderSuccess.total.toLocaleString()} for Order #${orderSuccess.ticketNumber}${orderSuccess.mpesaCode ? ` (Payment Code: ${orderSuccess.mpesaCode})` : ''}. Please verify and accept my order!`
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -471,7 +521,7 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                         </div>
 
                         {/* Integrated Order Rating & Experience Feedback */}
-                        <OrderRatingWidget order={orderSuccess} />
+                        <OrderRatingWidget order={orderSuccess} tenant={tenant} />
 
                         <button
                             onClick={() => setOrderSuccess(null)}
@@ -503,7 +553,16 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
     );
 };
 
-export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
+export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }) {
+    const tenantSlug = tenant?.slug || 'online';
+    const guestKey = `manipos_guest_${tenantSlug}`;
+    const cartKey = `manipos_cart_${tenantSlug}`;
+    const CACHE_KEY = `manipos_microsite_overrides_${tenantSlug}`;
+
+    // Prefer the tenant's own menu, then fall back to the legacy showcase menu.
+    const tenantMenu = useMemo(() => normaliseTenantMenu(tenant), [tenant]);
+    const sourceMenu = tenantMenu || ubereatsMenuData;
+
     // Dynamic Overrides State
     const [menuOverrides, setMenuOverrides] = useState(() => {
         try {
@@ -532,11 +591,11 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     }, []);
 
     // Menu & Store State
-    const store = ubereatsMenuData.store;
+    const store = sourceMenu.store || ubereatsMenuData.store;
     
     // Compute categories with dynamic overrides merged in
     const allCategories = useMemo(() => {
-        return ubereatsMenuData.categories.map(cat => ({
+        return (sourceMenu.categories || []).map(cat => ({
             ...cat,
             items: cat.items.map(item => {
                 const override = menuOverrides[item.id];
@@ -550,13 +609,19 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                 };
             })
         }));
-    }, [menuOverrides]);
+    }, [menuOverrides, sourceMenu]);
 
     // UI state
     const [searchQuery, setSearchQuery] = useState('');
     const [diningMode, setDiningMode] = useState('delivery'); // 'delivery' | 'pickup' | 'dine_in'
     const [tableNumber, setTableNumber] = useState('');
-    const [activeCategory, setActiveCategory] = useState(ubereatsMenuData.categories[0]?.name || 'Most Popular');
+    const [activeCategory, setActiveCategory] = useState(sourceMenu.categories[0]?.name || 'Most Popular');
+
+    useEffect(() => {
+        if (!sourceMenu.categories.some((cat) => cat.name === activeCategory)) {
+            setActiveCategory(sourceMenu.categories[0]?.name || '');
+        }
+    }, [activeCategory, sourceMenu]);
     const [selectedItem, setSelectedItem] = useState(null); // for item modal
     const [cartOpen, setCartOpen] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
@@ -568,7 +633,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     // Customer Account / Guest CRM States
     const [guestUser, setGuestUser] = useState(() => {
         try {
-            const saved = localStorage.getItem('mute_kitchens_guest');
+            const saved = localStorage.getItem(guestKey);
             return saved ? JSON.parse(saved) : null;
         } catch {
             return null;
@@ -590,7 +655,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     // Cart state
     const [cart, setCart] = useState(() => {
         try {
-            const saved = localStorage.getItem('poj_ubereats_cart');
+            const saved = localStorage.getItem(cartKey);
             return saved ? JSON.parse(saved) : [];
         } catch {
             return [];
@@ -600,7 +665,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     // Customer Checkout State
     const [customerName, setCustomerName] = useState(() => {
         try {
-            const saved = localStorage.getItem('mute_kitchens_guest');
+            const saved = localStorage.getItem(guestKey);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 return `${parsed.first_name || ''} ${parsed.last_name || ''}`.trim();
@@ -610,7 +675,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     });
     const [customerPhone, setCustomerPhone] = useState(() => {
         try {
-            const saved = localStorage.getItem('mute_kitchens_guest');
+            const saved = localStorage.getItem(guestKey);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 return parsed.phone || '';
@@ -620,7 +685,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     });
     const [deliveryAddress, setDeliveryAddress] = useState(() => {
         try {
-            const saved = localStorage.getItem('mute_kitchens_guest');
+            const saved = localStorage.getItem(guestKey);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 return parsed.delivery_address || '';
@@ -636,42 +701,54 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(null);
     const [whatsappSettings, setWhatsappSettings] = useState({
-        paybill_number: '542542',
-        account_number: '992422',
-        base_delivery_fee: 100,
+        paybill_number: tenant?.paybill || '',
+        account_number: tenant?.account || '',
+        base_delivery_fee: tenant?.deliveryFee ?? 100,
         base_delivery_distance: 3,
         delivery_fee_per_km: 50,
         packaging_fee: 0,
-        store_lat: -1.2943,
-        store_lng: 36.7953
+        store_lat: tenant?.lat ?? -1.2943,
+        store_lng: tenant?.lng ?? 36.7953
     });
 
     useEffect(() => {
+        setWhatsappSettings(prev => ({
+            ...prev,
+            paybill_number: tenant?.paybill || prev.paybill_number,
+            account_number: tenant?.account || prev.account_number,
+        }));
+    }, [tenant?.paybill, tenant?.account]);
+
+    useEffect(() => {
+        let cancelled = false;
         const fetchWaSettings = async () => {
             try {
-                const { data } = await supabase
+                let query = supabase
                     .from('pos_channels')
                     .select('*')
-                    .eq('name', 'whatsapp')
-                    .maybeSingle();
-                if (data) {
+                    .eq('name', 'whatsapp');
+                if (tenant?.id) query = query.eq('restaurant_id', tenant.id);
+                const { data, error } = await query.limit(1);
+                const channel = !error ? data?.[0] : null;
+                if (channel && !cancelled) {
                     setWhatsappSettings({
-                        paybill_number: data.paybill_number || '542542',
-                        account_number: data.account_number || '992422',
-                        base_delivery_fee: data.base_delivery_fee ?? 100,
-                        base_delivery_distance: data.base_delivery_distance ?? 3,
-                        delivery_fee_per_km: data.delivery_fee_per_km ?? 50,
-                        packaging_fee: data.packaging_fee ?? 0,
-                        store_lat: data.store_lat ?? -1.2943,
-                        store_lng: data.store_lng ?? 36.7953
+                        paybill_number: channel.paybill_number || tenant?.paybill || '',
+                        account_number: channel.account_number || tenant?.account || '',
+                        base_delivery_fee: channel.base_delivery_fee ?? tenant?.deliveryFee ?? 100,
+                        base_delivery_distance: channel.base_delivery_distance ?? 3,
+                        delivery_fee_per_km: channel.delivery_fee_per_km ?? 50,
+                        packaging_fee: channel.packaging_fee ?? 0,
+                        store_lat: channel.store_lat ?? tenant?.lat ?? -1.2943,
+                        store_lng: channel.store_lng ?? tenant?.lng ?? 36.7953
                     });
                 }
             } catch (err) {
-                console.warn("Error fetching whatsapp settings:", err);
+                console.warn("Error fetching delivery settings:", err);
             }
         };
         fetchWaSettings();
-    }, []);
+        return () => { cancelled = true; };
+    }, [tenant?.id, tenant?.paybill, tenant?.account, tenant?.deliveryFee]);
 
     // Modal Customization State (when an item modal is open)
     const [modalQuantity, setModalQuantity] = useState(1);
@@ -682,7 +759,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     // Persist cart
     useEffect(() => {
         try {
-            localStorage.setItem('poj_ubereats_cart', JSON.stringify(cart));
+            localStorage.setItem(cartKey, JSON.stringify(cart));
         } catch {}
     }, [cart]);
 
@@ -779,7 +856,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                 setCustomerName(`${guest.first_name || ''} ${guest.last_name || ''}`.trim());
                 if (guest.phone) setCustomerPhone(guest.phone);
                 if (guest.delivery_address) setDeliveryAddress(guest.delivery_address);
-                localStorage.setItem('mute_kitchens_guest', JSON.stringify(guest));
+                localStorage.setItem(guestKey, JSON.stringify(guest));
                 fetchPastOrders(guest.id);
                 setAccountOpen(false);
                 setLoginInput('');
@@ -826,7 +903,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                     setCustomerName(`${newGuest.first_name || ''} ${newGuest.last_name || ''}`.trim());
                     if (newGuest.phone) setCustomerPhone(newGuest.phone);
                     if (newGuest.delivery_address) setDeliveryAddress(newGuest.delivery_address);
-                    localStorage.setItem('mute_kitchens_guest', JSON.stringify(newGuest));
+                    localStorage.setItem(guestKey, JSON.stringify(newGuest));
                     fetchPastOrders(newGuest.id);
                     setAccountOpen(false);
                     setLoginInput('');
@@ -842,7 +919,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
     };
 
     const handleGuestLogout = () => {
-        localStorage.removeItem('mute_kitchens_guest');
+        localStorage.removeItem(guestKey);
         setGuestUser(null);
         setCustomerName('');
         setCustomerPhone('');
@@ -1154,7 +1231,9 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                 total_amount: finalTotal,
                 discount: discountAmount,
                 cashier_name: 'Self-Service Microsite',
-                brand: 'POT OF JOLLOF',
+                brand: (tenant?.name || 'ManiPOS').toUpperCase(),
+                ...(tenant?.id ? { restaurant_id: tenant.id } : {}),
+                order_channel: 'Online',
                 notes: finalNotes,
                 guest_id: guestUser ? guestUser.id : null
             };
@@ -1242,7 +1321,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                             lifetime_spend: newSpend,
                             delivery_address: deliveryAddress.trim() || guestUser.delivery_address
                         };
-                        localStorage.setItem('mute_kitchens_guest', JSON.stringify(updatedGuest));
+                        localStorage.setItem(guestKey, JSON.stringify(updatedGuest));
                         setGuestUser(updatedGuest);
                     } catch (e) {
                         console.warn('CRM update note:', e);
@@ -1259,7 +1338,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                     return desc;
                 }).join('\n');
 
-                let message = `🍲 *NEW ORDER — POT OF JOLLOF KITCHEN*\n`;
+                let message = `🍲 *NEW ORDER — ${(tenant?.name || 'MANIPOS').toUpperCase()}*\n`;
                 message += `*Order Ticket:* #${orderData.ticket_number}\n`;
                 message += `─────────────────────────\n`;
                 message += `👤 *Customer:* ${customerName.trim()}\n`;
@@ -1284,10 +1363,12 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                 message += `🛵 *Delivery:* ${deliveryFee === 0 ? 'FREE (3km)' : `KES ${deliveryFee.toLocaleString()}`}\n`;
                 message += `💰 *TOTAL PAYABLE:* KES ${finalTotal.toLocaleString()}\n`;
                 message += `─────────────────────────\n`;
-                message += `_Sent via Pot of Jollof Digital Store_`;
+                message += `_Sent via ${tenant?.name || 'ManiPOS'} Digital Store_`;
 
-                const whatsappNumber = '254795384140';
-                window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank');
+                const whatsappNumber = (tenant?.whatsapp || '').replace(/[^0-9]/g, '');
+                if (whatsappNumber) {
+                    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank');
+                }
             }
 
             // 6. Set orderSuccess to open the interactive M-Pesa Payment Verification Modal!
@@ -1295,13 +1376,13 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                 orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
                 total: finalTotal,
-                brand: 'POT OF JOLLOF',
+                brand: (tenant?.name || 'ManiPOS').toUpperCase(),
                 items: cart.map(i => `${i.quantity}x ${i.title}`).join('\n'),
                 diningOption: diningOptionValue,
                 deliveryAddress: deliveryAddress,
                 notes: finalNotes,
-                customerName: guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : (deliveryPhone || 'Online Guest'),
-                customerPhone: deliveryPhone || (guestUser?.phone || ''),
+                customerName: customerName.trim() || (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : 'Online Guest'),
+                customerPhone: customerPhone.trim() || (guestUser?.phone || ''),
                 stage: 'payment_instructions',
                 mpesaCode: ''
             });
@@ -1330,13 +1411,13 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                     <div className="flex items-center gap-6">
                         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                             <img 
-                                src="/jollof_logo.png" 
-                                alt="Pot of Jollof" 
+                                src={store.logo || '/manipos_logo.png'}
+                                alt={store.name}
                                 className="w-9 h-9 object-contain rounded-xl shadow-sm bg-white"
-                                onError={(e) => { e.target.onerror = null; e.target.src = '/logo.png'; }}
+                                onError={(e) => { e.target.onerror = null; e.target.src = '/manipos_logo.png'; }}
                             />
                             <span className="font-black text-xl tracking-tight hidden sm:inline text-black">
-                                Pot of Jollof
+                                {store.name}
                             </span>
                         </div>
                     </div>
@@ -1345,9 +1426,9 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                     <div className="hidden md:flex items-center gap-2 text-xs text-[#545454] bg-[#f3f3f3] hover:bg-[#eaeaea] px-4 py-2 rounded-full cursor-pointer transition-colors"
                          onClick={() => setStoreInfoOpen(true)}>
                         <MapPin size={14} className="text-black" />
-                        <span className="font-medium text-black">Hurlingham, Nairobi</span>
+                        <span className="font-medium text-black">{store.address || 'Nairobi'}</span>
                         <span>•</span>
-                        <span className="text-[#06C167] font-semibold">Free within 3km</span>
+                        <span className="text-[#06C167] font-semibold">{store.delivery_fee}</span>
                     </div>
 
                     {/* Right: Search, Customer Login & Cart */}
@@ -1406,7 +1487,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                         type="text"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Search Pot of Jollof menu..."
+                        placeholder={`Search ${store.name} menu...`}
                         className="w-full bg-[#f3f3f3] rounded-full pl-9 pr-8 py-2 text-xs text-black placeholder-[#757575] outline-none"
                     />
                     {searchQuery && (
@@ -1480,7 +1561,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                             {/* ETA */}
                             <div className="flex items-center gap-1 font-semibold text-black">
                                 <Clock size={14} className="text-[#757575]" />
-                                <span>Delivery in 20–35 mins</span>
+                                <span>{store.delivery_time || 'Delivery in 30–45 mins'}</span>
                             </div>
                             <span>•</span>
                             {/* Delivery Fee */}
@@ -1597,13 +1678,13 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                                         {/* Right: Food Image & Quick Add Button */}
                                         <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0 rounded-xl overflow-hidden bg-[#e5e5e5]">
                                             <img
-                                                src={item.image_url || '/jollof_logo.png'}
+                                                src={item.image_url || store.logo || '/manipos_logo.png'}
                                                 alt={item.title}
                                                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                                 loading="lazy"
                                                 onError={(e) => {
                                                     e.target.onerror = null;
-                                                    e.target.src = 'https://potofjollof.co.ke/images/jollof-rice-isolated-on-transparent-background-free-png.webp';
+                                                    e.target.src = store.logo || '/manipos_logo.png';
                                                 }}
                                             />
                                             {/* Plus button (UberEats style circular button) */}
@@ -1648,12 +1729,12 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                             {/* Modal Header & Hero Image */}
                             <div className="relative h-48 sm:h-56 shrink-0 bg-black">
                                 <img
-                                    src={selectedItem.image_url || '/jollof_logo.png'}
+                                    src={selectedItem.image_url || store.logo || '/manipos_logo.png'}
                                     alt={selectedItem.title}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
                                         e.target.onerror = null;
-                                        e.target.src = 'https://potofjollof.co.ke/images/jollof-rice-isolated-on-transparent-background-free-png.webp';
+                                        e.target.src = store.logo || '/manipos_logo.png';
                                     }}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
@@ -1860,7 +1941,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                             <div className="p-4 sm:p-5 border-b border-[#e2e2e2] flex items-center justify-between">
                                 <div>
                                     <h3 className="font-black text-lg text-black">Your Order</h3>
-                                    <p className="text-xs text-[#757575] font-medium">{store.name} • Hurlingham</p>
+                                    <p className="text-xs text-[#757575] font-medium">{store.name} • {store.address || 'Nairobi'}</p>
                                 </div>
                                 <button
                                     onClick={() => setCartOpen(false)}
@@ -2192,6 +2273,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                         orderSuccess={orderSuccess}
                         setOrderSuccess={setOrderSuccess}
                         whatsappSettings={whatsappSettings}
+                        tenant={tenant}
                     />
                 )}
             </AnimatePresence>
@@ -2236,7 +2318,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
                                     <Motorbike size={16} className="text-[#06C167] mt-0.5 shrink-0" />
                                     <div>
                                         <p className="font-bold text-black">Delivery Coverage</p>
-                                        <p className="text-[#545454]">100% FREE within 3km (Kilimani, Hurlingham). Discounted dispatch across Nairobi.</p>
+                                        <p className="text-[#545454]">Delivery across Nairobi. {store.delivery_fee}.</p>
                                     </div>
                                 </div>
                             </div>
@@ -2598,6 +2680,7 @@ export function UberEatsMicrosite({ onStaffLogin, onAdminLogin, onBack }) {
 
                             <OrderRatingWidget
                                 order={ratingOrder}
+                                tenant={tenant}
                                 onRated={() => {
                                     setTimeout(() => setRatingOrder(null), 1800);
                                 }}

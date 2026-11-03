@@ -125,49 +125,24 @@ export function RetailLandingPage({ onProceedToLogin, onLaunchRetailDemo, onSwit
 
     try {
       const cleanSlug = onboardingData.slug.toLowerCase().replace(/[^a-z0-9-]/g, '');
+      const ownerEmail = onboardingData.email?.trim() || `manager@${cleanSlug}.manipos.com`;
 
-      // Check slug uniqueness
-      const { data: existing, error: checkErr } = await supabase
-        .from('restaurants')
-        .select('id')
-        .eq('slug', cleanSlug)
-        .maybeSingle();
+      // Atomic tenant + owner creation (hashes the PIN server-side).
+      const { data: result, error: rpcError } = await supabase.rpc('create_new_restaurant_tenant', {
+        p_name: onboardingData.name.trim(),
+        p_slug: cleanSlug,
+        p_email: ownerEmail,
+        p_password: onboardingData.pin,
+        p_manager_name: 'Manager',
+        p_phone: onboardingData.phone.trim() || null,
+        p_business_type: 'retail',
+      });
 
-      if (existing) {
-        setOnboardingError(`Store slug "${cleanSlug}" is already taken. Please choose another.`);
-        setOnboardingLoading(false);
+      if (rpcError) throw rpcError;
+      if (result?.success === false) {
+        setOnboardingError(result.error || 'Failed to create store. Please try again.');
         return;
       }
-
-      // Insert new retail store
-      const { data: store, error: storeErr } = await supabase
-        .from('restaurants')
-        .insert([{
-          name: onboardingData.name.trim(),
-          slug: cleanSlug,
-          phone: onboardingData.phone.trim(),
-          status: 'approved',
-          is_active: true,
-          business_type: 'retail'
-        }])
-        .select()
-        .single();
-
-      if (storeErr) throw storeErr;
-
-      // Insert initial manager staff account
-      const { error: staffErr } = await supabase
-        .from('staff_access')
-        .insert([{
-          restaurant_id: store.id,
-          name: 'Manager',
-          role: 'admin',
-          pin_code: onboardingData.pin,
-          is_active: true
-        }]);
-
-      if (staffErr) throw staffErr;
-
       setOnboardingSuccess(true);
       setTimeout(() => {
         if (onProceedToLogin) {

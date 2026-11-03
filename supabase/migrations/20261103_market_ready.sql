@@ -388,14 +388,28 @@ create table if not exists public.pos_discounts (
     id uuid primary key default gen_random_uuid(),
     restaurant_id uuid references public.restaurants(id) on delete cascade,
     code text,
+    name text,
     description text,
-    discount_type text default 'percentage',
-    discount_value numeric(10,2) default 0,
+    type text default 'percentage',
+    value numeric(10,2) default 0,
+    discount_percent numeric(10,2),
+    discount_amount numeric(10,2),
     min_order_amount numeric(10,2) default 0,
     is_active boolean default true,
     expires_at timestamptz,
     created_at timestamptz not null default timezone('utc', now())
 );
+
+-- Reconcile with the live schema used by the terminal (type/value/min_order_amount).
+alter table public.pos_discounts add column if not exists name text;
+alter table public.pos_discounts add column if not exists description text;
+alter table public.pos_discounts add column if not exists type text;
+alter table public.pos_discounts add column if not exists value numeric(10,2);
+alter table public.pos_discounts add column if not exists discount_percent numeric(10,2);
+alter table public.pos_discounts add column if not exists discount_amount numeric(10,2);
+alter table public.pos_discounts add column if not exists min_order_amount numeric(10,2);
+alter table public.pos_discounts add column if not exists is_active boolean default true;
+alter table public.pos_discounts add column if not exists expires_at timestamptz;
 
 do $$
 begin
@@ -429,7 +443,7 @@ create or replace function public.verify_staff_login(p_email text, p_password te
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_staff public.staff_access%rowtype;
@@ -533,7 +547,7 @@ create or replace function public.create_new_restaurant_tenant(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_slug text := lower(regexp_replace(coalesce(p_slug, ''), '[^a-zA-Z0-9-]', '', 'g'));
@@ -608,7 +622,7 @@ create or replace function public.admin_verify_passcode(p_passcode text)
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_hash text;
@@ -627,7 +641,7 @@ create or replace function public.admin_list_restaurants(p_passcode text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
     if not public.admin_verify_passcode(p_passcode) then
@@ -679,7 +693,7 @@ create or replace function public.admin_platform_metrics(p_passcode text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
     if not public.admin_verify_passcode(p_passcode) then
@@ -688,11 +702,11 @@ begin
 
     return (
         select jsonb_build_object(
-            'orders_count', count(*),
+            'orders_count', (select count(*) from public.pos_orders),
             'pending_count', count(*) filter (where status = 'pending'),
             'approved_count', count(*) filter (where status = 'approved' or (status is null and coalesce(is_active, true)))
         )
-        from public.pos_orders
+        from public.restaurants
     );
 end;
 $$;
@@ -706,7 +720,7 @@ create or replace function public.admin_update_restaurant_status(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
     if not public.admin_verify_passcode(p_passcode) then
@@ -735,7 +749,7 @@ create or replace function public.admin_extend_trial(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_current timestamptz;
@@ -777,7 +791,7 @@ create or replace function public.staff_list(p_actor_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_role text;
@@ -820,7 +834,7 @@ create or replace function public.staff_upsert(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_role text;
@@ -875,7 +889,7 @@ create or replace function public.staff_delete(p_actor_id uuid, p_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_role text;
@@ -899,11 +913,15 @@ begin
 end;
 $$;
 
+-- The project may still have the legacy terminal PIN verifier with a different
+-- parameter name. Drop it so the replacement can be created cleanly.
+drop function if exists public.verify_staff_pin(text, text);
+
 create or replace function public.verify_staff_pin(p_name text, p_pin text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
     v_staff public.staff_access%rowtype;

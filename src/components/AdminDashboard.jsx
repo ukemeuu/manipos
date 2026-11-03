@@ -43,13 +43,15 @@ import {
   Video,
   Image as ImageIcon,
   ShieldCheck,
-  ArrowLeft
+  ArrowLeft,
+  ChefHat,
+  Armchair
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
-export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, tenantSlug }) {
+export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, onSignOut, tenantSlug }) {
   const [setupCompleted, setSetupCompleted] = useState(() => {
     try {
       return localStorage.getItem('manipos_setup_completed') === 'true';
@@ -116,11 +118,17 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
       const { data: fetchedMenu } = await menuQuery;
       setMenuItems(fetchedMenu || []);
 
-      // 3. Fetch Staff List
-      let staffQuery = supabase.from('staff_access').select('*').order('name');
-      if (currentRestaurantId) staffQuery = staffQuery.eq('restaurant_id', currentRestaurantId);
-      const { data: fetchedStaff } = await staffQuery;
-      setStaffList(fetchedStaff || []);
+      // 3. Fetch Staff List (safe RPC: no PIN columns leave the database)
+      try {
+        const { data: fetchedStaff, error: staffError } = await supabase.rpc('staff_list', {
+          p_actor_id: pinUser.id || null,
+        });
+        if (staffError) throw staffError;
+        setStaffList(fetchedStaff || []);
+      } catch (staffError) {
+        console.warn('Staff list notice:', staffError?.message || staffError);
+        setStaffList([]);
+      }
 
       // 4. Fetch Customer Feedback
       try {
@@ -293,28 +301,27 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
     const form = e.target;
     const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
     const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
+    const newPin = form.password ? form.password.value : '';
 
-    const payload = {
-      restaurant_id: currentRestaurantId,
-      name: form.staffName.value,
-      email: form.email ? form.email.value : `${form.staffName.value.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`,
-      role: form.role.value,
-      pin_code: form.password ? form.password.value : '1234'
-    };
+    if (!editingStaff?.id && newPin.length < 4) {
+      alert('Set a staff PIN of at least 4 characters.');
+      setSubmitting(false);
+      return;
+    }
 
     try {
-      if (editingStaff && editingStaff.id) {
-        const { error } = await supabase
-          .from('staff_access')
-          .update(payload)
-          .eq('id', editingStaff.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('staff_access')
-          .insert([payload]);
-        if (error) throw error;
-      }
+      const { data, error } = await supabase.rpc('staff_upsert', {
+        p_actor_id: pinUser.id || null,
+        p_id: editingStaff?.id || null,
+        p_restaurant_id: currentRestaurantId || null,
+        p_name: form.staffName.value,
+        p_email: form.email ? form.email.value : `${form.staffName.value.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`,
+        p_role: form.role.value,
+        p_pin: newPin || null,
+      });
+      if (error) throw error;
+      if (data?.success === false) throw new Error(data.error || 'Could not save staff member.');
+
       setEditingStaff(null);
       fetchDashboardData();
     } catch (err) {
@@ -326,12 +333,14 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
 
   const handleDeleteStaff = async (id) => {
     if (!confirm('Are you sure you want to remove this staff access?')) return;
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
     try {
-      const { error } = await supabase
-        .from('staff_access')
-        .delete()
-        .eq('id', id);
+      const { data, error } = await supabase.rpc('staff_delete', {
+        p_actor_id: pinUser.id || null,
+        p_id: id,
+      });
       if (error) throw error;
+      if (data?.success === false) throw new Error(data.error || 'Could not delete staff.');
       fetchDashboardData();
     } catch (err) {
       alert('Error deleting staff: ' + err.message);
@@ -550,6 +559,35 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onSignOut, ten
                 <Users size={18} />
                 Staff & Access
               </button>
+
+              <div className="pt-3 pb-1 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Operations
+              </div>
+
+              <button
+                onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+              >
+                <ChefHat size={18} />
+                Kitchen Display
+              </button>
+
+              <button
+                onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+              >
+                <Armchair size={18} />
+                Floor & Reservations
+              </button>
+
+              <button
+                onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+              >
+                <Package size={18} />
+                Inventory & Recipes
+              </button>
+
               <button
                 onClick={() => setActiveTab('feedback')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${

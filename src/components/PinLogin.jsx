@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, ArrowRight, Loader2, UserCheck } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { authenticateStaffLogin } from '../services/data/staffService';
 
 export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
-    const [email, setEmail] = useState('admin@demostore.com');
-    const [password, setPassword] = useState('demostore2026');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -57,7 +57,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                     id="staff-email"
                     type="email"
                     required
-                    placeholder="e.g. cashier@demostore.com"
+                    placeholder="you@restaurant.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm placeholder:text-slate-600"
@@ -78,31 +78,6 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none transition-all text-white font-bold text-sm placeholder:text-slate-600"
                 />
-            </div>
-
-            {/* Demo Quick Fill Controls */}
-            <div className="pt-1">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Quick Demo Accounts:</p>
-                <div className="flex flex-wrap gap-2">
-                    {[
-                        { label: 'Admin', email: 'admin@demostore.com', pass: 'demostore2026' },
-                        { label: 'Cashier', email: 'cashier@demostore.com', pass: 'cashier2026' },
-                        { label: 'Waiter', email: 'waiter@demostore.com', pass: 'waiter2026' }
-                    ].map(acc => (
-                        <button
-                            key={acc.email}
-                            type="button"
-                            onClick={() => {
-                                setEmail(acc.email);
-                                setPassword(acc.pass);
-                            }}
-                            className="px-2.5 py-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                        >
-                            <UserCheck size={11} className="text-orange-400" />
-                            <span>{acc.label}</span>
-                        </button>
-                    ))}
-                </div>
             </div>
 
             <button

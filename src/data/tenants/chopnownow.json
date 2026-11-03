@@ -1,0 +1,62 @@
+{
+  "slug": "chopnownow",
+  "name": "Chop Now Now",
+  "legalName": "Chop Now Now Nigerian Restaurant",
+  "status": "approved",
+  "isActive": true,
+  "businessType": "restaurant",
+  "plan": "growth",
+  "cuisine": "Nigerian",
+  "tagline": "Naija flavour, now now.",
+  "description": "Authentic Nigerian food in Nairobi — smoky party jollof, egusi, pounded yam, suya, pepper soup and small chops, cooked fresh and delivered fast.",
+  "phone": "+254700000000",
+  "whatsapp": "254700000000",
+  "email": "hello@chopnownow.com",
+  "address": "Kilimani, Nairobi",
+  "city": "Nairobi",
+  "country": "Kenya",
+  "currency": "KES",
+  "currencySymbol": "KSh",
+  "timezone": "Africa/Nairobi",
+  "logoUrl": "/chopnownow-logo.svg",
+  "coverUrl": "/manipos_african_hero.png",
+  "colors": {
+    "primary": "#0B6B3A",
+    "primaryDark": "#064D29",
+    "accent": "#F97316",
+    "accentSoft": "#FFF3E8"
+  },
+  "deliveryFee": 200,
+  "minOrder": 800,
+  "freeDeliveryOver": 3500,
+  "etaMinutes": "35–50 min",
+  "owner": {
+    "name": "Chop Now Now Owner",
+    "email": "admin@chopnownow.com",
+    "password": "ChopNowNow2026!"
+  },
+  "menuFile": "src/data/chopnownow_menu.json",
+  "tables": [
+    { "name": "T1", "zone": "Main floor", "seats": 2 },
+    { "name": "T2", "zone": "Main floor", "seats": 2 },
+    { "name": "T3", "zone": "Main floor", "seats": 4 },
+    { "name": "T4", "zone": "Main floor", "seats": 4 },
+    { "name": "T5", "zone": "Window", "seats": 4 },
+    { "name": "T6", "zone": "Window", "seats": 6 },
+    { "name": "B1", "zone": "Bar", "seats": 2 },
+    { "name": "B2", "zone": "Bar", "seats": 2 },
+    { "name": "P1", "zone": "Private room", "seats": 8 }
+  ],
+  "inventory": [
+    { "name": "Long grain rice", "category": "Dry goods", "sku": "INV-RICE", "unit": "kg", "quantity": 48, "reorder_threshold": 20, "cost_price": 180 },
+    { "name": "Chicken (whole)", "category": "Protein", "sku": "INV-CHKN", "unit": "kg", "quantity": 12, "reorder_threshold": 15, "cost_price": 520 },
+    { "name": "Beef (boneless)", "category": "Protein", "sku": "INV-BEEF", "unit": "kg", "quantity": 9, "reorder_threshold": 10, "cost_price": 680 },
+    { "name": "Palm oil", "category": "Cooking", "sku": "INV-PALM", "unit": "litre", "quantity": 6, "reorder_threshold": 8, "cost_price": 420 },
+    { "name": "Scotch bonnet", "category": "Produce", "sku": "INV-PEPP", "unit": "kg", "quantity": 3, "reorder_threshold": 5, "cost_price": 300 },
+    { "name": "Egusi (melon seeds)", "category": "Dry goods", "sku": "INV-EGUS", "unit": "kg", "quantity": 14, "reorder_threshold": 6, "cost_price": 650 },
+    { "name": "Plantain", "category": "Produce", "sku": "INV-PLNT", "unit": "bunch", "quantity": 4, "reorder_threshold": 4, "cost_price": 350 },
+    { "name": "Takeaway bowls (500ml)", "category": "Packaging", "sku": "INV-PKG5", "unit": "pack", "quantity": 22, "reorder_threshold": 10, "cost_price": 480 },
+    { "name": "Tilapia (whole)", "category": "Protein", "sku": "INV-TILA", "unit": "kg", "quantity": 8, "reorder_threshold": 6, "cost_price": 480 },
+    { "name": "Yam flour", "category": "Dry goods", "sku": "INV-YAMF", "unit": "kg", "quantity": 10, "reorder_threshold": 5, "cost_price": 400 }
+  ]
+}

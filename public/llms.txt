@@ -1,0 +1,43 @@
+# ManiPOS
+
+> ManiPOS is an all-in-one cloud point of sale and restaurant operating system for African hospitality businesses. It combines POS, kitchen display, inventory and recipes, floor plans and reservations, online ordering, delivery channels, staff management and M-Pesa payments in one platform.
+
+## What ManiPOS does
+
+- **Point of sale** — fast register for dine-in, takeaway and delivery, with offline mode and automatic sync.
+- **Kitchen display system (KDS)** — live tickets, preparation timers, station filters and ready-to-serve workflow.
+- **Inventory & recipes** — stock levels, reorder thresholds, supplier records, CSV import/export and recipe-based deduction.
+- **Floor plan & reservations** — table zones, seating status, guest bookings and party sizes.
+- **Online ordering & microsites** — a branded menu and checkout for every restaurant, with M-Pesa and delivery options.
+- **Guest CRM & loyalty** — customer profiles, order history, visit counts, lifetime spend and feedback.
+- **Multi-tenant SaaS** — isolated restaurant workspaces, plans, trials, super-admin approval and per-tenant branding.
+- **Reporting** — sales analytics, best sellers, payment reconciliation and audit logs.
+
+## Who it is for
+
+Restaurants, cloud kitchens, cafés, bars and food courts in Kenya and across Africa that need reliable software which works on real connections and real devices.
+
+## Key facts
+
+- **Website**: https://manipos.com
+- **Restaurant directory**: https://manipos.com/?page=restaurants
+- **Support**: support@manipos.com
+- **Currency**: KES (multi-currency ready)
+- **Payments**: M-Pesa Paybill / Till and card through regulated providers
+- **Deployment**: cloud SaaS with offline-capable POS terminals
+- **Plans**: Starter, Growth and Pro
+
+## Tenant example
+
+Chop Now Now is a Nigerian restaurant in Nairobi running on ManiPOS:
+- Menu: https://chopnownow.manipos.com
+- Cuisine: Nigerian
+- Signature dishes: party jollof rice, egusi and pounded yam, suya, pepper soup, small chops
+
+## Links
+
+- Product and pricing: https://manipos.com
+- Restaurant directory: https://manipos.com/?page=restaurants
+- System status: https://manipos.com/?page=status
+- Privacy: https://manipos.com/?page=privacy
+- Terms: https://manipos.com/?page=terms
