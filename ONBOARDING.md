@@ -38,6 +38,8 @@ You should see `status`, `is_active`, `plan`, `cuisine`, `trial_ends_at`.
 
 ## 2. Seed Chop Now Now
 
+> Already applied to `ptaqejtyhdbhmhrhuxcj` on 3 November 2026. Re-running is safe.
+
 Run:
 
 ```
@@ -70,20 +72,13 @@ The script is idempotent for the tenant row, settings, menu, categories, tables 
 
 ## 4. Configure the platform owner console
 
-The super-admin console verifies its passcode server-side. Replace the seeded
-placeholder before launch:
+The super-admin console verifies its passcode server-side. The seed placeholder was replaced on 3 November 2026; use the generated passcode stored in the deployment `.env` / platform settings. To rotate again:
 
 ```sql
 update public.platform_settings
 set value = crypt('YOUR_STRONG_PASSCODE', gen_salt('bf')),
     updated_at = timezone('utc', now())
 where key = 'super_admin_passcode';
-```
-
-Set the same value in the production environment:
-
-```
-VITE_SUPER_ADMIN_PASSCODE=YOUR_STRONG_PASSCODE
 ```
 
 Alternatively, sign in with a Supabase-authenticated email listed in

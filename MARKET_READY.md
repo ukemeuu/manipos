@@ -46,12 +46,14 @@ What this change set does:
 
 What still requires an operator:
 
-1. Run the migration and seed against the SaaS Supabase project.
-2. Point the production environment at that project (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
-3. Redeploy `manipos.com`.
+1. ~~Run the migration and seed against the SaaS Supabase project.~~ **Done** on 3 Nov 2026 for `ptaqejtyhdbhmhrhuxcj`.
+2. Point the production environment at that project (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). The publishable key is in `.env.example`.
+3. Redeploy `manipos.com` (the GitHub push triggers a deploy if the host is connected).
 4. Keep `pojmanagement.com` on its own deployment, or configure it as a tenant storefront.
 5. Create the wildcard DNS records and TLS certificates.
 6. Replace the Chop Now Now placeholder phone and M-Pesa details.
+
+The super-admin passcode was rotated from the seed placeholder to a generated secret on 3 Nov 2026. It is stored only in the bcrypt hash in `platform_settings` and in the local `.env`; set `VITE_SUPER_ADMIN_PASSCODE` in production to the same value if you want the env fallback, or rely on the server-side hash.
 
 ## Security changes
 
