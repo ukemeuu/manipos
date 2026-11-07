@@ -61,20 +61,24 @@ export function MenuBuilder({ restaurantId, onBack }) {
 
   const [categoryModal, setCategoryModal] = useState(null); // { id?, parent_id, name, image_url, description, is_active, display_order }
   const [itemModal, setItemModal] = useState(null); // { id?, name, ... }
+  const [modifierModal, setModifierModal] = useState(null); // { id?, name, options, ... }
+  const [modifiers, setModifiers] = useState([]);
 
   const fileInputRef = useRef(null);
   const uploadTarget = useRef(null); // { kind: 'item'|'category', id? }
 
   const fetchData = async () => {
-    if (!restaurantId) return;
     setLoading(true);
+    if (!restaurantId) { setLoading(false); return; }
     try {
-      const [{ data: cats }, { data: menu }] = await Promise.all([
+      const [{ data: cats }, { data: menu }, { data: mods }] = await Promise.all([
         supabase.from('pos_categories').select('*').eq('restaurant_id', restaurantId).order('display_order', { ascending: true }),
         supabase.from('pos_menu').select('*').eq('restaurant_id', restaurantId).order('display_order', { ascending: true }),
+        supabase.from('menu_modifier_groups').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: true }),
       ]);
       setCategories(cats || []);
       setItems(menu || []);
+      setModifiers(mods || []);
     } catch (err) {
       console.error('Menu builder load failed:', err);
     } finally {
@@ -215,6 +219,62 @@ export function MenuBuilder({ restaurantId, onBack }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Modifier group CRUD ───────────────────────────────────────────────────
+
+  const saveModifier = async (data) => {
+    setSaving(true);
+    try {
+      const payload = {
+        restaurant_id: restaurantId,
+        name: data.name.trim(),
+        min_selected: Number(data.min_selected) || 0,
+        max_selected: Number(data.max_selected) || 1,
+        is_required: data.is_required === true,
+        options: (data.options || []).map((o) => ({
+          name: o.name || '',
+          price: Number(o.price) || 0,
+          include_vat: o.include_vat === true,
+          is_available: o.is_available !== false,
+        })),
+      };
+      if (data.id) {
+        const { error } = await supabase.from('menu_modifier_groups').update(payload).eq('id', data.id).eq('restaurant_id', restaurantId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('menu_modifier_groups').insert([{ ...payload, menu_item_ids: [] }]);
+        if (error) throw error;
+      }
+      setModifierModal(null);
+      await fetchData();
+    } catch (err) {
+      alert('Failed to save customisation: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteModifier = async (mod) => {
+    if (!confirm(`Delete customisation "${mod.name}"? It will be removed from all items.`)) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('menu_modifier_groups').delete().eq('id', mod.id).eq('restaurant_id', restaurantId);
+      if (error) throw error;
+      await fetchData();
+    } catch (err) {
+      alert('Failed to delete customisation: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleItemModifier = async (itemId, mod, link) => {
+    const current = Array.isArray(mod.menu_item_ids) ? mod.menu_item_ids : [];
+    const next = link ? [...new Set([...current, itemId])] : current.filter((id) => id !== itemId);
+    setModifiers((prev) => prev.map((m) => (m.id === mod.id ? { ...m, menu_item_ids: next } : m)));
+    const { error } = await supabase.from('menu_modifier_groups').update({ menu_item_ids: next }).eq('id', mod.id).eq('restaurant_id', restaurantId);
+    if (error) { console.error(error); fetchData(); }
   };
 
   // ── Quick toggles ─────────────────────────────────────────────────────────
@@ -369,6 +429,32 @@ export function MenuBuilder({ restaurantId, onBack }) {
               />
             ))}
           </div>
+
+          <div className="pt-3">
+            <div className="flex items-center justify-between px-2 pb-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Customisations</span>
+              <button
+                onClick={() => setModifierModal({ name: '', min_selected: 0, max_selected: 1, is_required: false, options: [{ name: '', price: 0, include_vat: false, is_available: true }] })}
+                className="p-1 rounded hover:bg-slate-100 text-slate-500"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+            {modifiers.length === 0 && <p className="text-xs text-slate-400 px-3 py-2">No customisations yet.</p>}
+            {modifiers.map((mod) => (
+              <div key={mod.id} className="group flex items-center gap-1 px-2 py-1.5 rounded-xl text-sm hover:bg-slate-50 text-slate-700">
+                <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-black">
+                  {(mod.name || '?').slice(0, 1).toUpperCase()}
+                </span>
+                <button onClick={() => setModifierModal({ ...mod })} className="flex-1 text-left font-semibold truncate">{mod.name}</button>
+                <span className="text-[10px] font-bold text-slate-400">{(mod.menu_item_ids || []).length}</span>
+                <div className="hidden group-hover:flex items-center">
+                  <button onClick={() => setModifierModal({ ...mod })} className="p-1 rounded hover:bg-white text-slate-400"><Pencil size={13} /></button>
+                  <button onClick={() => deleteModifier(mod)} className="p-1 rounded hover:bg-white text-red-400"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
         </aside>
 
         {/* Items */}
@@ -467,11 +553,25 @@ export function MenuBuilder({ restaurantId, onBack }) {
           key={itemModal.id || 'new'}
           value={itemModal}
           categories={categories}
+          modifiers={modifiers}
           saving={saving}
           onSave={saveItem}
           onClose={() => setItemModal(null)}
           onDelete={(i) => { setItemModal(null); deleteItem(i); }}
           onUpload={() => openImagePicker('item', itemModal.id)}
+          onToggleModifier={toggleItemModifier}
+        />
+      )}
+
+      {/* Modifier modal */}
+      {modifierModal && (
+        <ModifierModal
+          key={modifierModal.id || 'new'}
+          value={modifierModal}
+          saving={saving}
+          onSave={saveModifier}
+          onClose={() => setModifierModal(null)}
+          onDelete={(m) => { setModifierModal(null); deleteModifier(m); }}
         />
       )}
     </div>
@@ -575,7 +675,7 @@ function CategoryModal({ value, categories, saving, onSave, onClose, onDelete, o
 
 // ─── Item modal ─────────────────────────────────────────────────────────────
 
-function ItemModal({ value, categories, saving, onSave, onClose, onDelete, onUpload }) {
+function ItemModal({ value, categories, modifiers = [], saving, onSave, onClose, onDelete, onUpload, onToggleModifier }) {
   const [form, setForm] = useState(value);
   const parents = categories.filter((c) => !c.parent_id);
   const subcategories = categories.filter(
@@ -639,6 +739,122 @@ function ItemModal({ value, categories, saving, onSave, onClose, onDelete, onUpl
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
           <Switch checked={form.show_on_microsite !== false} onChange={(v) => setForm({ ...form, show_on_microsite: v })} icon={form.show_on_microsite !== false ? Globe : GlobeLock} label="Push to microsite" />
           <Switch checked={form.is_available !== false} onChange={(v) => setForm({ ...form, is_available: v })} icon={form.is_available !== false ? Eye : EyeOff} label="Available for ordering" />
+        </div>
+
+        <div>
+          <label className={labelCls}>Customisations</label>
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+            {modifiers.length === 0 && <p className="text-xs text-slate-400">No customisation groups yet. Add them from the sidebar.</p>}
+            {modifiers.map((mod) => {
+              const linked = form.id ? (mod.menu_item_ids || []).includes(form.id) : false;
+              return (
+                <label key={mod.id} className="flex items-center justify-between gap-3 text-sm cursor-pointer py-1">
+                  <span className="font-semibold text-slate-700">{mod.name}</span>
+                  <input
+                    type="checkbox"
+                    checked={linked}
+                    disabled={!form.id}
+                    onChange={(e) => onToggleModifier && onToggleModifier(form.id, mod, e.target.checked)}
+                    className="w-4 h-4 accent-amber-500"
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          {form.id ? (
+            <button onClick={() => onDelete(form)} className="text-sm font-bold text-red-600 hover:bg-red-50 px-3 py-2 rounded-xl">Delete</button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-sm font-bold text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-xl">Cancel</button>
+            <button onClick={() => onSave(form)} disabled={saving || !form.name?.trim()} className="inline-flex items-center gap-2 bg-amber-400 text-slate-950 text-sm font-black px-4 py-2 rounded-xl hover:bg-amber-300 disabled:opacity-50">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ModifierModal({ value, saving, onSave, onClose, onDelete }) {
+  const [form, setForm] = useState({
+    min_selected: 0,
+    max_selected: 1,
+    is_required: false,
+    options: [{ name: '', price: 0, include_vat: false, is_available: true }],
+    ...value,
+  });
+
+  const updateOption = (idx, patch) => {
+    const options = [...(form.options || [])];
+    options[idx] = { ...options[idx], ...patch };
+    setForm({ ...form, options });
+  };
+
+  return (
+    <Modal title={form.id ? 'Edit customisation' : 'New customisation'} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div>
+          <label className={labelCls}>Group name</label>
+          <input className={inputCls} value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Choose Size, Extras" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Minimum selection</label>
+            <input type="number" min={0} className={inputCls} value={form.min_selected ?? 0} onChange={(e) => setForm({ ...form, min_selected: parseInt(e.target.value) || 0 })} />
+          </div>
+          <div>
+            <label className={labelCls}>Maximum selection</label>
+            <input type="number" min={1} className={inputCls} value={form.max_selected ?? 1} onChange={(e) => setForm({ ...form, max_selected: parseInt(e.target.value) || 1 })} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+          <span className="text-sm font-semibold text-slate-700">Required (customers must choose)</span>
+          <Switch checked={form.is_required === true} onChange={(v) => setForm({ ...form, is_required: v })} />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className={labelCls}>Options</label>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, options: [...(form.options || []), { name: '', price: 0, include_vat: false, is_available: true }] })}
+              className="text-xs font-black text-amber-600 hover:text-amber-700"
+            >
+              + Add option
+            </button>
+          </div>
+          <div className="space-y-2">
+            {(form.options || []).map((opt, idx) => (
+              <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                <input
+                  className={inputCls}
+                  placeholder="Option name (e.g. Large)"
+                  value={opt.name || ''}
+                  onChange={(e) => updateOption(idx, { name: e.target.value })}
+                />
+                <input
+                  type="number"
+                  className={`${inputCls} w-28`}
+                  placeholder="Price"
+                  value={opt.price ?? 0}
+                  onChange={(e) => updateOption(idx, { price: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, options: (form.options || []).filter((_, i) => i !== idx) })}
+                  className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">

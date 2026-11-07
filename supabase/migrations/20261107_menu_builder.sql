@@ -15,6 +15,12 @@ create index if not exists pos_categories_parent_idx on public.pos_categories (p
 -- already exist from the market-ready migration).
 alter table public.pos_menu add column if not exists subcategory text;
 
+-- Customisation / modifier groups (the columns the POS editor expects).
+alter table public.menu_modifier_groups add column if not exists min_selected int default 0;
+alter table public.menu_modifier_groups add column if not exists max_selected int default 1;
+alter table public.menu_modifier_groups add column if not exists is_required boolean default false;
+alter table public.menu_modifier_groups add column if not exists menu_item_ids jsonb default '[]'::jsonb;
+
 -- Public image bucket used by the menu builder.
 insert into storage.buckets (id, name, public)
 values ('menu_images', 'menu_images', true)
