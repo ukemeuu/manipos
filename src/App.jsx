@@ -17,6 +17,7 @@ import { FloorPlanView } from './components/FloorPlanView';
 import { InventoryView } from './components/InventoryView';
 import { RestaurantDirectory } from './components/RestaurantDirectory';
 import { StatusPage, LegalPage } from './components/PublicPages';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import {
   getTenantInfo,
   getPosLoginUrl,
@@ -93,6 +94,7 @@ function App() {
   const [currentRoute, setCurrentRoute] = useState(() => resolveRoute());
   const [storeStatus, setStoreStatus] = useState('approved');
   const [businessType, setBusinessType] = useState('restaurant');
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   // Load tenant configuration (DB first, static registry fallback).
   useEffect(() => {
@@ -189,6 +191,7 @@ function App() {
     supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
       if (activeSession) {
         setSession(prev => ({ ...prev, ...activeSession }));
+        setTenantContext(activeSession.user?.app_metadata?.tenant_id || null);
       }
       setLoading(false);
     }).catch(() => {
@@ -199,6 +202,7 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
       if (activeSession) {
         setSession(prev => ({ ...prev, ...activeSession }));
+        setTenantContext(activeSession.user?.app_metadata?.tenant_id || null);
       }
     });
 
@@ -207,6 +211,12 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Force migrated staff to set a new password on first sign-in.
+  useEffect(() => {
+    const staff = session?.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    setMustChangePassword(staff?.mustChangePassword === true);
+  }, [session?.staffUser]);
 
   // Listen to browser navigation changes
   useEffect(() => {
@@ -253,6 +263,7 @@ function App() {
     try {
       await supabase.auth.signOut();
     } catch (e) {}
+    setTenantContext(null);
     localStorage.removeItem('pin_staff_user');
     localStorage.removeItem('manipos_selected_brand');
     setSession(null);
@@ -266,6 +277,11 @@ function App() {
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-400"></div>
       </div>
     );
+  }
+
+  // Migrated staff must set a new password before using the terminal.
+  if (mustChangePassword) {
+    return <ChangePasswordModal onDone={() => setMustChangePassword(false)} />;
   }
 
   // ROUTE -1: Platform Owner Super Admin Console (manipos.com?page=superadmin)

@@ -27,11 +27,21 @@ returns uuid
 language sql
 stable
 as $$
-  select nullif(
-    coalesce(current_setting('request.headers', true), '{}'::text)::jsonb ->> 'x-tenant-id',
-    ''
-  )::uuid
+  select coalesce(
+    -- Preferred: the tenant claim in the signed Supabase Auth JWT.
+    nullif(auth.jwt() -> 'app_metadata' ->> 'tenant_id', '')::uuid,
+    -- Fallback: the x-tenant-id header sent by the app (anonymous guests).
+    nullif(
+      coalesce(current_setting('request.headers', true), '{}'::text)::jsonb
+        ->> 'x-tenant-id',
+      ''
+    )::uuid
+  )
 $$;
+
+-- Link each staff record to its Supabase Auth user (populated by
+-- scripts/sync-staff-auth.mjs).
+alter table public.staff_access add column if not exists auth_uid uuid;
 
 create or replace function public.current_tenant_slug()
 returns text

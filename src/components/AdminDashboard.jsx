@@ -159,10 +159,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         console.warn('Feedback table notice:', e);
       }
 
-      // 5. Fetch Restaurant Links for Link Hub
+      // 5. Fetch Restaurant Links for Link Hub (keyed by tenant slug)
       try {
+        const tenantSlug = pinUser.tenantSlug;
         let linksQuery = supabase.from('tenant_links').select('*').order('display_order', { ascending: true });
-        if (currentRestaurantId) linksQuery = linksQuery.eq('restaurant_id', currentRestaurantId);
+        if (tenantSlug) linksQuery = linksQuery.eq('tenant_id', tenantSlug);
         const { data: fetchedLinks } = await linksQuery;
         setTenantLinks(fetchedLinks || []);
       } catch (e) {

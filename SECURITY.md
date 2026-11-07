@@ -76,6 +76,33 @@ is applied, the app-level scoping above is the enforced boundary.
 > `auth.jwt() ->> 'tenant_id'`. The header approach is a defence-in-depth
 > measure for the current anonymous-key deployment.
 
+### Staff Auth migration
+
+The app now signs staff in with **Supabase Auth** first and falls back to the
+legacy PIN RPC for accounts that have not been migrated.
+
+```bash
+# 1. Add the auth_uid column + JWT-aware RLS (already in the migration file).
+# 2. Create the Auth users (server-side, with the service role key):
+SUPABASE_URL=https://ptaqejtyhdbhmhrhuxcj.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+node scripts/sync-staff-auth.mjs            # preview
+
+SUPABASE_URL=https://ptaqejtyhdbhmhrhuxcj.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+node scripts/sync-staff-auth.mjs --apply    # create users
+```
+
+Each new Auth user gets:
+
+- `app_metadata`: `{ tenant_id, tenant_slug, tenant_name, role, name }` —
+  the JWT carries these claims and the RLS policies use `tenant_id`.
+- a random temporary password + `user_metadata.must_change_password = true`,
+  so the change-password screen appears on first sign-in.
+
+After the migration, the RLS prefers the JWT claim over the header. Staff keep
+working through the legacy RPC until their Auth account exists.
+
 ---
 
 ## 3. Staff Authentication Workflow
