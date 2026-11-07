@@ -1,6 +1,14 @@
 -- ============================================================================
 -- ManiPOS tenant isolation RLS
 -- ============================================================================
+
+-- Schema gaps the app expects on restaurant_settings (present in
+-- supabase_master_setup.sql but missing from the live SaaS project).
+alter table public.restaurant_settings add column if not exists setup_completed boolean default false;
+alter table public.restaurant_settings add column if not exists hub_bg_type text;
+alter table public.restaurant_settings add column if not exists hub_bg_url text;
+alter table public.restaurant_settings add column if not exists hub_bg_opacity numeric default 0.35;
+alter table public.restaurant_settings add column if not exists enabled_payment_methods jsonb default '["CASH","MPESA","CARD"]';
 -- Apply this AFTER deploying the app build that sends the `x-tenant-id`
 -- header (src/lib/supabase.js). Every Supabase request then carries the
 -- signed-in tenant's restaurant UUID.
