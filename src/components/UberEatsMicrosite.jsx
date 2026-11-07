@@ -13,20 +13,23 @@ function normaliseTenantMenu(tenant) {
     if (!tenant?.menu?.length) return null;
     const groups = new Map();
     tenant.menu.forEach((item, index) => {
-        if (item.is_available === false) return;
+        if (item.is_available === false || item.show_on_microsite === false) return;
         const category = item.category || 'Menu';
-        if (!groups.has(category)) groups.set(category, []);
-        groups.get(category).push({
+        const subcategory = item.subcategory || '';
+        const key = `${category}||${subcategory}`;
+        if (!groups.has(key)) groups.set(key, { category, subcategory, items: [] });
+        groups.get(key).items.push({
             id: item.id || `tenant-item-${index}`,
             title: item.name || item.title || 'Menu item',
             description: item.description || '',
             price: Number(item.price) || 0,
             image_url: item.image_url || tenant.logo,
             category,
+            subcategory,
             hasCustomizations: false,
             modifiers: [],
             isSoldOut: false,
-            isPopular: false,
+            isPopular: item.is_featured === true,
             rating: null,
         });
     });
@@ -43,7 +46,10 @@ function normaliseTenantMenu(tenant) {
             hero_image: tenant.cover,
             logo: tenant.logo,
         },
-        categories: Array.from(groups.entries()).map(([name, items]) => ({ name, items })),
+        categories: Array.from(groups.values()).map((g) => ({
+            name: g.subcategory ? `${g.category} · ${g.subcategory}` : g.category,
+            items: g.items,
+        })),
     };
 }
 

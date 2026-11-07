@@ -18,6 +18,7 @@ import { InventoryView } from './components/InventoryView';
 import { RestaurantDirectory } from './components/RestaurantDirectory';
 import { StatusPage, LegalPage } from './components/PublicPages';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { MenuBuilder } from './components/MenuBuilder';
 import {
   getTenantInfo,
   getPosLoginUrl,
@@ -50,6 +51,8 @@ const PAGE_ROUTES = {
   status: 'status',
   privacy: 'privacy',
   terms: 'terms',
+  'menu-builder': 'menu-builder',
+  'menu-build': 'menu-builder',
 };
 
 function resolveRoute() {
@@ -309,6 +312,16 @@ function App() {
           goTo('home', '/');
           setTimeout(() => window.dispatchEvent(new CustomEvent('manipos:open-onboarding')), 150);
         }}
+      />
+    );
+  }
+
+  // ROUTE 0.65: Menu builder (categories, items, images, microsite visibility)
+  if (currentRoute === 'menu-builder') {
+    return (
+      <MenuBuilder
+        restaurantId={session?.staffUser?.restaurantId || JSON.parse(localStorage.getItem('pin_staff_user') || '{}')?.restaurantId}
+        onBack={() => goTo('app', '/?page=app')}
       />
     );
   }

@@ -143,19 +143,22 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
       // has not published menu items yet.
       const { data: menuRows, error: menuError } = await supabase
         .from('pos_menu')
-        .select('name, category, price, description, image_url, is_available, display_order')
+        .select('name, category, subcategory, price, description, image_url, is_available, is_featured, display_order')
         .eq('restaurant_id', data.id)
         .eq('is_available', true)
+        .neq('show_on_microsite', false)
         .order('display_order', { ascending: true });
 
       if (!menuError && menuRows?.length) {
         menu = menuRows.map((row) => ({
           name: row.name,
           category: row.category || 'Menu',
+          subcategory: row.subcategory || '',
           price: Number(row.price) || 0,
           description: row.description || '',
           image_url: row.image_url || null,
           is_available: row.is_available !== false,
+          is_featured: row.is_featured === true,
         }));
       }
     }

@@ -29,7 +29,9 @@ export async function authenticateStaffLogin(email, password) {
                 const appMeta = data.user?.app_metadata || {};
                 const userMeta = data.user?.user_metadata || {};
                 const staffUser = {
-                    id: data.user.id,
+                    // Prefer the staff_access id so the RPCs can resolve the actor.
+                    id: userMeta.staff_id || data.user.id,
+                    authUid: data.user.id,
                     name: appMeta.name || userMeta.name || cleanEmail.split('@')[0] || 'Staff',
                     email: data.user.email || cleanEmail,
                     role: appMeta.role || 'cashier',
