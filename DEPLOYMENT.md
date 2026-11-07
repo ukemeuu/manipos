@@ -68,3 +68,60 @@ To onboard a new restaurant client (e.g., `Mama Oliech Kitchen`):
 3. **Provide Terminal Login URL**:
    Provide the restaurant client with their dedicated login portal:
    `https://mamaoliech.pos.manipos.com` (or `https://pos.manipos.com/?tenant=mamaoliech`).
+
+---
+
+## 5. Hostinger production deployment (manipos.com)
+
+The production site is a static SPA served from Hostinger (`public_html`). The
+`dist/` folder is the deployable artifact — upload its **contents** to
+`public_html`, not the folder itself.
+
+### Tenant URLs
+
+| Surface | URL | Hostinger object |
+| --- | --- | --- |
+| SaaS landing page | `https://manipos.com` | main domain |
+| General POS login | `https://pos.manipos.com` | subdomain → `public_html` |
+| Chop Now Now guest menu | `https://chopnownow.manipos.com` | subdomain → `public_html` |
+| Chop Now Now staff POS | `https://chopnownow.pos.manipos.com` | parked domain → `public_html` |
+
+> Hostinger does not support multi-level subdomains (`*.pos.manipos.com`), so
+> `chopnownow.pos.manipos.com` is configured as a **parked domain**. The SPA
+> detects the tenant from the hostname via `getTenantInfo()`.
+
+### One-command deploy
+
+```bash
+npm run build
+bash scripts/deploy-hostinger.sh
+```
+
+The script reads `FTP_*` from `.env` and uploads every file in `dist/`.
+
+### Manual deploy
+
+```bash
+cd dist
+find . -type f | while read f; do
+  remote="${f#./}"
+  encoded=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$remote")
+  curl --ftp-create-dirs -T "$f" --user "$FTP_USER:$FTP_PASS" \
+    "ftp://$FTP_HOST:$FTP_PORT/$encoded"
+done
+```
+
+### After every deploy
+
+1. Flush the hCDN cache: **hPanel → Performance → CDN → Flush cache** for each
+   domain (`manipos.com`, `pos.manipos.com`, `chopnownow.manipos.com`,
+   `chopnownow.pos.manipos.com`).
+2. Verify `https://manipos.com` serves `ManiPOS · Cloud POS for African
+   restaurants` and the tenant URLs render their respective pages.
+
+### Cache behaviour
+
+`public/.htaccess` sends `Cache-Control: no-cache, no-store, must-revalidate`
+for `index.html` and `sw.js`, so browsers and the CDN always revalidate the SPA
+entry and service worker. Bump `VERSION` in `public/sw.js` on every release to
+rotate the service-worker cache.
