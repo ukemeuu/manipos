@@ -18,6 +18,10 @@ const PRESET_TAGS = [
 ];
 
 export function GuestCRMView({ initialTab = 'directory' }) {
+    const sessionUser = useMemo(() => {
+        try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
+    }, []);
+    const restaurantId = sessionUser.restaurantId || sessionUser.restaurant_id || null;
     const [activeTab, setActiveTab] = useState(initialTab); // 'directory' | 'feedback'
 
     useEffect(() => {
@@ -238,12 +242,13 @@ export function GuestCRMView({ initialTab = 'directory' }) {
                     *,
                     guest_tags (id, tag_name, color)
                 `)
+                .eq('restaurant_id', restaurantId)
                 .order('created_at', { ascending: false });
 
             // Fallback if join query fails due to missing relationship schema
             if (error || !data) {
                 console.warn('Guest tags join query error, falling back to simple select:', error);
-                const res = await supabase.from('guests').select('*').order('created_at', { ascending: false });
+                const res = await supabase.from('guests').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false });
                 data = res.data;
             }
 
@@ -278,7 +283,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
         let guestId = selectedGuest?.id;
         const { brand, preferred_brand, channel, acquisition_channel, ...coreData } = formData;
 
-        const brandVal = brand || preferred_brand || 'POT OF JOLLOF';
+        const brandVal = brand || preferred_brand || 'All';
         const channelVal = channel || acquisition_channel || 'Walk-in';
 
         if (!coreData.notes?.includes('[Brand:')) {
@@ -296,7 +301,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
                 try { await supabase.from('guest_tags').delete().eq('guest_id', guestId); } catch(e) {}
             }
         } else {
-            const { data, error } = await supabase.from('guests').insert([coreData]).select().single();
+            const { data, error } = await supabase.from('guests').insert([{ ...coreData, restaurant_id: restaurantId }]).select().single();
             if (error) { alert("Notice: Saved guest with notes fallback (" + error.message + ")"); }
             guestId = data?.id || `local_${Date.now()}`;
             
@@ -541,8 +546,8 @@ function GuestEditModal({ guest, onClose, onSave }) {
         last_name: guest?.last_name || '',
         phone: guest?.phone || '',
         email: guest?.email || '',
-        brand: guest?.brand || guest?.preferred_brand || 'POT OF JOLLOF',
-        preferred_brand: guest?.brand || guest?.preferred_brand || 'POT OF JOLLOF',
+        brand: guest?.brand || guest?.preferred_brand || 'All',
+        preferred_brand: guest?.brand || guest?.preferred_brand || 'All',
         channel: guest?.channel || guest?.acquisition_channel || 'Walk-in',
         acquisition_channel: guest?.channel || guest?.acquisition_channel || 'Walk-in',
         notes: guest?.notes || ''
@@ -594,7 +599,7 @@ function GuestEditModal({ guest, onClose, onSave }) {
                                 onChange={(e) => setFormData({...formData, brand: e.target.value, preferred_brand: e.target.value})} 
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none font-medium text-sm"
                             >
-                                <option value="POT OF JOLLOF">🫕 Pot of Jollof</option>
+                                <option value="All">All Brands</option>
                                 <option value="LITTLE LAGOS">🌶️ Little Lagos</option>
                                 <option value="CAFE SWAHILI">☕ Cafe Swahili</option>
                                 <option value="SAMAKI STREET">🐟 Samaki Street</option>

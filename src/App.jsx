@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, setTenantContext } from './lib/supabase';
 import { PosTerminal } from './components/PosTerminal';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
@@ -101,10 +101,14 @@ function App() {
       (currentRoute === 'kds' || currentRoute === 'floor' || currentRoute === 'inventory' ? 'chopnownow' : null);
     if (!slug) {
       setTenant(null);
+      setTenantContext(null);
       return undefined;
     }
     loadTenant(slug).then((resolved) => {
-      if (!cancelled) setTenant(resolved);
+      if (!cancelled) {
+        setTenant(resolved);
+        setTenantContext(resolved?.id || null);
+      }
     });
     return () => { cancelled = true; };
   }, [tenantInfo.tenantSlug, currentRoute]);

@@ -113,6 +113,18 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
       const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
 
+      // Never fall back to an unscoped query — a missing tenant must show no data,
+      // not every tenant's data.
+      if (!currentRestaurantId) {
+        console.warn('AdminDashboard: staff session has no restaurant id; skipping data fetch.');
+        setOrders([]);
+        setMenuItems([]);
+        setFeedbackList([]);
+        setTenantLinks([]);
+        setLoading(false);
+        return;
+      }
+
       // 1. Fetch Orders
       let ordersQuery = supabase.from('pos_orders').select('*, items:pos_order_items(*)').order('created_at', { ascending: false });
       if (currentRestaurantId) ordersQuery = ordersQuery.eq('restaurant_id', currentRestaurantId);

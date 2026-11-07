@@ -70,7 +70,7 @@ export function InventoryView({ tenant, staffName = 'Manager', onBack }) {
         setItems(data || []);
       }
 
-      const { data: recipeRows } = await supabase.from('pos_item_recipes').select('*');
+      const { data: recipeRows } = await supabase.from('pos_item_recipes').select('*').eq('restaurant_id', tenantId);
       setRecipes(recipeRows || []);
 
       let menuQuery = supabase.from('pos_menu').select('id, name, category, price').order('name');

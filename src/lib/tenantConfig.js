@@ -1,8 +1,8 @@
-import { supabase } from './supabase';
+import { supabase, setTenantContext } from './supabase';
 import { getTenantInfo } from './tenant';
 import { getRegistryTenant } from '../data/tenantRegistry';
 
-const CACHE_PREFIX = 'manipos_tenant_config_';
+const CACHE_PREFIX = 'manipos_tenant_config_v2_';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
@@ -117,7 +117,9 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
   const registry = getRegistryTenant(resolvedSlug);
   let restaurant = null;
   let settings = null;
-  let menu = registry?.menu || [];
+  // A restaurant's menu comes only from its own database rows. New tenants start
+  // empty until they publish items — never inherit the static showcase menu.
+  let menu = [];
 
   try {
     const { data, error } = await supabase
@@ -128,6 +130,8 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
 
     if (!error && data) {
       restaurant = data;
+      // Scope every subsequent query (settings, menu, channels) to this tenant.
+      setTenantContext(data.id);
       const { data: settingRows } = await supabase
         .from('restaurant_settings')
         .select('*')

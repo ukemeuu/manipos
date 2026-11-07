@@ -18,37 +18,19 @@ export function QRCodeGeneratorView() {
     const [editingId, setEditingId] = useState(null);
 
     // Default presets
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const PRESETS = [
-        { 
-            name: 'Pot of Jollof Digital Menu', 
-            url: 'https://potofjollof.manipos.com', 
+        {
+            name: 'Digital Menu',
+            url: origin,
             icon: Globe,
             color: 'text-orange-600 bg-orange-50 border-orange-100'
         },
-
-        { 
-            name: 'Ordering Website', 
-            url: 'https://potofjollof.com/order', 
-            icon: Globe,
-            color: 'text-blue-600 bg-blue-50 border-blue-100'
-        },
-        { 
-            name: 'Customer Feedback Form', 
-            url: 'https://potofjollof.manipos.com/feedback', 
+        {
+            name: 'Customer Feedback Form',
+            url: `${origin}/feedback`,
             icon: Star,
             color: 'text-emerald-600 bg-emerald-50 border-emerald-100'
-        },
-        { 
-            name: 'Google Review Page', 
-            url: 'https://g.page/r/CUfyoed3Iq6KEBM/review', 
-            icon: Star,
-            color: 'text-amber-600 bg-amber-50 border-amber-100'
-        },
-        { 
-            name: 'General Office Sheet', 
-            url: 'https://docs.google.com/spreadsheets/d/1dRx2s42HG0oTMDne-M6-iJRBvhc7ynuedDarn9sq_FU/edit?gid=2143842321#gid=2143842321', 
-            icon: FileText,
-            color: 'text-indigo-600 bg-indigo-50 border-indigo-100'
         }
     ];
 

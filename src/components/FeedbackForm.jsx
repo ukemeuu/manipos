@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { getTenantInfo } from '../lib/tenant';
+import { loadTenant } from '../lib/tenantConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -42,6 +43,19 @@ export function FeedbackForm() {
   
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [restaurantId, setRestaurantId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTenant(tenantSlug)
+      .then((t) => {
+        if (cancelled) return;
+        setRestaurantId(t?.id || null);
+        if (t?.name) setSelectedBrand(t.name);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tenantSlug]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -124,6 +138,7 @@ export function FeedbackForm() {
         .from('pos_feedback')
         .insert([{
           tenant_id: tenantSlug,
+          restaurant_id: restaurantId,
           rating: numericRating,
           category: selectedBrand,
           comment: `[Method: ${orderMethod}] [Ticket: ${ticketId || 'N/A'}] ${comment || 'No comment'}`,

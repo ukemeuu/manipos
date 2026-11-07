@@ -8,9 +8,6 @@ import {
     CheckCircle, Loader2, Copy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import ubereatsMenuData from '../data/ubereats_menu.json';
-
-const CONFIG_ROW_ID = '00000000-0000-0000-0000-000000000001';
 
 function normaliseTenantMenu(tenant) {
     if (!tenant?.menu?.length) return null;
@@ -47,6 +44,28 @@ function normaliseTenantMenu(tenant) {
             logo: tenant.logo,
         },
         categories: Array.from(groups.entries()).map(([name, items]) => ({ name, items })),
+    };
+}
+
+/**
+ * Empty menu shell for a restaurant that has not published its menu yet.
+ * Never fall back to another tenant's menu — a new restaurant starts empty.
+ */
+function emptyTenantMenu(tenant) {
+    return {
+        store: {
+            name: tenant?.name || 'Restaurant',
+            subtitle: [tenant?.cuisine, tenant?.city].filter(Boolean).join(' • ') || '',
+            rating: tenant?.rating || null,
+            delivery_time: `Delivery in ${tenant?.etaMinutes || '30–45 min'}`,
+            delivery_fee: tenant?.freeDeliveryOver
+                ? `Free delivery over ${tenant?.currencySymbol || 'KSh'} ${Number(tenant.freeDeliveryOver).toLocaleString()}`
+                : '',
+            address: tenant?.address || tenant?.city || '',
+            hero_image: tenant?.cover,
+            logo: tenant?.logo,
+        },
+        categories: [],
     };
 }
 
@@ -557,59 +576,14 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     const tenantSlug = tenant?.slug || 'online';
     const guestKey = `manipos_guest_${tenantSlug}`;
     const cartKey = `manipos_cart_${tenantSlug}`;
-    const CACHE_KEY = `manipos_microsite_overrides_${tenantSlug}`;
-
-    // Prefer the tenant's own menu, then fall back to the legacy showcase menu.
+    // A restaurant only ever sees its own menu. New restaurants start empty
+    // until they publish items — never inherit another tenant's menu.
     const tenantMenu = useMemo(() => normaliseTenantMenu(tenant), [tenant]);
-    const sourceMenu = tenantMenu || ubereatsMenuData;
-
-    // Dynamic Overrides State
-    const [menuOverrides, setMenuOverrides] = useState(() => {
-        try {
-            const cached = localStorage.getItem(CACHE_KEY);
-            return cached ? JSON.parse(cached) : {};
-        } catch {
-            return {};
-        }
-    });
-
-    useEffect(() => {
-        // Fetch live overrides from Supabase pos_menu config record
-        supabase
-            .from('pos_menu')
-            .select('brand_prices')
-            .eq('id', CONFIG_ROW_ID)
-            .maybeSingle()
-            .then(({ data, error }) => {
-                if (!error && data?.brand_prices?.item_overrides) {
-                    setMenuOverrides(data.brand_prices.item_overrides);
-                    try {
-                        localStorage.setItem(CACHE_KEY, JSON.stringify(data.brand_prices.item_overrides));
-                    } catch {}
-                }
-            });
-    }, []);
+    const sourceMenu = tenantMenu || emptyTenantMenu(tenant);
 
     // Menu & Store State
-    const store = sourceMenu.store || ubereatsMenuData.store;
-    
-    // Compute categories with dynamic overrides merged in
-    const allCategories = useMemo(() => {
-        return (sourceMenu.categories || []).map(cat => ({
-            ...cat,
-            items: cat.items.map(item => {
-                const override = menuOverrides[item.id];
-                if (!override) return item;
-                return {
-                    ...item,
-                    price: override.price !== undefined ? override.price : item.price,
-                    title: override.title || item.title,
-                    description: override.description || item.description,
-                    isSoldOut: override.isSoldOut !== undefined ? override.isSoldOut : item.isSoldOut
-                };
-            })
-        }));
-    }, [menuOverrides, sourceMenu]);
+    const store = sourceMenu.store;
+    const allCategories = sourceMenu.categories || [];
 
     // UI state
     const [searchQuery, setSearchQuery] = useState('');
@@ -1612,14 +1586,22 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 {filteredCategories.length === 0 ? (
                     <div className="text-center py-20 bg-white rounded-3xl border border-[#e2e2e2] p-8">
                         <UtensilsCrossed size={40} className="mx-auto text-[#a3a3a3] mb-3" />
-                        <h3 className="text-lg font-bold text-black">No matching items found</h3>
-                        <p className="text-xs text-[#757575] mt-1">Try searching for something else like Jollof, Egusi, or Suya.</p>
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            className="mt-4 px-4 py-2 bg-black text-white rounded-full text-xs font-bold"
-                        >
-                            View All Items
-                        </button>
+                        <h3 className="text-lg font-bold text-black">
+                            {searchQuery ? 'No matching items found' : 'Menu coming soon'}
+                        </h3>
+                        <p className="text-xs text-[#757575] mt-1">
+                            {searchQuery
+                                ? 'Try a different search term.'
+                                : "This restaurant hasn't published its menu yet. Please check back soon."}
+                        </p>
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="mt-4 px-4 py-2 bg-black text-white rounded-full text-xs font-bold"
+                            >
+                                View All Items
+                            </button>
+                        )}
                     </div>
                 ) : (
                     filteredCategories.map(category => (

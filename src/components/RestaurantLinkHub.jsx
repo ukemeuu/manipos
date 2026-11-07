@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { getTenantInfo } from '../lib/tenant';
+import { loadTenant } from '../lib/tenantConfig';
 import { motion } from 'framer-motion';
 import { 
   Utensils, 
@@ -50,6 +51,7 @@ export function RestaurantLinkHub() {
   const tenantDisplayName = tenantSlug.replace('-', ' ').toUpperCase();
 
   const [links, setLinks] = useState([]);
+  const [tenant, setTenant] = useState(null);
   const [hubSettings, setHubSettings] = useState({
     bgType: 'gradient', // 'gradient', 'image', 'video'
     bgUrl: '', // image or video URL
@@ -61,36 +63,43 @@ export function RestaurantLinkHub() {
   const [copied, setCopied] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
 
-  // Default fallback links if database table is initializing
-  const fallbackLinks = [
-    {
-      id: '1',
-      title: 'Dine-In & Online Menu',
-      subtitle: 'Browse dishes & order online',
-      url: `https://${tenantSlug}.manipos.com/`,
-      icon: 'Utensils',
-      badge_text: 'Scan QR',
-      button_color: 'amber'
-    },
-    {
-      id: '2',
-      title: 'WhatsApp Direct Order',
-      subtitle: 'Instant kitchen dispatch via WhatsApp',
-      url: 'https://wa.me/254795384140?text=Hi%2C%20I%20would%20like%20to%20place%20an%20order',
-      icon: 'Truck',
-      badge_text: 'Fast Delivery',
-      button_color: 'emerald'
-    },
-    {
-      id: '3',
-      title: 'Customer Feedback & Rewards',
-      subtitle: 'Rate your meal & get KSH 200 off',
-      url: `https://${tenantSlug}.manipos.com/feedback`,
-      icon: 'Star',
-      badge_text: 'Voucher',
-      button_color: 'purple'
-    }
-  ];
+  // Default fallback links if database table is initializing.
+  // Never hardcode another tenant's contact details.
+  const fallbackLinks = useMemo(() => {
+    const rawPhone = tenant?.phone || tenant?.whatsapp || '';
+    const waNumber = String(rawPhone).replace(/[^0-9]/g, '');
+    return [
+      {
+        id: '1',
+        title: 'Dine-In & Online Menu',
+        subtitle: 'Browse dishes & order online',
+        url: `https://${tenantSlug}.manipos.com/`,
+        icon: 'Utensils',
+        badge_text: 'Scan QR',
+        button_color: 'amber'
+      },
+      {
+        id: '2',
+        title: 'WhatsApp Direct Order',
+        subtitle: 'Instant kitchen dispatch via WhatsApp',
+        url: waNumber
+          ? `https://wa.me/${waNumber}?text=Hi%2C%20I%20would%20like%20to%20place%20an%20order`
+          : `https://${tenantSlug}.manipos.com/`,
+        icon: 'Truck',
+        badge_text: 'Fast Delivery',
+        button_color: 'emerald'
+      },
+      {
+        id: '3',
+        title: 'Customer Feedback & Rewards',
+        subtitle: 'Rate your meal & get KSH 200 off',
+        url: `https://${tenantSlug}.manipos.com/feedback`,
+        icon: 'Star',
+        badge_text: 'Voucher',
+        button_color: 'purple'
+      }
+    ];
+  }, [tenant, tenantSlug]);
 
   useEffect(() => {
     fetchTenantData();
@@ -99,28 +108,36 @@ export function RestaurantLinkHub() {
   const fetchTenantData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Tenant Links
+      const tenantConfig = await loadTenant(tenantSlug);
+      setTenant(tenantConfig);
+      const restaurantId = tenantConfig?.id || null;
+
+      // 1. Fetch this tenant's links only
       const { data: fetchedLinks } = await supabase
         .from('tenant_links')
         .select('*')
+        .eq('tenant_id', tenantSlug)
         .eq('is_active', true)
         .order('display_order', { ascending: true });
 
       setLinks(fetchedLinks && fetchedLinks.length > 0 ? fetchedLinks : fallbackLinks);
 
-      // 2. Fetch Restaurant Hub Customization Settings
-      const { data: fetchedSettings } = await supabase
-        .from('restaurant_settings')
-        .select('*')
-        .single();
+      // 2. Fetch this tenant's hub customization settings
+      if (restaurantId) {
+        const { data: fetchedSettings } = await supabase
+          .from('restaurant_settings')
+          .select('*')
+          .eq('restaurant_id', restaurantId)
+          .maybeSingle();
 
-      if (fetchedSettings && fetchedSettings.hub_bg_url) {
-        setHubSettings({
-          bgType: fetchedSettings.hub_bg_type || 'image',
-          bgUrl: fetchedSettings.hub_bg_url,
-          bgOpacity: fetchedSettings.hub_bg_opacity || 0.35,
-          muted: true
-        });
+        if (fetchedSettings && fetchedSettings.hub_bg_url) {
+          setHubSettings({
+            bgType: fetchedSettings.hub_bg_type || 'image',
+            bgUrl: fetchedSettings.hub_bg_url,
+            bgOpacity: fetchedSettings.hub_bg_opacity || 0.35,
+            muted: true
+          });
+        }
       }
     } catch (err) {
       console.warn('Link Hub fetch notice:', err);

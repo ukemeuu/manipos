@@ -77,7 +77,7 @@ export function CampaignsView() {
         const itemName = selectedItem ? selectedItem.name : 'Delicious Meal';
         const micrositeUrl = waConfig?.microsite_url 
             ? `${waConfig.microsite_url}/?phone=${guest ? guest.phone : '254700000000'}` 
-            : `https://www.pojmanagement.com/?phone=${guest ? guest.phone : '254700000000'}`;
+            : `${typeof window !== 'undefined' ? window.location.origin : ''}/?phone=${guest ? guest.phone : '254700000000'}`;
 
         return customMessage
             .replace(/\{\{firstName\}\}/g, guestName)
