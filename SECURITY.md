@@ -32,16 +32,49 @@ All multi-tenant database tables enforce RLS:
 - `public.suppliers`
 - `public.audit_logs`
 
-### Sample Policy Enforcement
+### Tenant isolation model
+
+Every request carries the signed-in tenant's restaurant UUID in the
+`x-tenant-id` header (`src/lib/supabase.js` → `setTenantContext()`). The
+database-scoped policies in
+`supabase/migrations/20261107_tenant_isolation_rls.sql` read that header and
+deny access when it is missing or mismatched:
 
 ```sql
-ALTER TABLE public.pos_orders ENABLE ROW LEVEL SECURITY;
+create or replace function public.current_tenant_id()
+returns uuid language sql stable as $$
+  select nullif(
+    coalesce(current_setting('request.headers', true), '{}'::text)::jsonb
+      ->> 'x-tenant-id',
+    ''
+  )::uuid
+$$;
 
-CREATE POLICY "Tenant operational access" ON public.pos_orders
-    FOR ALL TO public
-    USING (restaurant_id = auth.jwt() ->> 'restaurant_id')
-    WITH CHECK (restaurant_id = auth.jwt() ->> 'restaurant_id');
+create policy "tenant isolate pos_orders" on public.pos_orders
+  for all to anon, authenticated
+  using (restaurant_id = public.current_tenant_id())
+  with check (restaurant_id = public.current_tenant_id());
 ```
+
+The app also scopes every query in code (`PosTerminal`, `AdminDashboard`,
+`InventoryView`, `GuestCRMView`, `RestaurantLinkHub`, `FeedbackForm`), so a
+missing header can never fall back to an unscoped query.
+
+**Apply the migration** (Supabase SQL editor, on the SaaS project
+`ptaqejtyhdbhmhrhuxcj`):
+
+```
+supabase/migrations/20261107_tenant_isolation_rls.sql
+```
+
+`public.restaurants` stays publicly readable so slugs can be resolved and the
+directory works; all operational tables are tenant-scoped. Until the migration
+is applied, the app-level scoping above is the enforced boundary.
+
+> Long-term: move staff sessions to Supabase Auth and put `tenant_id` in the
+> JWT claims, then replace the header lookup with
+> `auth.jwt() ->> 'tenant_id'`. The header approach is a defence-in-depth
+> measure for the current anonymous-key deployment.
 
 ---
 
