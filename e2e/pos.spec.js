@@ -33,9 +33,13 @@ test.describe('POS terminal', () => {
     // dashboard for admins/managers, the POS register for everyone else.
     await expect(page.locator('#staff-email')).toHaveCount(0, { timeout: 30_000 });
 
+    // The authenticated view fetches data, so wait for it to render.
+    await expect(
+      page.getByText(/Management Dashboard|Menu Grid|POS Register/i).first()
+    ).toBeVisible({ timeout: 30_000 });
+
     const text = await page.locator('#root').innerText();
     expect(text.length).toBeGreaterThan(100);
-    expect(/Management Dashboard|Menu Grid|POS Register/i.test(text)).toBe(true);
 
     expect(errors).toEqual([]);
   });
