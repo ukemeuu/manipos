@@ -143,7 +143,7 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
       // has not published menu items yet.
       const { data: menuRows, error: menuError } = await supabase
         .from('pos_menu')
-        .select('name, category, subcategory, price, description, image_url, is_available, is_featured, display_order')
+        .select('id, name, category, subcategory, price, description, image_url, is_available, is_featured, display_order')
         .eq('restaurant_id', data.id)
         .eq('is_available', true)
         .neq('show_on_microsite', false)
