@@ -77,6 +77,7 @@ jobs:
       - name: Upload to Hostinger
         env:
           TARGET: ${{ github.event.inputs.environment || 'staging' }}
+          SKIP_BUILD: "1"
           FTP_HOST: ${{ secrets.FTP_HOST || vars.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER || vars.FTP_USER }}
           FTP_PASS: ${{ secrets.FTP_PASS || vars.FTP_PASS }}

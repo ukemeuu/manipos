@@ -67,8 +67,15 @@ if [[ "$TARGET" == "staging" && "$BASE" == "/" ]]; then
 fi
 echo "Base URL: ${BASE}"
 
-echo "Building bundle..."
-npm run build -- --base "$BASE"
+# CI builds in a separate job and uploads the artifact; the deploy job only
+# uploads. Set SKIP_BUILD=1 to reuse an existing dist/ (the repo ships a
+# macOS node_modules, which cannot build on Linux runners).
+if [[ "${SKIP_BUILD:-0}" == "1" ]]; then
+  echo "Skipping build (using existing dist/)."
+else
+  echo "Building bundle..."
+  npm run build -- --base "$BASE"
+fi
 
 echo "Uploading dist/ to ${FTP_USER}@${FTP_HOST} ..."
 cd dist
