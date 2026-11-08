@@ -65,6 +65,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # The deploy job only downloads the build artifact, so it needs its own
+      # checkout to get the deploy script itself.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: dist
