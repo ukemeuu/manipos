@@ -63,13 +63,22 @@ def curl(method: str, url: str, payload: dict | None = None, timeout: int = 25):
 
 
 def fetch_pending() -> list[dict]:
-    status, body = curl(
-        "GET",
-        f"{SUPABASE_URL}/rest/v1/error_logs"
-        "?select=id,created_at,error_message,error_stack,page,url,"
-        "tenant_slug,staff_name,user_agent"
-        f"&forwarded_at=is.null&order=created_at.asc&limit={BATCH_LIMIT}",
-    )
+    try:
+        status, body = curl(
+            "GET",
+            f"{SUPABASE_URL}/rest/v1/error_logs"
+            "?select=id,created_at,error_message,error_stack,page,url,"
+            "tenant_slug,staff_name,user_agent"
+            f"&forwarded_at=is.null&order=created_at.asc&limit={BATCH_LIMIT}",
+        )
+    except RuntimeError as exc:
+        raise SystemExit(f"Supabase request failed: {exc}")
+
+    # The migration may not have been applied yet — stay quiet rather than
+    # failing every scheduled run.
+    if status == "404":
+        print("error_logs table not found — run supabase/migrations/20261108_error_logs.sql")
+        return []
     if status != "200":
         raise SystemExit(f"Supabase request failed ({status}): {body}")
     return body if isinstance(body, list) else []
