@@ -23,3 +23,9 @@ release/
 __pycache__/
 *.pyc
 .temp/
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+.playwright/

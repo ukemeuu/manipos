@@ -592,9 +592,11 @@ function App() {
               } else {
                 setCurrentRoute('terminal');
               }
-              if (userTenantSlug && userTenantSlug !== tenantInfo.tenantSlug) {
-                navigateToLogin(userTenantSlug);
-              }
+              // Stay on the current origin. The staff session is kept in
+              // localStorage, which is origin-scoped, so redirecting to
+              // <tenant>.pos.manipos.com after signing in at pos.manipos.com
+              // would drop it and land the staff member back on the login page.
+              // The terminal scopes data by the session's restaurantId instead.
             }} 
           />
         </div>
