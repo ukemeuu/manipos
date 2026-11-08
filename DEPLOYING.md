@@ -6,6 +6,7 @@ alerting.
 | Workflow | File | Trigger |
 |---|---|---|
 | CI | `.github/workflows/ci.yml` | Every push to `main` and every pull request |
+| E2E Tests | `.github/workflows/e2e.yml` | Every push to `main`, pull request, and manual |
 | Deploy | `.github/workflows/deploy.yml` | Push to `main` → staging; manual → production |
 | Monitor | `.github/workflows/monitor.yml` | Every 5 minutes |
 
@@ -82,6 +83,25 @@ https://staging.manipos.com before deploying to production.
 
 **Actions → Monitor → Run workflow** runs the uptime check and error-forwarding
 steps immediately.
+
+### Run the E2E tests locally
+
+```bash
+npm ci
+npx playwright install chromium   # skip on macOS 13 — use the system Chrome
+E2E_BROWSER_CHANNEL=chrome \
+SUPABASE_SERVICE_KEY=<service_role_key> \
+E2E_STAFF_EMAIL=admin@chopnownow.com \
+E2E_STAFF_PASSWORD=<password> \
+npx playwright test
+```
+
+The suite covers the marketing site, the tenant microsite, the POS login page,
+staff sign-in, and a full microsite checkout (the order is created, asserted in
+`pos_orders`, then deleted).
+
+On macOS 13 the bundled Chromium is unavailable (Playwright needs macOS 14+),
+so set `E2E_BROWSER_CHANNEL=chrome` to use the installed Google Chrome.
 
 ## Notes
 
