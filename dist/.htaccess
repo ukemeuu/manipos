@@ -1,11 +1,12 @@
 # Hostinger LiteSpeed / Apache SPA Routing Rule
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /
+  # Relative target so staging (served from /staging/) falls back to its own
+  # index.html rather than the production one at the document root.
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
+  RewriteRule . index.html [L]
 </IfModule>
 
 # Never cache the SPA entry or the service worker so deploys are picked up immediately.

@@ -2,14 +2,20 @@
 const VERSION = 'manipos-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
-const OFFLINE_URL = '/offline.html';
+
+// The worker is deployed at the root of production and under /staging/ for
+// staging. registration.scope is therefore '/' or '/staging/' respectively,
+// which keeps each environment's cache and offline shell separate.
+const BASE = self.registration.scope;
+const OFFLINE_URL = `${BASE}offline.html`;
+const ASSET_PREFIX = `${BASE}assets/`;
 
 const SHELL_ASSETS = [
-  '/',
-  '/offline.html',
-  '/manifest.webmanifest',
-  '/manipos_logo.png',
-  '/manipos_african_hero.png',
+  BASE,
+  OFFLINE_URL,
+  `${BASE}manifest.webmanifest`,
+  `${BASE}manipos_logo.png`,
+  `${BASE}manipos_african_hero.png`,
 ];
 
 self.addEventListener('install', (event) => {
@@ -53,7 +59,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Static assets: stale-while-revalidate.
-  if (url.pathname.startsWith('/assets/') || /\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$/.test(url.pathname)) {
+  if (url.pathname.startsWith(ASSET_PREFIX) || /\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$/.test(url.pathname)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         const network = fetch(request)
