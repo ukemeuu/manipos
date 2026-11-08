@@ -47,9 +47,10 @@ jobs:
         run: npm ci
 
       # Pushes deploy to staging; manual runs use the selected environment.
+      # Base is '/' only for a manual production deploy.
       - name: Build
         env:
-          BASE: ${{ github.event.inputs.environment == 'staging' && '/staging/' || '/' }}
+          BASE: ${{ github.event.inputs.environment == 'production' && '/' || '/staging/' }}
           VITE_SUPER_ADMIN_EMAILS: ${{ secrets.VITE_SUPER_ADMIN_EMAILS || vars.VITE_SUPER_ADMIN_EMAILS }}
         run: npm run build -- --base "$BASE"
 
