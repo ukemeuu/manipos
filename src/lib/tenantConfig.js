@@ -151,6 +151,7 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
 
       if (!menuError && menuRows?.length) {
         menu = menuRows.map((row) => ({
+          id: row.id,
           name: row.name,
           category: row.category || 'Menu',
           subcategory: row.subcategory || '',
@@ -159,6 +160,18 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
           image_url: row.image_url || null,
           is_available: row.is_available !== false,
           is_featured: row.is_featured === true,
+        }));
+      }
+
+      // Customisation groups linked to each item (menu_item_ids).
+      const { data: modifierRows, error: modifierError } = await supabase
+        .from('menu_modifier_groups')
+        .select('*')
+        .eq('restaurant_id', data.id);
+      if (!modifierError && modifierRows?.length) {
+        menu = menu.map((item) => ({
+          ...item,
+          modifierGroups: modifierRows.filter((g) => (g.menu_item_ids || []).includes(item.id)),
         }));
       }
     }
