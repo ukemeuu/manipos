@@ -32,9 +32,6 @@ on:
 permissions:
   contents: read
 
-env:
-  TARGET: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'staging' }}
-
 jobs:
   build:
     name: Build
@@ -57,11 +54,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Pushes deploy to staging; manual runs use the selected environment.
       - name: Build
-        run: npm run build -- --base "$BASE"
         env:
-          BASE: ${{ env.TARGET == 'staging' && '/staging/' || '/' }}
+          BASE: ${{ github.event.inputs.environment == 'staging' && '/staging/' || '/' }}
           VITE_SUPER_ADMIN_EMAILS: ${{ secrets.VITE_SUPER_ADMIN_EMAILS || vars.VITE_SUPER_ADMIN_EMAILS }}
+        run: npm run build -- --base "$BASE"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -71,11 +69,9 @@ jobs:
           retention-days: 14
 
   deploy:
-    name: Deploy to ${{ env.TARGET }}
+    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ env.TARGET }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -84,7 +80,7 @@ jobs:
 
       - name: Upload to Hostinger
         env:
-          BASE: ${{ env.TARGET == 'staging' && '/staging/' || '/' }}
+          TARGET: ${{ github.event.inputs.environment || 'staging' }}
           FTP_HOST: ${{ secrets.FTP_HOST || vars.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER || vars.FTP_USER }}
           FTP_PASS: ${{ secrets.FTP_PASS || vars.FTP_PASS }}
