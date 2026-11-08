@@ -91,7 +91,7 @@ def group_rows(rows: list[dict]) -> list[dict]:
         key = (row.get("error_message") or "Unknown error", row.get("page") or "/")
         group = groups.get(key)
         if group is None:
-            groups[key] = {
+            group = {
                 "message": key[0],
                 "page": key[1],
                 "count": 0,
@@ -103,6 +103,7 @@ def group_rows(rows: list[dict]) -> list[dict]:
                 "staff": row.get("staff_name") or "",
                 "user_agent": row.get("user_agent") or "",
             }
+            groups[key] = group
         else:
             group["count"] += 1
         group["ids"].append(row["id"])
