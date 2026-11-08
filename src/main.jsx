@@ -56,9 +56,11 @@ createRoot(document.getElementById('root')).render(
 )
 
 // Register the offline service worker in production builds only.
+// import.meta.env.BASE_URL keeps staging (deployed under /staging/) from
+// registering the production service worker.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((error) => {
       console.warn('[PWA] Service worker registration failed:', error);
     });
   });

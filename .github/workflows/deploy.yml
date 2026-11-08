@@ -1,0 +1,93 @@
+name: Deploy
+
+# Staging deploys automatically on every push to main.
+# Production deploys are manual: run this workflow with environment=production.
+# Rollback: run this workflow with environment=production and a commit SHA or
+# tag in the "ref" input — that commit is rebuilt and deployed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - 'tailwind.config.js'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [production, staging]
+        default: production
+      ref:
+        description: 'Commit SHA or tag (for rollback — leave blank for the latest commit)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  TARGET: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'staging' }}
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.sha }}
+
+      - name: Show deployed revision
+        run: |
+          git rev-parse --short HEAD
+          git log -1 --oneline
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build -- --base "$BASE"
+        env:
+          BASE: ${{ env.TARGET == 'staging' && '/staging/' || '/' }}
+          VITE_SUPER_ADMIN_EMAILS: ${{ secrets.VITE_SUPER_ADMIN_EMAILS || vars.VITE_SUPER_ADMIN_EMAILS }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
+
+  deploy:
+    name: Deploy to ${{ env.TARGET }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ env.TARGET }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Upload to Hostinger
+        env:
+          BASE: ${{ env.TARGET == 'staging' && '/staging/' || '/' }}
+          FTP_HOST: ${{ secrets.FTP_HOST || vars.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER || vars.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS || vars.FTP_PASS }}
+          FTP_PORT: ${{ secrets.FTP_PORT || vars.FTP_PORT }}
+          FTP_STAGING_REMOTE_DIR: ${{ secrets.FTP_STAGING_REMOTE_DIR || vars.FTP_STAGING_REMOTE_DIR }}
+        run: bash scripts/deploy-hostinger.sh --target "$TARGET"

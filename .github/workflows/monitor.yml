@@ -2,12 +2,13 @@ name: Monitor
 
 # Uptime + bug alerts for ManiPOS.
 #
-# Requires these repository secrets:
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
 #   TELEGRAM_BOT_TOKEN     bot token from @BotFather
 #   TELEGRAM_CHAT_ID       chat to send alerts to
 #   SUPABASE_SERVICE_KEY   service role key (used to read error_logs)
 #
-# Add them at: Settings -> Secrets and variables -> Actions -> New secret.
+# Values may also be supplied as repository *variables* — the workflow accepts
+# either.
 
 on:
   schedule:
@@ -34,15 +35,31 @@ jobs:
           restore-keys: |
             uptime-state-
 
+      - name: Check configuration
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
+        run: |
+          missing=0
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN is not set. Add it as a repository secret (Settings -> Secrets and variables -> Actions)."
+            missing=1
+          fi
+          if [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+            echo "::error::TELEGRAM_CHAT_ID is not set. Add it as a repository secret (Settings -> Secrets and variables -> Actions)."
+            missing=1
+          fi
+          exit $missing
+
       - name: Check sites
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
         run: python3 scripts/uptime-monitor.py
 
       - name: Forward bug reports
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || vars.SUPABASE_SERVICE_KEY }}
         run: python3 scripts/error-forwarder.py

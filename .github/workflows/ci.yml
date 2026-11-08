@@ -1,0 +1,40 @@
+name: CI
+
+# Build check on every push to main and every pull request.
+# A red build blocks the deploy workflows, so broken commits never reach
+# staging or production.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPER_ADMIN_EMAILS: ${{ secrets.VITE_SUPER_ADMIN_EMAILS || vars.VITE_SUPER_ADMIN_EMAILS }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
