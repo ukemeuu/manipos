@@ -249,21 +249,21 @@ export function MenuBuilder({ restaurantId, onBack }) {
       setModifierModal(null);
       await fetchData();
     } catch (err) {
-      alert('Failed to save customisation: ' + err.message);
+      alert('Failed to save modifier: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
   const deleteModifier = async (mod) => {
-    if (!confirm(`Delete customisation "${mod.name}"? It will be removed from all items.`)) return;
+    if (!confirm(`Delete modifier "${mod.name}"? It will be removed from all items.`)) return;
     setSaving(true);
     try {
       const { error } = await supabase.from('menu_modifier_groups').delete().eq('id', mod.id).eq('restaurant_id', restaurantId);
       if (error) throw error;
       await fetchData();
     } catch (err) {
-      alert('Failed to delete customisation: ' + err.message);
+      alert('Failed to delete modifier: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -432,7 +432,7 @@ export function MenuBuilder({ restaurantId, onBack }) {
 
           <div className="pt-3">
             <div className="flex items-center justify-between px-2 pb-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Customisations</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Modifiers</span>
               <button
                 onClick={() => setModifierModal({ name: '', min_selected: 0, max_selected: 1, is_required: false, options: [{ name: '', price: 0, include_vat: false, is_available: true }] })}
                 className="p-1 rounded hover:bg-slate-100 text-slate-500"
@@ -440,7 +440,7 @@ export function MenuBuilder({ restaurantId, onBack }) {
                 <Plus size={14} />
               </button>
             </div>
-            {modifiers.length === 0 && <p className="text-xs text-slate-400 px-3 py-2">No customisations yet.</p>}
+            {modifiers.length === 0 && <p className="text-xs text-slate-400 px-3 py-2">No modifiers yet.</p>}
             {modifiers.map((mod) => (
               <div key={mod.id} className="group flex items-center gap-1 px-2 py-1.5 rounded-xl text-sm hover:bg-slate-50 text-slate-700">
                 <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-black">
@@ -742,9 +742,9 @@ function ItemModal({ value, categories, modifiers = [], saving, onSave, onClose,
         </div>
 
         <div>
-          <label className={labelCls}>Customisations</label>
+          <label className={labelCls}>Modifiers</label>
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
-            {modifiers.length === 0 && <p className="text-xs text-slate-400">No customisation groups yet. Add them from the sidebar.</p>}
+            {modifiers.length === 0 && <p className="text-xs text-slate-400">No modifier groups yet. Add them from the sidebar.</p>}
             {modifiers.map((mod) => {
               const linked = form.id ? (mod.menu_item_ids || []).includes(form.id) : false;
               return (
@@ -795,11 +795,30 @@ function ModifierModal({ value, saving, onSave, onClose, onDelete }) {
   };
 
   return (
-    <Modal title={form.id ? 'Edit customisation' : 'New customisation'} onClose={onClose} wide>
+    <Modal title={form.id ? 'Edit modifier' : 'New modifier'} onClose={onClose} wide>
       <div className="space-y-4">
         <div>
-          <label className={labelCls}>Group name</label>
-          <input className={inputCls} value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Choose Size, Extras" />
+          <label className={labelCls}>Modifier name</label>
+          <input className={inputCls} value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Spice Level, Preparation Style, Size, Extras" />
+          <p className="text-[11px] text-slate-400 mt-1.5">
+            Create any modifier type — spice level, preparation style, size, extras, add-ons, sides…
+          </p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {['Spice Level', 'Preparation Style', 'Size', 'Extras', 'Add-ons', 'Sides', 'Sauce', 'Doneness'].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, name: preset }))}
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
+                  form.name === preset
+                    ? 'bg-amber-400 text-slate-950 border-amber-400'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-amber-400 hover:text-amber-700'
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -834,7 +853,7 @@ function ModifierModal({ value, saving, onSave, onClose, onDelete }) {
               <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
                 <input
                   className={inputCls}
-                  placeholder="Option name (e.g. Large)"
+                  placeholder="Option name (e.g. Mild, Medium, Hot)"
                   value={opt.name || ''}
                   onChange={(e) => updateOption(idx, { name: e.target.value })}
                 />

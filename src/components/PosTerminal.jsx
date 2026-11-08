@@ -2196,6 +2196,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         fetchCategories();
         fetchDiscounts();
 
+        // Poll open orders so microsite orders appear even when the Realtime
+        // socket cannot send the x-tenant-id header (RLS would otherwise block it).
+        const openOrdersPoll = setInterval(() => { fetchOpenOrders(); }, 15000);
+
         // Supabase Realtime channel subscription to listen for new orders
         const ordersChannel = supabase
             .channel('realtime_pos_orders')
@@ -3747,6 +3751,52 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     ) : null}
                 </div>
             </header>
+
+            {/* Global Microsite Orders Banner — visible in every view, not just Dine-In Tables.
+                Microsite orders are created as Pending and must be accepted by staff before
+                the kitchen makes them. Without this, they were only shown on the Tables tab. */}
+            {(() => {
+                const pendingMicrosite = openOrders.filter(
+                    o => o.cashier_name === 'Self-Service Microsite' && o.status === 'Pending'
+                );
+                if (pendingMicrosite.length === 0) return null;
+                return (
+                    <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 sm:px-6 shrink-0 relative z-10">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-base">🔔</span>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-amber-800">
+                                    {pendingMicrosite.length} Microsite Order{pendingMicrosite.length > 1 ? 's' : ''} Awaiting Approval
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {pendingMicrosite.map(order => (
+                                    <div key={order.id} className="flex items-center gap-2 bg-white border border-amber-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                                        <span className="text-[10px] font-black text-white bg-amber-600 px-1.5 py-0.5 rounded">
+                                            #{obfuscateTicket(order.ticket_number)}
+                                        </span>
+                                        <span className="text-[11px] font-bold text-gray-800">{order.customer_name}</span>
+                                        <span className="text-[10px] text-gray-500">({order.dining_option})</span>
+                                        <span className="font-mono text-[11px] font-black text-gray-900">KES {order.total_amount.toLocaleString()}</span>
+                                        <button
+                                            onClick={() => handleAcceptOrder(order)}
+                                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                                        >
+                                            Accept
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeclineOrder(order)}
+                                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-red-100 transition-colors"
+                                        >
+                                            Decline
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Main Terminal Split Screen */}
             <div className="flex-1 flex overflow-hidden relative">

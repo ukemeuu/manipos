@@ -50,9 +50,15 @@ const tenantMap = new Map((tenants || []).map((t) => [t.id, t]));
 
 // --- Load staff -------------------------------------------------------------
 
+// auth_uid is added by the tenant-isolation migration; tolerate its absence.
+let staffColumns = 'id, restaurant_id, name, email, role, active';
+const { data: probe } = await supabase.from('staff_access').select('auth_uid').limit(1);
+const hasAuthUid = probe !== null;
+if (hasAuthUid) staffColumns += ', auth_uid';
+
 const { data: staff, error: staffError } = await supabase
   .from('staff_access')
-  .select('id, restaurant_id, name, email, role, active, auth_uid')
+  .select(staffColumns)
   .eq('active', true)
   .not('email', 'is', null);
 
@@ -98,12 +104,18 @@ for (const s of staff) {
   if (existing) {
     console.log(`~ ${s.email} — Auth user exists (${existing.id}), updating claims`);
     if (APPLY) {
-      const { error } = await supabase.auth.admin.updateUserById(existing.id, { app_metadata: appMetadata });
+      const { error } = await supabase.auth.admin.updateUserById(existing.id, {
+        app_metadata: appMetadata,
+        user_metadata: { ...(existing.user_metadata || {}), staff_id: s.id },
+      });
       if (error) {
         results.push({ email: s.email, tenant: tenant?.slug, error: error.message });
         continue;
       }
-      await supabase.from('staff_access').update({ auth_uid: existing.id }).eq('id', s.id);
+      if (hasAuthUid) {
+        const { error: linkErr } = await supabase.from('staff_access').update({ auth_uid: existing.id }).eq('id', s.id);
+        if (linkErr) console.error(`  ✗ failed to link auth_uid: ${linkErr.message}`);
+      }
     }
     results.push({ email: s.email, tenant: tenant?.slug, tempPassword: '(existing password)' });
     continue;
@@ -118,7 +130,7 @@ for (const s of staff) {
       password: tempPassword,
       email_confirm: true,
       app_metadata: appMetadata,
-      user_metadata: { must_change_password: true },
+      user_metadata: { must_change_password: true, staff_id: s.id },
     });
 
     if (createError) {
@@ -127,15 +139,17 @@ for (const s of staff) {
       continue;
     }
 
-    const { error: linkError } = await supabase
-      .from('staff_access')
-      .update({ auth_uid: created.user.id })
-      .eq('id', s.id);
+    if (hasAuthUid) {
+      const { error: linkError } = await supabase
+        .from('staff_access')
+        .update({ auth_uid: created.user.id })
+        .eq('id', s.id);
 
-    if (linkError) {
-      console.error(`  ✗ failed to link staff_access: ${linkError.message}`);
-      results.push({ email: s.email, tenant: tenant?.slug, error: linkError.message });
-      continue;
+      if (linkError) {
+        console.error(`  ✗ failed to link auth_uid: ${linkError.message}`);
+        results.push({ email: s.email, tenant: tenant?.slug, error: linkError.message });
+        continue;
+      }
     }
 
     results.push({ email: s.email, tenant: tenant?.slug, tempPassword });

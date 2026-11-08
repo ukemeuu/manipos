@@ -1,0 +1,48 @@
+name: Monitor
+
+# Uptime + bug alerts for ManiPOS.
+#
+# Requires these repository secrets:
+#   TELEGRAM_BOT_TOKEN     bot token from @BotFather
+#   TELEGRAM_CHAT_ID       chat to send alerts to
+#   SUPABASE_SERVICE_KEY   service role key (used to read error_logs)
+#
+# Add them at: Settings -> Secrets and variables -> Actions -> New secret.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    name: Uptime + bug alerts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Persist the uptime state between runs so we only alert on transitions.
+      - name: Restore uptime state
+        uses: actions/cache@v4
+        with:
+          path: .uptime-state.json
+          key: uptime-state-${{ github.run_id }}
+          restore-keys: |
+            uptime-state-
+
+      - name: Check sites
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 scripts/uptime-monitor.py
+
+      - name: Forward bug reports
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python3 scripts/error-forwarder.py

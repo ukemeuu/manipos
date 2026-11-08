@@ -14,3 +14,12 @@ release/
 # Logs and OS
 *.log
 .DS_Store
+
+# Uptime monitor state (per-machine / per-runner)
+.uptime-state.json
+
+# Build archives and Python caches
+*.zip
+__pycache__/
+*.pyc
+.temp/

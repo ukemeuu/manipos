@@ -70,7 +70,6 @@ export function SuperAdminDashboard() {
       .split(',')
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean);
-    const configuredPasscode = import.meta.env.VITE_SUPER_ADMIN_PASSCODE || '';
 
     // Preferred: an authenticated Supabase user on the platform-admin allow-list.
     try {
@@ -85,7 +84,7 @@ export function SuperAdminDashboard() {
     }
 
     // Server-side passcode verification against the bcrypt hash in
-    // platform_settings. This keeps the secret out of the bundle.
+    // platform_settings. The secret never ships in the client bundle.
     try {
       const { data: valid, error: rpcError } = await supabase.rpc('admin_verify_passcode', {
         p_passcode: passcode,
@@ -95,16 +94,11 @@ export function SuperAdminDashboard() {
         return;
       }
     } catch (_) {
-      // Fall through to the deployment-configured fallback.
+      // Fall through to the error below.
     }
 
-    if (configuredPasscode && passcode === configuredPasscode) {
-      setAuthenticated(true);
-      return;
-    }
-
-    if (!configuredPasscode && adminEmails.length === 0) {
-      setPasscodeError('Super Admin access is not configured on this deployment. Set VITE_SUPER_ADMIN_PASSCODE or sign in with a platform admin account.');
+    if (adminEmails.length === 0) {
+      setPasscodeError('Super Admin access is not configured on this deployment. Sign in with a platform admin account.');
       return;
     }
 
