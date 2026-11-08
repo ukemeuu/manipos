@@ -14,6 +14,12 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+  # Safety net: GitHub's schedule trigger can take a long time to register for
+  # a newly added workflow. Running after every CI build keeps monitoring live
+  # even while the cron schedule is warming up.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: read
