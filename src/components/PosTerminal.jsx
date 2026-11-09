@@ -10,6 +10,7 @@ import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { MenuItemSalesAnalyzer } from './MenuItemSalesAnalyzer';
 import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { loadTenant } from '../lib/tenantConfig';
+import { can } from '../lib/permissions';
 
 // ---------------------------------------------------------------------------
 // Receipt / print branding
@@ -356,7 +357,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const stored = localStorage.getItem('pin_staff_user');
             if (stored) {
                 const parsed = JSON.parse(stored);
-                if (parsed.role === 'admin') return true;
+                // Terminal settings and the brand filter are permission-gated
+                // rather than reserved for the hard-coded admin role.
+                if (can('manage_settings', parsed)) return true;
             }
         } catch (e) {}
         const upperName = staffName?.toUpperCase() || '';

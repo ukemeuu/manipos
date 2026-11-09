@@ -25,6 +25,7 @@ import {
   getRetailPosLoginUrl,
 } from './lib/tenant';
 import { loadTenant, getActiveTenantSlug, getMicrositeUrl } from './lib/tenantConfig';
+import { can } from './lib/permissions';
 
 const PAGE_ROUTES = {
   superadmin: 'superadmin',
@@ -411,7 +412,8 @@ function App() {
   // AUTHENTICATED SESSION ROUTING ENGINE
   if (session) {
     const staffUser = session.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-    const isAdmin = staffUser.role === 'admin' || staffUser.role === 'manager';
+    // Dashboard access is a permission, not a hard-coded role pair.
+    const isAdmin = can('view_dashboard', staffUser);
 
     // If store is retail, route to retail terminal by default
     if (businessType === 'retail' && currentRoute === 'terminal') {

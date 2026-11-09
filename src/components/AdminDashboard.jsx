@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
+import { PERMISSION_GROUPS, currentPermissions, roleDefaults } from '../lib/permissions';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
 // Setup progress is per restaurant. A shared flag would let a brand-new
@@ -114,6 +115,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   // Modals / Editing states
   const [editingItem, setEditingItem] = useState(null); // for menu
   const [editingStaff, setEditingStaff] = useState(null); // for staff
+  // null means "use the role defaults"; an array is an explicit override.
+  const [staffPermissions, setStaffPermissions] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null); // for suppliers
   
   // Restaurant info
@@ -396,6 +399,13 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   };
 
   // Staff Management Handlers
+  // Opens the add/edit modal with the user's current permissions (or null to
+  // inherit the role defaults).
+  const openStaffModal = (staff) => {
+    setEditingStaff(staff);
+    setStaffPermissions(Array.isArray(staff?.permissions) ? staff.permissions : null);
+  };
+
   const handleSaveStaff = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -419,11 +429,14 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         p_email: form.email ? form.email.value : `${form.staffName.value.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`,
         p_role: form.role.value,
         p_pin: newPin || null,
+        // null keeps the role defaults; an array is an explicit override.
+        p_permissions: staffPermissions,
       });
       if (error) throw error;
       if (data?.success === false) throw new Error(data.error || 'Could not save staff member.');
 
       setEditingStaff(null);
+      setStaffPermissions(null);
       fetchDashboardData();
     } catch (err) {
       alert('Error saving staff member: ' + err.message);
@@ -583,6 +596,25 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
   const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6'];
 
+  // Effective permissions for the signed-in user. Tabs and actions that need a
+  // permission are hidden when it is missing; the server enforces the same
+  // checks on the RPCs that matter.
+  const perms = currentPermissions();
+  const canDo = (permission) => perms.includes(permission);
+
+  // Which permission (if any) unlocks each dashboard tab.
+  const TAB_PERMISSION = {
+    analytics: 'view_analytics',
+    menu: 'manage_menu',
+    staff: 'manage_staff',
+    offers: 'manage_offers',
+    feedback: 'manage_feedback',
+    suppliers: 'manage_suppliers',
+    linkhub: 'manage_settings',
+    audit: 'view_audit',
+    settings: 'manage_settings',
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -663,6 +695,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           ) : (
             <>
               {/* PRIMARY WORKSPACE MODULES */}
+              {canDo(TAB_PERMISSION.analytics) && (
               <button
                 onClick={() => setActiveTab('analytics')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
@@ -674,7 +707,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 <TrendingUp size={18} />
                 Analytics & Sales
               </button>
+              )}
           
+              {canDo(TAB_PERMISSION.menu) && (
               <button
                 onClick={() => setActiveTab('menu')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
@@ -686,7 +721,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 <Package size={18} />
                 Menu Management
               </button>
+              )}
 
+              {canDo(TAB_PERMISSION.staff) && (
               <button
                 onClick={() => setActiveTab('staff')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
@@ -698,6 +735,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 <Users size={18} />
                 Staff & Access
               </button>
+              )}
 
               <div className="pt-3 pb-1 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
                 Operations
@@ -727,29 +765,33 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 Inventory & Recipes
               </button>
 
+              {canDo(TAB_PERMISSION.offers) && (
               <button
                 onClick={() => setActiveTab("offers")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === "offers" 
-                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10" 
+                  activeTab === "offers"
+                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10"
                     : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
                 }`}
               >
                 <Gift size={18} />
                 Offers & Promotions
               </button>
+              )}
 
+              {canDo(TAB_PERMISSION.feedback) && (
               <button
                 onClick={() => setActiveTab("feedback")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === "feedback" 
-                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10" 
+                  activeTab === "feedback"
+                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10"
                     : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
                 }`}
               >
                 <MessageSquare size={18} />
                 Customer Feedback
               </button>
+              )}
 
               {/* COLLAPSIBLE SETTINGS & TOOLS GROUP */}
               <div className="pt-2">
@@ -782,55 +824,63 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       Store Setup Checklist
                     </button>
 
+                    {canDo(TAB_PERMISSION.suppliers) && (
                     <button
                       onClick={() => setActiveTab('suppliers')}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'suppliers' 
-                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                        activeTab === 'suppliers'
+                          ? 'bg-amber-400 text-slate-950 font-bold'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                       }`}
                     >
                       <Truck size={14} />
                       Supplier Management
                     </button>
+                    )}
 
                     
 
+                    {canDo(TAB_PERMISSION.linkhub) && (
                     <button
                       onClick={() => setActiveTab('linkhub')}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'linkhub' 
-                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                        activeTab === 'linkhub'
+                          ? 'bg-amber-400 text-slate-950 font-bold'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                       }`}
                     >
                       <Link2 size={14} />
                       Link Hub & Socials
                     </button>
+                    )}
 
+                    {canDo(TAB_PERMISSION.audit) && (
                     <button
                       onClick={() => setActiveTab('audit')}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'audit' 
-                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                        activeTab === 'audit'
+                          ? 'bg-amber-400 text-slate-950 font-bold'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                       }`}
                     >
                       <ShieldCheck size={14} />
                       Security & Audit Logs
                     </button>
+                    )}
 
+                    {canDo(TAB_PERMISSION.settings) && (
                     <button
                       onClick={() => setActiveTab('settings')}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'settings' 
-                          ? 'bg-amber-400 text-slate-950 font-bold' 
+                        activeTab === 'settings'
+                          ? 'bg-amber-400 text-slate-950 font-bold'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                       }`}
                     >
                       <Settings size={14} />
                       Receipt Configuration
                     </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -967,7 +1017,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* ANALYTICS PANEL */}
-            {activeTab === 'analytics' && (
+            {activeTab === 'analytics' && canDo(TAB_PERMISSION.analytics) && (
               <motion.div
                 key="analytics"
                 initial={{ opacity: 0, y: 15 }}
@@ -1148,7 +1198,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* MENU PANEL */}
-            {activeTab === 'menu' && (
+            {activeTab === 'menu' && canDo(TAB_PERMISSION.menu) && (
               <motion.div
                 key="menu"
                 initial={{ opacity: 0, y: 15 }}
@@ -1222,7 +1272,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* STAFF PANEL */}
-            {activeTab === 'staff' && (
+            {activeTab === 'staff' && canDo(TAB_PERMISSION.staff) && (
               <motion.div
                 key="staff"
                 initial={{ opacity: 0, y: 15 }}
@@ -1236,7 +1286,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                     <p className="text-slate-400 text-sm mt-1">Configure staff authorization credentials and role permissions.</p>
                   </div>
                   <button
-                    onClick={() => setEditingStaff({ name: '', email: '', role: 'cashier', password: '' })}
+                    onClick={() => openStaffModal({ name: '', email: '', role: 'cashier', password: '' })}
                     className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
                   >
                     <Plus size={16} /> Add Staff Account
@@ -1272,7 +1322,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                           <td className="py-4 px-6 text-slate-400 font-mono">••••••••</td>
                           <td className="py-4 px-6 text-right space-x-2">
                             <button
-                              onClick={() => setEditingStaff(staff)}
+                              onClick={() => openStaffModal(staff)}
                               className="text-slate-400 hover:text-white p-1"
                             >
                               <Edit3 size={16} />
@@ -1293,7 +1343,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* SETTINGS PANEL */}
-            {activeTab === 'settings' && (
+            {activeTab === 'settings' && canDo(TAB_PERMISSION.settings) && (
               <motion.div
                 key="settings"
                 initial={{ opacity: 0, y: 15 }}
@@ -1572,7 +1622,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* SUPPLIERS PANEL */}
-            {activeTab === 'suppliers' && (
+            {activeTab === 'suppliers' && canDo(TAB_PERMISSION.suppliers) && (
               <motion.div
                 key="suppliers"
                 initial={{ opacity: 0, y: 15 }}
@@ -2082,7 +2132,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
 
             {/* CUSTOMER FEEDBACK PANEL */}
-            {activeTab === 'feedback' && (
+            {activeTab === 'feedback' && canDo(TAB_PERMISSION.feedback) && (
               <motion.div
                 key="feedback"
                 initial={{ opacity: 0, y: 15 }}
@@ -2095,7 +2145,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* LINK HUB & SOCIALS PANEL */}
-            {activeTab === 'linkhub' && (
+            {activeTab === 'linkhub' && canDo(TAB_PERMISSION.linkhub) && (
               <motion.div
                 key="linkhub"
                 initial={{ opacity: 0, y: 15 }}
@@ -2243,7 +2293,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* SECURITY & AUDIT LOGS PANEL */}
-            {activeTab === 'audit' && (
+            {activeTab === 'audit' && canDo(TAB_PERMISSION.audit) && (
               <motion.div
                 key="audit"
                 initial={{ opacity: 0, y: 15 }}
@@ -2464,6 +2514,58 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       placeholder="••••••••"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none font-medium"
                     />
+                  </div>
+                </div>
+
+                {/* Granular permissions. An empty/untouched list inherits the
+                    role defaults; ticking a box switches to an explicit list. */}
+                <div className="space-y-2 pt-4 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-400 block">Permissions</label>
+                    <button
+                      type="button"
+                      onClick={() => setStaffPermissions(null)}
+                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      Reset to role defaults
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {staffPermissions
+                      ? 'This person has an explicit permission list. Untick everything and press reset to inherit their role defaults.'
+                      : `Inheriting the ${(editingStaff.role || 'cashier')} role defaults. Tick any box to give this person an explicit list.`}
+                  </p>
+                  <div className="max-h-56 overflow-y-auto pr-1 space-y-3">
+                    {Object.entries(PERMISSION_GROUPS).map(([group, perms]) => (
+                      <div key={group}>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{group}</div>
+                        <div className="grid grid-cols-1 gap-1">
+                          {perms.map((p) => {
+                            const fallback = roleDefaults(editingStaff.role || 'cashier');
+                            const checked = staffPermissions
+                              ? staffPermissions.includes(p.key)
+                              : fallback.includes(p.key);
+                            return (
+                              <label key={p.key} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer hover:text-white transition-colors">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    const base = staffPermissions || fallback;
+                                    const next = e.target.checked
+                                      ? [...new Set([...base, p.key])]
+                                      : base.filter((k) => k !== p.key);
+                                    setStaffPermissions(next);
+                                  }}
+                                  className="accent-emerald-500"
+                                />
+                                {p.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

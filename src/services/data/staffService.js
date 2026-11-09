@@ -1,6 +1,7 @@
 import { supabase, setTenantContext } from '../../lib/supabase';
 import { isOnline } from './connectivityService';
 import { getLocalCollection, insertLocalRecord } from './localStoreService';
+import { roleDefaults } from '../../lib/permissions';
 
 const OFFLINE_STAFF_KEY = 'manipos_offline_staff_credentials';
 
@@ -28,9 +29,24 @@ export async function authenticateStaffLogin(email, password) {
             if (!error && data?.session) {
                 const appMeta = data.user?.app_metadata || {};
                 const userMeta = data.user?.user_metadata || {};
+                const staffId = userMeta.staff_id || data.user.id;
+
+                // Resolve the authoritative permission list (role defaults or a
+                // per-user override) from the staff record.
+                let permissions = [];
+                try {
+                    const { data: perms } = await supabase.rpc('effective_permissions', {
+                        p_staff_id: staffId,
+                    });
+                    if (Array.isArray(perms) && perms.length) permissions = perms;
+                } catch (_) {
+                    // Fall through to the role defaults below.
+                }
+                if (!permissions.length) permissions = roleDefaults(appMeta.role || 'cashier');
+
                 const staffUser = {
                     // Prefer the staff_access id so the RPCs can resolve the actor.
-                    id: userMeta.staff_id || data.user.id,
+                    id: staffId,
                     authUid: data.user.id,
                     name: appMeta.name || userMeta.name || cleanEmail.split('@')[0] || 'Staff',
                     email: data.user.email || cleanEmail,
@@ -39,6 +55,7 @@ export async function authenticateStaffLogin(email, password) {
                     restaurantName: appMeta.tenant_name || '',
                     tenantSlug: appMeta.tenant_slug || '',
                     mustChangePassword: userMeta.must_change_password === true,
+                    permissions,
                 };
                 setTenantContext(staffUser.restaurantId);
                 localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
