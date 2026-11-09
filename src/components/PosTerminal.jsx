@@ -32,6 +32,19 @@ export function getReceiptBrand() {
     return RECEIPT_BRAND;
 }
 
+// Offline caches (menu, categories, modifiers, orders, shifts) are keyed per
+// tenant. A shared key would hand one restaurant's data to the next tenant that
+// signs in on the same device.
+let POS_TENANT_ID = null;
+
+export function setPosTenantId(tenantId) {
+    POS_TENANT_ID = tenantId || null;
+}
+
+function posCacheKey(name) {
+    return `pos_cache_${name}_${POS_TENANT_ID || 'shared'}`;
+}
+
 function escapeReceiptHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -153,15 +166,11 @@ export const BRAND_OPTIONS = [
     }
 ];
 
-const DEFAULT_CATEGORIES = [
-    { name: 'Starters & Bites', icon: '🍢' },
-    { name: 'Breakfast', icon: '🍳' },
-    { name: 'Main Combos', icon: '🍛' },
-    { name: 'Stews', icon: '🍲' },
-    { name: 'Soups', icon: '🥣' },
-    { name: 'Beverages', icon: '🥤' },
-    { name: 'Hot Beverages', icon: '☕' }
-];
+// NOTE: there is deliberately no hard-coded default category list. A starter
+// set was previously shown to every tenant with no categories (and cached in
+// localStorage), which made new restaurants look like an existing brand and
+// let one tenant's categories leak into the next on the same device.
+// Tenants create their own categories in the menu builder.
 
 // Modifier groups for the order item modifier panel
 const MODIFIER_GROUPS = [
@@ -325,8 +334,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const restaurantId = sessionUser.restaurantId || sessionUser.restaurant_id || null;
     const activeTenantSlug = tenantSlug || sessionUser.tenantSlug;
 
-    // Keep the Supabase tenant context in sync so RLS can scope every request.
-    React.useEffect(() => { setTenantContext(restaurantId); }, [restaurantId]);
+    // Keep the Supabase tenant context in sync so RLS can scope every request,
+    // and key the offline caches to this tenant.
+    React.useEffect(() => { setTenantContext(restaurantId); setPosTenantId(restaurantId); }, [restaurantId]);
 
     // Load this tenant's profile so printed receipts and slips carry the
     // restaurant's own name, address, phone and M-Pesa details rather than a
@@ -1086,7 +1096,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const [editingItem, setEditingItem] = useState(null);
     const [linkedGroupIds, setLinkedGroupIds] = useState([]);
     const [editingModifierGroup, setEditingModifierGroup] = useState(null);
-    const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+    // Start empty: a tenant with no categories must see none, not a starter set
+    // and not another restaurant's cached categories.
+    const [categories, setCategories] = useState([]);
     const [loadingCategories, setLoadingCategories] = useState(false);
     const [editingCategory, setEditingCategory] = useState(null);
     const [catLinkedItemIds, setCatLinkedItemIds] = useState([]);
@@ -1742,13 +1754,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             if (error) throw error;
             setActiveShift(data || null);
             if (data) {
-                localStorage.setItem('pos_cache_active_shift_' + staffName, JSON.stringify(data));
+                localStorage.setItem(posCacheKey('active_shift_' + staffName), JSON.stringify(data));
             } else {
-                localStorage.removeItem('pos_cache_active_shift_' + staffName);
+                localStorage.removeItem(posCacheKey('active_shift_' + staffName));
             }
         } catch (err) {
             console.error('Error checking active shift:', err);
-            const cached = localStorage.getItem('pos_cache_active_shift_' + staffName);
+            const cached = localStorage.getItem(posCacheKey('active_shift_' + staffName));
             if (cached) {
                 setActiveShift(JSON.parse(cached));
             }
@@ -1775,7 +1787,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             if (error) throw error;
             setActiveShift(data);
             setOpeningFloatInput('');
-            localStorage.setItem('pos_cache_active_shift_' + staffName, JSON.stringify(data));
+            localStorage.setItem(posCacheKey('active_shift_' + staffName), JSON.stringify(data));
         } catch (err) {
             console.warn('Failed to open shift online, opening offline shift:', err);
             const offlineShift = {
@@ -1787,7 +1799,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             };
             setActiveShift(offlineShift);
             setOpeningFloatInput('');
-            localStorage.setItem('pos_cache_active_shift_' + staffName, JSON.stringify(offlineShift));
+            localStorage.setItem(posCacheKey('active_shift_' + staffName), JSON.stringify(offlineShift));
             
             // Queue the shift creation for offline sync
             const offlineShifts = JSON.parse(localStorage.getItem('pos_offline_shifts_queue') || '[]');
@@ -1825,7 +1837,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 let totalCardSales = 0;
                 let shiftOrdersCount = 0;
 
-                const cachedHistory = JSON.parse(localStorage.getItem('pos_cache_history') || '[]');
+                const cachedHistory = JSON.parse(localStorage.getItem(posCacheKey('history')) || '[]');
                 const offlineQueue = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
 
                 const allOrders = [
@@ -1872,7 +1884,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 setClosingCashInput('');
                 setClosingCardInput('');
                 setClosingModalOpen(false);
-                localStorage.removeItem('pos_cache_active_shift_' + staffName);
+                localStorage.removeItem(posCacheKey('active_shift_' + staffName));
 
                 // Queue shift closure
                 const offlineShifts = JSON.parse(localStorage.getItem('pos_offline_shifts_queue') || '[]');
@@ -2165,10 +2177,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             }
 
             setOpenOrders(finalMerged);
-            localStorage.setItem('pos_cache_open_orders', JSON.stringify(finalMerged));
+            localStorage.setItem(posCacheKey('open_orders'), JSON.stringify(finalMerged));
         } catch (err) {
             console.error('Error fetching open orders:', err);
-            const cached = localStorage.getItem('pos_cache_open_orders');
+            const cached = localStorage.getItem(posCacheKey('open_orders'));
             if (cached) {
                 setOpenOrders(JSON.parse(cached));
             }
@@ -2254,7 +2266,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             }
 
             setHistoryOrders(finalOrders);
-            localStorage.setItem('pos_cache_history', JSON.stringify(finalOrders));
+            localStorage.setItem(posCacheKey('history'), JSON.stringify(finalOrders));
 
             // Previous Period calculations
             const periodDiffMs = end.getTime() - start.getTime();
@@ -2282,18 +2294,18 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 }
                 const prevSum = validPrevOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
                 setPrevPeriodSales(prevSum);
-                localStorage.setItem('pos_cache_prev_sales', String(prevSum));
+                localStorage.setItem(posCacheKey('prev_sales'), String(prevSum));
             } else {
-                const cachedPrev = localStorage.getItem('pos_cache_prev_sales');
+                const cachedPrev = localStorage.getItem(posCacheKey('prev_sales'));
                 if (cachedPrev) setPrevPeriodSales(parseFloat(cachedPrev) || 0);
             }
         } catch (err) {
             console.error('Error fetching order history:', err);
-            const cached = localStorage.getItem('pos_cache_history');
+            const cached = localStorage.getItem(posCacheKey('history'));
             if (cached) {
                 setHistoryOrders(JSON.parse(cached));
             }
-            const cachedPrev = localStorage.getItem('pos_cache_prev_sales');
+            const cachedPrev = localStorage.getItem(posCacheKey('prev_sales'));
             if (cachedPrev) {
                 setPrevPeriodSales(parseFloat(cachedPrev) || 0);
             }
@@ -2386,10 +2398,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
             if (error) throw error;
             setMenu(data || []);
-            localStorage.setItem('pos_cache_menu', JSON.stringify(data || []));
+            localStorage.setItem(posCacheKey('menu'), JSON.stringify(data || []));
         } catch (err) {
             console.error('Error loading menu:', err);
-            const cached = localStorage.getItem('pos_cache_menu');
+            const cached = localStorage.getItem(posCacheKey('menu'));
             if (cached) {
                 setMenu(JSON.parse(cached));
             }
@@ -2409,10 +2421,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
             if (error) throw error;
             setModifierGroups(data || []);
-            localStorage.setItem('pos_cache_modifiers', JSON.stringify(data || []));
+            localStorage.setItem(posCacheKey('modifiers'), JSON.stringify(data || []));
         } catch (err) {
             console.error('Error loading modifier groups:', err);
-            const cached = localStorage.getItem('pos_cache_modifiers');
+            const cached = localStorage.getItem(posCacheKey('modifiers'));
             if (cached) {
                 setModifierGroups(JSON.parse(cached));
             }
@@ -2423,6 +2435,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
     const fetchCategories = async () => {
         setLoadingCategories(true);
+        // Cache per tenant. A shared key would show one restaurant's categories
+        // to the next tenant that signs in on the same device.
+        const cacheKey = posCacheKey('categories');
         try {
             const { data, error } = await supabase
                 .from('pos_categories')
@@ -2434,21 +2449,21 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 if (error.code !== '42P01') {
                     console.error('Error loading categories:', error);
                 }
-                setCategories(DEFAULT_CATEGORIES);
+                // Fall back to this tenant's own cache only.
+                const cached = localStorage.getItem(cacheKey);
+                setCategories(cached ? JSON.parse(cached) : []);
             } else if (data && data.length > 0) {
                 setCategories(data);
-                localStorage.setItem('pos_cache_categories', JSON.stringify(data));
+                localStorage.setItem(cacheKey, JSON.stringify(data));
             } else {
-                setCategories(DEFAULT_CATEGORIES);
+                // No categories yet — the tenant creates their own.
+                setCategories([]);
+                localStorage.removeItem(cacheKey);
             }
         } catch (err) {
             console.error('Error loading categories:', err);
-            const cached = localStorage.getItem('pos_cache_categories');
-            if (cached) {
-                setCategories(JSON.parse(cached));
-            } else {
-                setCategories(DEFAULT_CATEGORIES);
-            }
+            const cached = localStorage.getItem(cacheKey);
+            setCategories(cached ? JSON.parse(cached) : []);
         } finally {
             setLoadingCategories(false);
         }
@@ -2539,10 +2554,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
             if (error) throw error;
             setStaffList(data || []);
-            localStorage.setItem('pos_cache_staff', JSON.stringify(data || []));
+            localStorage.setItem(posCacheKey('staff'), JSON.stringify(data || []));
         } catch (err) {
             console.error('Error loading staff list:', err);
-            const cached = localStorage.getItem('pos_cache_staff');
+            const cached = localStorage.getItem(posCacheKey('staff'));
             if (cached) {
                 setStaffList(JSON.parse(cached));
             }
@@ -10765,7 +10780,7 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .page { page-break-after:always; padding-bottom:8mm; } .page:last-child { page-break-after:avoid; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.r, td.r { text-align:right; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .big { font-size:14px; font-weight:900; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
     let cachedMenu = [];
     try {
-        const cached = localStorage.getItem('pos_cache_menu');
+        const cached = localStorage.getItem(posCacheKey('menu'));
         if (cached) cachedMenu = JSON.parse(cached);
     } catch (e) {}
 

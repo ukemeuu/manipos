@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getRegistryMenu, getRegistryTenant } from '../data/tenantRegistry';
+import { getRegistryTenant } from '../data/tenantRegistry';
 
 export function slugify(value) {
   return String(value || '')
@@ -17,19 +17,15 @@ export function validateSlug(slug) {
   return '';
 }
 
-const DEFAULT_CATEGORIES = [
-  { name: 'Small Chops & Starters', icon: 'Utensils', display_order: 1 },
-  { name: 'Rice & Jollof', icon: 'UtensilsCrossed', display_order: 2 },
-  { name: 'Soups & Swallow', icon: 'Soup', display_order: 3 },
-  { name: 'Grills & Mains', icon: 'Flame', display_order: 4 },
-  { name: 'Sides', icon: 'Salad', display_order: 5 },
-  { name: 'Drinks', icon: 'Coffee', display_order: 6 },
-  { name: 'Desserts', icon: 'IceCream', display_order: 7 },
-];
-
+/**
+ * Derive a category list from a menu.
+ *
+ * Returns an empty list when there is nothing to derive — a new restaurant
+ * must choose its own categories, so we never substitute a generic starter set
+ * (those names came from one existing brand and leaked into every new store).
+ */
 function uniqueCategories(menu) {
   const names = Array.from(new Set((menu || []).map((m) => m.category).filter(Boolean)));
-  if (names.length === 0) return DEFAULT_CATEGORIES;
   return names.map((name, index) => ({ name, icon: 'Utensils', display_order: index + 1 }));
 }
 
@@ -184,13 +180,17 @@ async function enrichTenant(tenantId, { plan, trialDays, cuisine }) {
 
 export async function seedTenantData(tenantId, slug, menuOverride = null) {
   const registry = getRegistryTenant(slug);
-  const menu = menuOverride || registry?.menu || getRegistryMenu(slug);
-  const categories = uniqueCategories(menu);
+  const menu = menuOverride || registry?.menu || [];
 
-  try {
-    await supabase.from('pos_categories').insert(categories.map((c) => ({ ...c, restaurant_id: tenantId })));
-  } catch (_) {
-    // Categories are optional for the terminal to function.
+  // Only seed categories when we actually have this tenant's menu to derive
+  // them from. A brand-new restaurant starts with none and creates its own.
+  const categories = menu.length > 0 ? uniqueCategories(menu) : [];
+  if (categories.length > 0) {
+    try {
+      await supabase.from('pos_categories').insert(categories.map((c) => ({ ...c, restaurant_id: tenantId })));
+    } catch (_) {
+      // Categories are optional for the terminal to function.
+    }
   }
 
   if (menu.length > 0) {

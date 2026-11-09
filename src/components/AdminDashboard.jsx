@@ -204,10 +204,13 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           .from('restaurant_settings')
           .insert([{
             restaurant_id: currentRestaurantId,
-            address: '123 Main Street',
-            phone: '+254700000000',
-            mpesa_paybill: '542542',
-            mpesa_account: '992422',
+            // Start blank: a new restaurant enters its own address and payment
+            // details. Pre-filling these with an existing tenant's paybill made
+            // every new store print another brand's M-Pesa number.
+            address: '',
+            phone: '',
+            mpesa_paybill: '',
+            mpesa_account: '',
             setup_completed: false
           }])
           .select()
@@ -1144,7 +1147,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                     <p className="text-slate-400 text-sm mt-1">Manage catalog details, pricing structures, and stock availability status.</p>
                   </div>
                   <button
-                    onClick={() => setEditingItem({ name: '', price: '', category: 'Starters & Bites', description: '', is_available: true })}
+                    onClick={() => setEditingItem({ name: '', price: '', category: '', description: '', is_available: true })}
                     className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
                   >
                     <Plus size={16} /> Add Menu Item
@@ -2330,19 +2333,20 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-400 block">Category</label>
-                    <select
+                    {/* Free text with suggestions from this restaurant's own
+                        categories — never a hard-coded list from another brand. */}
+                    <input
                       name="category"
-                      defaultValue={editingItem.category || 'Starters & Bites'}
+                      list="menu-category-options"
+                      defaultValue={editingItem.category || ''}
+                      placeholder="e.g. Main Dishes"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-sm focus:border-emerald-500 focus:outline-none text-slate-300"
-                    >
-                      <option value="Starters & Bites">Starters & Bites</option>
-                      <option value="Breakfast">Breakfast</option>
-                      <option value="Main Combos">Main Combos</option>
-                      <option value="Stews">Stews</option>
-                      <option value="Soups">Soups</option>
-                      <option value="Beverages">Beverages</option>
-                      <option value="Hot Beverages">Hot Beverages</option>
-                    </select>
+                    />
+                    <datalist id="menu-category-options">
+                      {Array.from(new Set(menuItems.map((m) => m.category).filter(Boolean))).sort().map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
                   </div>
                 </div>
 
