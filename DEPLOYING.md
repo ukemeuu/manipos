@@ -106,7 +106,7 @@ so set `E2E_BROWSER_CHANNEL=chrome` to use the installed Google Chrome.
 ## Notes
 
 - After any deploy, flush the hCDN cache: hPanel → **Performance → CDN → Flush
-  cache**, for each domain.
+  cache**, for each domain (including `potofjollof.pos.manipos.com`).
 - The monitor keeps its uptime state in a GitHub Actions cache so it only
   alerts when a site changes state (down → up, or up → down).
 - `scripts/deploy-hostinger.sh --target staging` does the same thing locally.

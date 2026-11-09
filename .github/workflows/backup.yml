@@ -31,7 +31,12 @@ jobs:
             exit 1
           fi
           STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          # public only: Supabase does not let the backup role read the auth or
+          # storage schemas, so the auth users are only covered by Supabase's
+          # own physical backups. This file is the app data — orders, menus,
+          # guests, settings and the M-Pesa ledger.
           pg_dump "$SUPABASE_DB_URL" \
+            --schema=public \
             --no-owner --no-privileges \
             --format=custom \
             --file="manipos-${STAMP}.dump"

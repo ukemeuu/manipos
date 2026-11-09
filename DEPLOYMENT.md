@@ -85,10 +85,18 @@ The production site is a static SPA served from Hostinger (`public_html`). The
 | General POS login | `https://pos.manipos.com` | subdomain → `public_html` |
 | Chop Now Now guest menu | `https://chopnownow.manipos.com` | subdomain → `public_html` |
 | Chop Now Now staff POS | `https://chopnownow.pos.manipos.com` | parked domain → `public_html` |
+| Pot of Jollof guest menu | `https://potofjollof.manipos.com` | subdomain → `public_html` |
+| Pot of Jollof staff POS | `https://potofjollof.pos.manipos.com` | parked domain → `public_html` |
 
 > Hostinger does not support multi-level subdomains (`*.pos.manipos.com`), so
-> `chopnownow.pos.manipos.com` is configured as a **parked domain**. The SPA
-> detects the tenant from the hostname via `getTenantInfo()`.
+> each tenant POS host is configured as a **parked domain** plus a DNS `CNAME`
+> to `<name>.manipos.com.cdn.hstgr.net` (the hCDN target). The SPA detects the
+> tenant from the hostname via `getTenantInfo()`.
+>
+> To add another tenant POS host: create the `CNAME` record in **hPanel →
+> Domains → DNS** (the hCDN target already resolves for any `*.pos.manipos.com`
+> name), then park the domain in **hPanel → Websites → manipos.com → Domains →
+> Parked Domains**. Parking fails until the DNS record exists.
 
 ### One-command deploy
 
@@ -115,7 +123,8 @@ done
 
 1. Flush the hCDN cache: **hPanel → Performance → CDN → Flush cache** for each
    domain (`manipos.com`, `pos.manipos.com`, `chopnownow.manipos.com`,
-   `chopnownow.pos.manipos.com`).
+   `chopnownow.pos.manipos.com`, `potofjollof.manipos.com`,
+   `potofjollof.pos.manipos.com`).
 2. Verify `https://manipos.com` serves `ManiPOS · Cloud POS for African
    restaurants` and the tenant URLs render their respective pages.
 
