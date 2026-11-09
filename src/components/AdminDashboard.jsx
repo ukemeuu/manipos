@@ -48,7 +48,8 @@ import {
   ShieldCheck,
   ArrowLeft,
   ChefHat,
-  Armchair
+  Armchair,
+  UtensilsCrossed
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
