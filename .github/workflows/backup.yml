@@ -1,0 +1,55 @@
+name: Backup
+
+# Weekly logical backup of the production database, kept as a workflow
+# artifact. Supabase keeps its own daily physical backups (7 days, Pro plan);
+# this is the off-site copy for the case where the project itself is lost.
+
+on:
+  schedule:
+    - cron: '0 2 * * 1' # Mondays, 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    name: Dump database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client > /dev/null
+
+      - name: Dump
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set"
+            exit 1
+          fi
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          pg_dump "$SUPABASE_DB_URL" \
+            --no-owner --no-privileges \
+            --format=custom \
+            --file="manipos-${STAMP}.dump"
+          ls -lh manipos-*.dump
+
+      - name: Upload dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: manipos-db-${{ github.run_number }}
+          path: manipos-*.dump
+          retention-days: 90
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=❌ ManiPOS weekly database backup FAILED (run ${{ github.run_number }})."

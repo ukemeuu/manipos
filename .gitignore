@@ -29,3 +29,7 @@ playwright-report/
 test-results/
 blob-report/
 .playwright/
+
+# database dumps
+*.dump
+*.sql.gz
