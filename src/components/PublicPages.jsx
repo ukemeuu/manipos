@@ -117,12 +117,20 @@ export function StatusPage({ onBack }) {
 const LEGAL = {
   privacy: {
     title: 'Privacy policy',
-    subtitle: 'How ManiPOS collects, uses and protects restaurant and guest data across our cloud POS, menus and payments.',
+    subtitle: 'How ManiPOS collects, uses and protects restaurant and guest data across our cloud POS, menus and payments, under the Kenya Data Protection Act, 2019.',
     icon: ShieldCheck,
     sections: [
       {
+        heading: 'Who is responsible for your data',
+        body: 'For a restaurant’s own account, staff and sales records, the restaurant is the data controller and ManiPOS acts as its data processor: we hold and process that data only to run the service the restaurant has asked for. For our own website visitors, trial sign-ups and platform marketing, ManiPOS is the data controller. Where a guest orders through a restaurant’s menu, the restaurant decides what guest data it collects and why; ManiPOS processes it on the restaurant’s instructions.',
+      },
+      {
         heading: 'Data we collect',
-        body: 'We collect account details for restaurant owners and staff (name, email, role, restaurant), transactional data required to operate the point of sale (orders, payments, inventory movements), and guest details voluntarily provided for online ordering (name, phone, delivery address).',
+        body: 'We collect account details for restaurant owners and staff (name, email, phone, role, restaurant), transactional data required to operate the point of sale (orders, payments, inventory movements), technical data needed to run and secure the service (device, browser, IP address, error logs), and guest details voluntarily provided for online ordering (name, phone, delivery address).',
+      },
+      {
+        heading: 'Lawful basis for processing',
+        body: 'Under the Data Protection Act, 2019 we rely on: performance of a contract, to provide the POS and process orders; compliance with a legal obligation, such as tax, accounting and anti-fraud record keeping; our legitimate interests, to secure the platform, prevent abuse and improve the product, balanced against your rights; and consent, where you opt in to marketing or optional communications. You may withdraw consent at any time without affecting processing already carried out.',
       },
       {
         heading: 'How we use data',
@@ -130,21 +138,41 @@ const LEGAL = {
       },
       {
         heading: 'Payments',
-        body: 'M-Pesa and card transactions are processed by regulated payment providers. ManiPOS stores payment references and reconciliation records, not full card numbers or M-Pesa credentials.',
+        body: 'M-Pesa and card transactions are processed by regulated payment providers such as Safaricom Daraja. ManiPOS stores payment references and reconciliation records, not full card numbers or M-Pesa credentials. Customer phone numbers are shared with the payment provider only to send a payment prompt for that order.',
       },
       {
-        heading: 'Retention and security',
-        body: 'Operational records are retained for the period required by applicable tax and accounting law. Access is role-based, encrypted in transit, and protected by tenant isolation policies. Staff PINs are never displayed publicly.',
+        heading: 'Where data is stored and cross-border transfer',
+        body: 'ManiPOS is hosted on infrastructure in the European Union (Ireland), with backups held in the same region. This means personal data is transferred outside Kenya. We do this under the transfer safeguards recognised by section 48 of the Data Protection Act, 2019 — contractual protections with our processors and appropriate technical measures — and we keep the transfer to what is necessary to provide the service.',
+      },
+      {
+        heading: 'How long we keep data',
+        body: 'Sales, payment and tax records are kept for the period required by Kenyan tax and accounting law, currently seven years. Account records are kept while the subscription is active and for a short period afterwards so the restaurant can reactivate or export. Guest ordering profiles can be deleted on request. Error logs are kept briefly for diagnosis and then discarded.',
+      },
+      {
+        heading: 'Security and breach notification',
+        body: 'Access is role-based and scoped to each restaurant, data is encrypted in transit, staff PINs and passwords are hashed, and database access is restricted by row-level security. If a breach is likely to result in a risk to your rights, we notify the Office of the Data Protection Commissioner without undue delay and, where the risk is high, we notify affected individuals as required by section 43 of the Data Protection Act, 2019.',
       },
       {
         heading: 'Your rights',
-        body: `Restaurant owners may request export, correction or deletion of their account data. Guests may request correction or deletion of their ordering profile. Contact ${SUPPORT_EMAIL} and we will respond within 30 days.`,
+        body: `You have the right to be informed, to access your data, to correct inaccurate data, to request erasure, to restrict or object to processing, to data portability, and not to be subject to a decision based solely on automated processing. Restaurant owners may export or delete their account data. Guests may request correction or deletion of their ordering profile. Contact ${SUPPORT_EMAIL} and we will respond within the timelines set by the Act.`,
+      },
+      {
+        heading: 'Complaints',
+        body: 'If you are unhappy with how we have handled your data, contact us first so we can put it right. You also have the right to complain to the Office of the Data Protection Commissioner (ODPC) in Kenya through dataprotection.go.ke.',
+      },
+      {
+        heading: 'Children',
+        body: 'ManiPOS is a business tool and is not directed at children. Restaurants should not collect data from anyone under 18 through the platform without a lawful basis and, where required, the consent of a parent or guardian.',
+      },
+      {
+        heading: 'Changes',
+        body: `We may update this policy as the product or the law changes. Material changes will be announced in-app or by email. Questions about this policy: ${SUPPORT_EMAIL}.`,
       },
     ],
   },
   terms: {
     title: 'Terms of service',
-    subtitle: 'The agreement between ManiPOS and the restaurants, staff and guests who use our platform.',
+    subtitle: 'The agreement between ManiPOS and the restaurants, staff and guests who use our platform, governed by the laws of Kenya.',
     icon: FileText,
     sections: [
       {
@@ -153,7 +181,11 @@ const LEGAL = {
       },
       {
         heading: 'Accounts and access',
-        body: 'You are responsible for the accuracy of your restaurant details, for keeping staff credentials confidential, and for all activity under your account. Notify us immediately of unauthorised access.',
+        body: 'You are responsible for the accuracy of your restaurant details, for keeping staff credentials and PINs confidential, and for all activity under your account. Notify us immediately of unauthorised access.',
+      },
+      {
+        heading: 'Your data',
+        body: 'The restaurant owns its business data — menu, orders, customers, stock and reports. You grant ManiPOS the licence needed to host, process and back up that data to provide the service. On termination you may export your data for a reasonable period before it is deleted, subject to records we must keep by law.',
       },
       {
         heading: 'Payments and billing',
@@ -165,11 +197,19 @@ const LEGAL = {
       },
       {
         heading: 'Availability and liability',
-        body: 'We target high availability and provide offline mode, but the service is provided “as is” to the extent permitted by law. Our aggregate liability is limited to fees paid in the twelve months preceding a claim. Nothing limits liability that cannot be limited by law.',
+        body: 'We target high availability and provide an offline mode, but the service is provided “as is” to the extent permitted by law. Our aggregate liability is limited to fees paid in the twelve months preceding a claim. Nothing in these terms limits liability that cannot be limited by Kenyan law, including your rights under the Consumer Protection Act, 2012.',
+      },
+      {
+        heading: 'Termination',
+        body: 'You may cancel at any time; access continues to the end of the paid period. We may suspend or terminate for material breach, non-payment or unlawful use. Either party may terminate if the other becomes insolvent.',
+      },
+      {
+        heading: 'Governing law and disputes',
+        body: 'These terms are governed by the laws of Kenya. We will try to resolve any dispute amicably first; if that fails, the courts of Kenya have exclusive jurisdiction.',
       },
       {
         heading: 'Changes',
-        body: `We may update these terms as the product evolves. Material changes will be announced in-app or by email. Questions: ${SUPPORT_EMAIL}.`,
+        body: `We may update these terms as the product evolves. Material changes will be announced in-app or by email before they take effect. Questions: ${SUPPORT_EMAIL}.`,
       },
     ],
   },
@@ -187,7 +227,7 @@ export function LegalPage({ kind = 'privacy', onBack }) {
           </section>
         ))}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 text-xs text-slate-500 font-medium">
-          Last updated 3 November 2026. Contact <a className="text-amber-400 font-bold" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for any question about this document.
+          Last updated 9 November 2026. Contact <a className="text-amber-400 font-bold" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for any question about this document.
         </div>
       </div>
     </PageShell>
