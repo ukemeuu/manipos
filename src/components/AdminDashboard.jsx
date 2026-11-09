@@ -54,10 +54,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
+// Setup progress is per restaurant. A shared flag would let a brand-new
+// tenant skip onboarding because a previous tenant on the same device had
+// already completed it.
+function setupCompletedKey() {
+  try {
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    return pinUser.restaurantId
+      ? `manipos_setup_completed_${pinUser.restaurantId}`
+      : 'manipos_setup_completed';
+  } catch (e) {
+    return 'manipos_setup_completed';
+  }
+}
+
 export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, onSignOut, tenantSlug }) {
   const [setupCompleted, setSetupCompleted] = useState(() => {
     try {
-      return localStorage.getItem('manipos_setup_completed') === 'true';
+      return localStorage.getItem(setupCompletedKey()) === 'true';
     } catch(e) {
       return false;
     }
@@ -193,10 +207,10 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         setSettings(currentSetting);
         if (currentSetting.setup_completed) {
           setSetupCompleted(true);
-          localStorage.setItem('manipos_setup_completed', 'true');
+          localStorage.setItem(setupCompletedKey(), 'true');
         } else {
           setSetupCompleted(false);
-          localStorage.removeItem('manipos_setup_completed');
+          localStorage.removeItem(setupCompletedKey());
           setActiveTab('onboarding');
         }
       } else if (currentRestaurantId) {
@@ -217,7 +231,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           .single();
         if (newSettings) setSettings(newSettings);
         setSetupCompleted(false);
-        localStorage.removeItem('manipos_setup_completed');
+        localStorage.removeItem(setupCompletedKey());
         setActiveTab('onboarding');
       }
 
@@ -933,7 +947,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       onClick={async () => {
                         setSetupCompleted(true);
                         try {
-                          localStorage.setItem('manipos_setup_completed', 'true');
+                          localStorage.setItem(setupCompletedKey(), 'true');
                           const tenant = localStorage.getItem('pin_staff_user') ? JSON.parse(localStorage.getItem('pin_staff_user')).restaurantId : null;
                           if (tenant) {
                             await supabase.from('restaurant_settings').update({ setup_completed: true }).eq('restaurant_id', tenant);

@@ -17,6 +17,19 @@ const PRESET_TAGS = [
     { name: 'Anniversary', color: '#EC4899', bg: '#FCE7F3' },
 ];
 
+// The local guest cache is per restaurant. A shared key would leak one
+// tenant's guest list into another that signs in on the same device.
+function registeredGuestsKey() {
+    try {
+        const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+        return pinUser.restaurantId
+            ? `pos_registered_guests_${pinUser.restaurantId}`
+            : 'pos_registered_guests';
+    } catch (e) {
+        return 'pos_registered_guests';
+    }
+}
+
 export function GuestCRMView({ initialTab = 'directory' }) {
     const sessionUser = useMemo(() => {
         try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
@@ -261,7 +274,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
 
         // 2. Merge with locally saved guests cache
         try {
-            const localSaved = JSON.parse(localStorage.getItem('pos_registered_guests') || '[]');
+            const localSaved = JSON.parse(localStorage.getItem(registeredGuestsKey()) || '[]');
             localSaved.forEach(lg => {
                 if (!guestList.some(g => (g.id && g.id === lg.id) || (g.phone && lg.phone && g.phone === lg.phone))) {
                     guestList.unshift(lg);
@@ -322,9 +335,9 @@ export function GuestCRMView({ initialTab = 'directory' }) {
 
             // Save to localStorage cache as well
             try {
-                const existing = JSON.parse(localStorage.getItem('pos_registered_guests') || '[]');
+                const existing = JSON.parse(localStorage.getItem(registeredGuestsKey()) || '[]');
                 existing.unshift(newGuest);
-                localStorage.setItem('pos_registered_guests', JSON.stringify(existing));
+                localStorage.setItem(registeredGuestsKey(), JSON.stringify(existing));
             } catch(e) {}
 
             setGuests(prev => [newGuest, ...prev]);

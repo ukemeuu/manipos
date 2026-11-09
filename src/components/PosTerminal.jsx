@@ -632,11 +632,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 created_at: new Date().toISOString()
             };
 
-            // Save locally to cache so guest is instantly visible even if DB network has latency
+            // Save locally to cache so guest is instantly visible even if DB network has latency.
+            // Keyed per tenant so one restaurant's guests never surface in another's.
             try {
-                const existing = JSON.parse(localStorage.getItem('pos_registered_guests') || '[]');
+                const guestsKey = `pos_registered_guests_${restaurantId}`;
+                const existing = JSON.parse(localStorage.getItem(guestsKey) || '[]');
                 existing.unshift(savedGuestRecord);
-                localStorage.setItem('pos_registered_guests', JSON.stringify(existing));
+                localStorage.setItem(guestsKey, JSON.stringify(existing));
             } catch(e) {}
 
             setCustomerNameText(fullName);

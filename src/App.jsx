@@ -485,7 +485,12 @@ function App() {
 
     // Authenticated Home / Workspace Selector
     if (currentRoute === 'app' || currentRoute === 'home') {
-      const isSetupCompleted = localStorage.getItem('manipos_setup_completed') === 'true';
+      // Scoped per restaurant: a new tenant must not inherit the previous
+      // tenant's "setup completed" flag on a shared device.
+      const setupKey = staffUser?.restaurantId
+        ? `manipos_setup_completed_${staffUser.restaurantId}`
+        : 'manipos_setup_completed';
+      const isSetupCompleted = localStorage.getItem(setupKey) === 'true';
       if (!isSetupCompleted) {
         return (
           <AdminDashboard 
