@@ -9,6 +9,90 @@ import { CampaignsView } from './CampaignsView';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { MenuItemSalesAnalyzer } from './MenuItemSalesAnalyzer';
 import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
+import { loadTenant } from '../lib/tenantConfig';
+
+// ---------------------------------------------------------------------------
+// Receipt / print branding
+//
+// The printed slips used to hard-code one restaurant's identity — the name,
+// address, phone, KRA PIN and M-Pesa paybill — so every tenant printed another
+// brand's details. They now read from the signed-in tenant's own profile.
+//
+// `RECEIPT_BRAND` is populated once when the terminal mounts (see the effect
+// in the PosTerminal component) and read synchronously by the print builders
+// below, which run outside React's render cycle.
+// ---------------------------------------------------------------------------
+let RECEIPT_BRAND = {};
+
+export function setReceiptBrand(brand) {
+    RECEIPT_BRAND = brand || {};
+}
+
+export function getReceiptBrand() {
+    return RECEIPT_BRAND;
+}
+
+function escapeReceiptHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/**
+ * Brand header for printed slips: the restaurant's own name, tagline, address,
+ * phone and KRA PIN. Falls back to a neutral "MANIPOS" header so a tenant with
+ * no profile configured still gets a valid receipt.
+ */
+function receiptBrandHeader() {
+    const brand = RECEIPT_BRAND || {};
+    const name = escapeReceiptHtml((brand.name || 'ManiPOS').toUpperCase());
+    const tagline = brand.tagline ? escapeReceiptHtml(String(brand.tagline).toUpperCase()) : '';
+    const address = brand.address ? escapeReceiptHtml(brand.address) : '';
+    const phone = brand.phone ? escapeReceiptHtml(brand.phone) : '';
+    const kraPin = brand.kraPin ? escapeReceiptHtml(brand.kraPin) : '';
+
+    return `
+        <div class="center">
+          <div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;">
+            <div style="font-size:24px;font-weight:200;letter-spacing:0.22em;line-height:1;text-transform:uppercase;">${name}</div>
+            ${tagline ? `<div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">${tagline}</div>` : ''}
+          </div>
+          ${address ? `<p class="sub">${address}</p>` : ''}
+          ${phone ? `<p class="sub">Tel: ${phone}</p>` : ''}
+          ${kraPin ? `<p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: ${kraPin}</p>` : ''}
+        </div>
+        <div class="divider"></div>
+    `;
+}
+
+/**
+ * M-Pesa payment box for receipts. Only renders when the tenant has paybill or
+ * account numbers configured, so a tenant without them no longer prints
+ * another restaurant's numbers.
+ */
+function receiptPaybillBlock(metaClass = 'meta') {
+    const brand = RECEIPT_BRAND || {};
+    const paybill = String(brand.paybill || '').trim();
+    const account = String(brand.account || '').trim();
+    if (!paybill && !account) return '';
+
+    const rows = [];
+    if (paybill) {
+        rows.push(`<div class="${metaClass}" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">${escapeReceiptHtml(paybill)}</span></div>`);
+    }
+    if (account) {
+        rows.push(`<div class="${metaClass}" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">${escapeReceiptHtml(account)}</span></div>`);
+    }
+
+    return `
+        <div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;">
+          <div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
+          ${rows.join('')}
+        </div>
+        `;
+}
 
 const MUTE_LOGO_URL = '/logo.png';
 
@@ -225,6 +309,19 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
     // Keep the Supabase tenant context in sync so RLS can scope every request.
     React.useEffect(() => { setTenantContext(restaurantId); }, [restaurantId]);
+
+    // Load this tenant's profile so printed receipts and slips carry the
+    // restaurant's own name, address, phone and M-Pesa details rather than a
+    // hard-coded brand. Falls back to a neutral header when nothing is set.
+    React.useEffect(() => {
+        let cancelled = false;
+        loadTenant(activeTenantSlug)
+            .then((tenant) => {
+                if (!cancelled) setReceiptBrand(tenant);
+            })
+            .catch((err) => console.warn('[PosTerminal] Could not load receipt branding:', err?.message || err));
+        return () => { cancelled = true; };
+    }, [activeTenantSlug]);
 
     const isSystemAdmin = React.useMemo(() => {
         try {
@@ -9483,7 +9580,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                             splitHtml += `
                                 <div class="page">
                                     <div class="center">
-                                        <h2 style="font-size:15px;font-weight:900;letter-spacing:0.5px;">MUTE KITCHENS</h2>
+                                        <h2 style="font-size:15px;font-weight:900;letter-spacing:0.5px;">${escapeReceiptHtml((getReceiptBrand().name || 'ManiPOS').toUpperCase())}</h2>
                                         <div style="font-size:10px;font-weight:900;margin:3px 0;text-transform:uppercase;background:#000;color:#fff;padding:2px 4px;display:inline-block;border-radius:3px;">
                                             SPLIT RECEIPT: GUEST ${share.guestNo} OF ${share.totalGuests}
                                         </div>
@@ -9505,11 +9602,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         <span>KES ${Math.round(share.amount).toLocaleString()}</span>
                                     </div>
                                     <div class="divider"></div>
-                                    <div style="border:2px solid #000;margin:6px 0;padding:5px 6px;border-radius:2px;text-align:center;">
-                                        <div style="font-size:10px;font-weight:900;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
-                                        <div class="meta" style="font-size:12px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">542542</span></div>
-                                        <div class="meta" style="font-size:12px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">992422</span></div>
-                                    </div>
+                                    ${receiptPaybillBlock()}
                                     <div class="divider"></div>
 
                                     <div class="footer">
@@ -10049,7 +10142,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 {splitReceiptsData.map((share, index) => (
                                     <div key={index} className="border-b border-dashed border-black pb-8 last:border-b-0 last:pb-0">
                                         <div className="text-center space-y-1 mb-4">
-                                            <h2 className="text-base font-black uppercase tracking-tight">MUTE KITCHENS</h2>
+                                            <h2 className="text-base font-black uppercase tracking-tight">{escapeReceiptHtml((getReceiptBrand().name || 'ManiPOS').toUpperCase())}</h2>
                                             <p className="text-[9px] font-bold">SPLIT BILL SLIP: GUEST {share.guestNo} OF {share.totalGuests}</p>
                                             <div className="border-b border-dashed border-black pt-2"></div>
                                         </div>
@@ -10057,7 +10150,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         <div className="space-y-1 text-[10px] mb-3">
                                             <div className="flex justify-between">
                                                 <span>BRAND:</span>
-                                                <span className="font-bold">{(splitBillTargetOrder?.brand || selectedBrand || 'Pot of Jollof').toUpperCase()}</span>
+                                                <span className="font-bold">{(splitBillTargetOrder?.brand || selectedBrand || getReceiptBrand().name || 'ManiPOS').toUpperCase()}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span>TABLE/PATRON:</span>
@@ -10098,17 +10191,23 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                             <div className="border-b border-dashed border-black pt-2"></div>
                                         </div>
 
-                                        <div className="border-2 border-black my-2 p-1.5 rounded text-center space-y-0.5">
-                                            <div className="text-[8px] font-black tracking-wider uppercase">— PAY VIA MPESA —</div>
-                                            <div className="flex justify-between text-[11px] font-black">
-                                                <span>PAYBILL NO:</span>
-                                                <span className="font-mono">542542</span>
+                                        {(getReceiptBrand().paybill || getReceiptBrand().account) && (
+                                            <div className="border-2 border-black my-2 p-1.5 rounded text-center space-y-0.5">
+                                                <div className="text-[8px] font-black tracking-wider uppercase">— PAY VIA MPESA —</div>
+                                                {getReceiptBrand().paybill && (
+                                                    <div className="flex justify-between text-[11px] font-black">
+                                                        <span>PAYBILL NO:</span>
+                                                        <span className="font-mono">{getReceiptBrand().paybill}</span>
+                                                    </div>
+                                                )}
+                                                {getReceiptBrand().account && (
+                                                    <div className="flex justify-between text-[11px] font-black">
+                                                        <span>ACCT NO:</span>
+                                                        <span className="font-mono">{getReceiptBrand().account}</span>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="flex justify-between text-[11px] font-black">
-                                                <span>ACCT NO:</span>
-                                                <span className="font-mono">992422</span>
-                                            </div>
-                                        </div>
+                                        )}
 
                                         <div className="text-center pt-1 text-[9px] space-y-1">
                                             <p className="font-bold uppercase">THANK YOU FOR DINING WITH US!</p>
@@ -10380,11 +10479,7 @@ function printCashierSlips(receipt) {
     `).join('');
 
     const headerBlock = `
-        <div class="center">
-          <div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div>
-          <p class="sub">Tel: 0795384140 / 0799034617</p>
-        </div>
-        <div class="divider"></div>
+        ${receiptBrandHeader()}
         <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
@@ -10398,26 +10493,7 @@ function printCashierSlips(receipt) {
     const slip1 = `
     <div class="page">
         <div class="center"><div class="badge">CUSTOMER COPY</div></div>
-         <div class="center">
-            <div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;">
-                <div style="display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:200;letter-spacing:0.22em;line-height:1;">
-                    <span>M</span>
-                    <span>U</span>
-                    <span>T</span>
-                    <span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:22px;width:20px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;">
-                        <span style="display:block;width:100%;height:3px;background:#000;"></span>
-                        <span style="display:block;width:100%;height:3px;background:#000;"></span>
-                        <span style="display:block;width:100%;height:3px;background:#000;"></span>
-                    </span>
-                </div>
-                <div style="width:188px;height:1px;background:#000;margin:5px 0 4px 0;"></div>
-                <div style="font-size:10px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div>
-            </div>
-            <p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p>
-            <p class="sub">Tel: 0795384140 / 0799034617</p>
-            <p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p>
-        </div>
-        <div class="divider"></div>
+         ${receiptBrandHeader()}
         <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
@@ -10441,11 +10517,7 @@ function printCashierSlips(receipt) {
         <div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>
         ${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}
         ${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `
-        <div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;">
-          <div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
-          <div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div>
-          <div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div>
-        </div>
+        ${receiptPaybillBlock()}
         `}
         <div class="divider"></div>
         <div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div>
@@ -10490,7 +10562,7 @@ function printCashierSlips(receipt) {
     const slip4 = `
     <div class="page">
         <div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div>
-        <div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div>
+        ${receiptBrandHeader()}
         <div class="divider"></div>
         <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
@@ -10588,11 +10660,7 @@ function printKitchenSlips(receipt) {
     `).join('');
 
     const headerBlock = `
-        <div class="center">
-          <div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div>
-          <p class="sub">Tel: 0795384140 / 0799034617</p>
-        </div>
-        <div class="divider"></div>
+        ${receiptBrandHeader()}
         <div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
         <div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div>
         <div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div>
@@ -10711,9 +10779,9 @@ function _buildCashierHTML(rawReceipt, dateFormatted) {
     const itemRowsFull = dedupedItems.map(item => `<tr><td style="width:50%;max-width:50%;word-break:break-word;padding:2px 0;">${item.item_name}${item.instructions ? `<br><span style="font-size:9px;font-weight:700;">* ${item.instructions}</span>` : ''}</td><td class="c" style="width:10%;text-align:center;padding:2px 0;">${item.quantity}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${item.price.toLocaleString()}</td><td class="r" style="width:20%;text-align:right;padding:2px 0;">${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('');
     const itemRowsPack = dedupedItems.map(item => `<tr><td class="c" style="font-size:12px;font-weight:900;padding:3px 0;width:15%;vertical-align:top;">[ &nbsp; ]</td><td style="font-size:12px;font-weight:900;padding:3px 0;word-break:break-word;width:70%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">➜ ${item.instructions}</span>` : ''}</td><td class="c" style="font-size:14px;font-weight:900;padding:3px 0;vertical-align:top;width:15%;">${item.quantity}</td></tr>`).join('');
     const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}<div class="divider"></div>`;
-    const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p><p class="sub">Tel: 0795384140 / 0799034617</p><p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;"><div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div><div class="meta" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">542542</span></div><div class="meta" style="font-size:13px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">992422</span></div></div>`}<div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
+    const slip1 = `<div class="page"><div class="center"><div class="badge">CUSTOMER COPY</div></div>${receiptBrandHeader()}${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>TAXABLE AMT:</span><span>KES ${netBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="meta" style="font-size:9px;"><span>CAT. LEVY (2% INCL):</span><span>KES ${cateringLevy.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `${receiptPaybillBlock()}`}<div class="divider"></div><div class="footer"><strong>THANK YOU FOR DINING WITH US!</strong><br><div style="font-size:10px;font-weight:900;margin-top:6px;text-align:center;text-transform:uppercase;">HOW WAS YOUR EXPERIENCE TODAY?</div><div style="font-size:11px;font-weight:900;margin-bottom:4px;text-align:center;text-transform:none;">Please scan this QR code to share your feedback</div><div style="text-align:center;margin:6px 0;"><img src="${FEEDBACK_QR_CODE}" style="width:120px;height:120px;display:inline-block;" /></div><span style="font-size:9px;">Powered by ManiPOS</span></div></div>`;
     const slip3 = `<div class="page"><div class="center"><div class="badge">PACKER / DISPATCH SLIP</div></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:25%;text-align:center;">PACKED</th><th style="font-size:12px;width:60%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:15%;text-align:center;">QTY</th></tr></thead><tbody><tr><td colspan="3"><div class="divider"></div></td></tr>${itemRowsPack}</tbody></table><div class="divider-solid"></div><div class="footer">PACKER SIGN: _______________</div></div>`;
-    const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">PIN: P052354624Y</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
+    const slip4 = `<div class="page"><div class="center"><div class="badge">FRONT DESK — RECORD COPY</div></div>${receiptBrandHeader()}${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="width:50%;text-align:left;">ITEM</th><th class="c" style="width:10%;text-align:center;">QTY</th><th class="r" style="width:20%;text-align:right;">PRICE</th><th class="r" style="width:20%;text-align:right;">TOTAL</th></tr></thead><tbody><tr><td colspan="4"><div class="divider"></div></td></tr>${itemRowsFull}<tr><td colspan="4"><div class="divider"></div></td></tr></tbody></table>${isPartialPay ? `<div class="meta"><span>ORDER ITEMS TOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div><div class="meta" style="font-weight:900;"><span>THIS SHARE PAID:</span><span>KES ${receipt.total_amount.toLocaleString()}</span></div>` : `<div class="meta"><span>SUBTOTAL:</span><span>KES ${itemsSubtotal.toLocaleString()}</span></div>`}${receipt.discount > 0 ? `<div class="meta"><span>DISCOUNT:</span><span>- KES ${receipt.discount.toLocaleString()}</span></div>` : ''}<div class="divider-solid"></div><div class="meta big"><span>TOTAL:</span><span>KES ${calculatedTotal.toLocaleString()}</span></div><div class="divider"></div><div class="meta" style="font-size:9px;"><span>VAT (16% INCL):</span><span>KES ${vatAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div><div class="divider"></div><div class="meta"><span>PAYMENT:</span><span>${receipt.payment_method.toUpperCase()}</span></div><div class="meta"><span>STATUS:</span><span>${receipt.payment_status.toUpperCase()}</span></div>${receipt.splitDetails ? `<p style="font-size:9px;margin-top:3px;">${receipt.splitDetails}</p>` : ''}<div class="divider-solid"></div><div class="footer">AUTHORISED BY: _______________</div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cashier Slips #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip1}${slip3}${slip4}</body></html>`;
 }
 
@@ -10721,7 +10789,7 @@ function _buildKitchenHTML(receipt, dateFormatted) {
     const baseStyle = `* { margin:0; padding:0; box-sizing:border-box; } body { font-family:Arial,Helvetica,sans-serif; font-size:12px; font-weight:700; color:#000; width:80mm; padding:5mm 4mm; background:#fff; } .center { text-align:center; } .divider { border-top:1px dashed #000; margin:4px 0; } .divider-solid { border-top:2px solid #000; margin:4px 0; } h1 { font-size:16px; font-weight:900; } .badge { display:inline-block; border:2px solid #000; padding:1px 6px; font-size:11px; font-weight:900; letter-spacing:1px; margin-bottom:4px; } .sub { font-size:11px; font-weight:600; color:#000; line-height:1.6; } table { width:100%; border-collapse:collapse; } th { font-size:11px; font-weight:800; color:#000; text-align:left; padding:2px 0; } th.c, td.c { text-align:center; } td { font-size:11px; font-weight:700; color:#000; padding:2px 0; } .meta { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; font-weight:700; } .footer { text-align:center; margin-top:6px; font-size:11px; font-weight:800; } @media print { body { width:80mm; } @page { margin:0; size:80mm auto; } }`;
     const rows = receipt.items.map(item => `<tr><td style="font-size:13px;font-weight:900;padding:3px 0;word-break:break-word;width:80%;">${item.item_name}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">[ ${item.instructions} ]</span>` : ''}</td><td class="c" style="font-size:16px;font-weight:900;padding:3px 0;vertical-align:top;width:20%;text-align:right;">${item.quantity}x</td></tr>`).join('');
     const hdr = `<div class="meta"><span>BRAND:</span><span>${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div><div class="meta"><span>TICKET #:</span><span>${obfuscateTicket(receipt.ticket_number)}</span></div><div class="meta"><span>TIME IN:</span><span>${dateFormatted}</span></div><div class="meta"><span>TIME OUT:</span><span>___________________</span></div><div class="meta"><span>CASHIER:</span><span>${receipt.cashier_name.toUpperCase()}</span></div><div class="meta"><span>CUSTOMER:</span><span>${formatCustomerName(receipt.customer_name)}</span></div><div class="meta"><span>MOS:</span><span>${receipt.dining_option.toUpperCase()}</span></div>${receipt.delivery_address || (receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]) ? `<div class="meta" style="font-weight:900;font-size:11px;background:#f0f0f0;padding:2px 4px;margin:2px 0;"><span>DELIVERY TO:</span><span>${receipt.delivery_address || receipt.notes?.match(/Delivery Address:\s*([^\n]*)/)?.[1]}</span></div>` : ''}<div class="divider"></div>`;
-    const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div><div class="center"><div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><div style="display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:200;letter-spacing:0.22em;line-height:1;"><span>M</span><span>U</span><span>T</span><span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:20px;width:18px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;"><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span><span style="display:block;width:100%;height:3px;background:#000;"></span></span></div><div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div></div><p class="sub">Tel: 0795384140 / 0799034617</p></div><div class="divider"></div>${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div></div>`;
+    const slip2 = `<div><div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div>${receiptBrandHeader()}${hdr}<table style="width:100%;table-layout:fixed;"><thead><tr><th style="font-size:12px;width:80%;text-align:left;">ITEM</th><th class="c" style="font-size:12px;width:20%;text-align:right;">QTY</th></tr></thead><tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${rows}</tbody></table><div class="divider-solid"></div><div class="meta"><span>CHEF NAME:</span><span>___________________</span></div><div class="divider"></div><div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${obfuscateTicket(receipt.ticket_number)}</div></div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kitchen KOT #${obfuscateTicket(receipt.ticket_number)}</title><style>${baseStyle}</style></head><body>${slip2}</body></html>`;
 }
 
@@ -10837,26 +10905,7 @@ function ReceiptPrintModal({ receipt: rawReceipt, onClose, onCloseAndExit, front
 </style>
 </head>
 <body>
-<div class="center">
-  <div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;">
-      <div style="display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:200;letter-spacing:0.22em;line-height:1;">
-          <span>M</span>
-          <span>U</span>
-          <span>T</span>
-          <span style="display:inline-flex;flex-direction:column;justify-content:space-between;height:22px;width:20px;margin-left:0.18em;padding:3px 0;box-sizing:border-box;">
-              <span style="display:block;width:100%;height:3px;background:#000;"></span>
-              <span style="display:block;width:100%;height:3px;background:#000;"></span>
-              <span style="display:block;width:100%;height:3px;background:#000;"></span>
-          </span>
-      </div>
-      <div style="width:188px;height:1px;background:#000;margin:5px 0 4px 0;"></div>
-      <div style="font-size:10px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">Kitchens</div>
-  </div>
-  <p class="sub">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p>
-  <p class="sub">Tel: 0795384140 / 0799034617</p>
-  <p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: P052354624Y</p>
-</div>
-<div class="divider"></div>
+${receiptBrandHeader()}
 
 <div class="meta-row"><span class="meta-label">BRAND:</span><span class="meta-value">${(!receipt.brand || receipt.brand.toUpperCase() === 'MANIPOS' || receipt.brand.toUpperCase() === 'ALL' ? 'ManiPOS' : receipt.brand).toUpperCase()}</span></div>
 <div class="meta-row"><span class="meta-label">TICKET NO:</span><span class="meta-value">#${obfuscateTicket(receipt.ticket_number)}</span></div>
@@ -10900,13 +10949,7 @@ ${receipt.discount > 0 ? `<div class="meta-row"><span class="meta-label">DISCOUN
 <div class="meta-row" style="margin-top:4px;"><span class="meta-label">PAYMENT METHOD:</span><span class="meta-value">${receipt.payment_method.toUpperCase()}</span></div>
 <div class="meta-row"><span class="meta-label">PAYMENT STATUS:</span><span class="meta-value">${receipt.payment_status.toUpperCase()}</span></div>
 ${splitNote}
-${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `
-<div style="border:2px solid #000;margin-top:6px;padding:5px 6px;border-radius:2px;">
-  <div style="font-size:10px;font-weight:900;text-align:center;margin-bottom:4px;letter-spacing:0.05em;">— PAY VIA MPESA —</div>
-  <div class="meta-row" style="font-size:12px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">542542</span></div>
-  <div class="meta-row" style="font-size:12px;font-weight:900;"><span>ACCT NO:</span><span style="font-size:14px;font-weight:900;letter-spacing:0.05em;">992422</span></div>
-</div>
-`}
+${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `${receiptPaybillBlock('meta-row')}`}
 
 <div class="divider"></div>
 <div class="footer">
@@ -10956,25 +10999,22 @@ ${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `
                 {/* Thermal Ticket preview (on-screen only) */}
                 <div className="flex-1 overflow-y-auto p-8 font-mono text-xs text-black select-text">
                     <div className="flex flex-col items-center justify-center text-center text-black font-sans py-1 pb-2.5">
-                        <div className="flex items-center justify-center text-3xl font-light tracking-[0.15em] leading-none">
-                            <span>M</span>
-                            <span className="ml-[0.15em]">U</span>
-                            <span className="ml-[0.15em]">T</span>
-                            <span className="inline-flex flex-col justify-between h-[24px] w-[22px] ml-[0.22em] py-[2px] shrink-0">
-                                <span className="block w-full h-[3.5px] bg-black"></span>
-                                <span className="block w-full h-[3.5px] bg-black"></span>
-                                <span className="block w-full h-[3.5px] bg-black"></span>
-                            </span>
+                        <div className="text-2xl font-light tracking-[0.15em] leading-none uppercase">
+                            {escapeReceiptHtml((getReceiptBrand().name || 'ManiPOS').toUpperCase())}
                         </div>
-                        <div className="w-[195px] h-[1.2px] bg-black my-1.5"></div>
-                        <div className="text-[10.5px] font-normal tracking-[0.45em] indent-[0.45em] uppercase">
-                            Kitchens
-                        </div>
+                        {getReceiptBrand().tagline && (
+                            <>
+                                <div className="w-[195px] h-[1.2px] bg-black my-1.5"></div>
+                                <div className="text-[10.5px] font-normal tracking-[0.45em] indent-[0.45em] uppercase">
+                                    {escapeReceiptHtml(String(getReceiptBrand().tagline).toUpperCase())}
+                                </div>
+                            </>
+                        )}
                     </div>
                     <div className="text-center space-y-1 mb-6">
-                        <p className="text-[10px] font-bold">1st floor, Maralal Oasis, Hurlingham, Nairobi, Kenya</p>
-                        <p className="text-[10px] font-bold">Tel: 0795384140 / 0799034617</p>
-                        <p className="text-[10px] font-bold">PIN: P052354624Y</p>
+                        {getReceiptBrand().address && <p className="text-[10px] font-bold">{escapeReceiptHtml(getReceiptBrand().address)}</p>}
+                        {getReceiptBrand().phone && <p className="text-[10px] font-bold">Tel: {escapeReceiptHtml(getReceiptBrand().phone)}</p>}
+                        {getReceiptBrand().kraPin && <p className="text-[10px] font-bold">PIN: {escapeReceiptHtml(getReceiptBrand().kraPin)}</p>}
                         <div className="border-b border-dashed border-black pt-3"></div>
                     </div>
 
@@ -11056,17 +11096,21 @@ ${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `
                         )}
                     </div>
 
-                    {!(receipt.payment_method || '').toLowerCase().includes('app') && (
+                    {!(receipt.payment_method || '').toLowerCase().includes('app') && (getReceiptBrand().paybill || getReceiptBrand().account) && (
                         <div className="border-2 border-black my-4 p-2 rounded text-center space-y-0.5">
                             <div className="text-[9px] font-black tracking-wider uppercase">— PAY VIA MPESA —</div>
-                            <div className="flex justify-between text-xs font-black">
-                                <span>PAYBILL NO:</span>
-                                <span className="text-sm tracking-wider font-mono">542542</span>
-                            </div>
-                            <div className="flex justify-between text-xs font-black">
-                                <span>ACCT NO:</span>
-                                <span className="text-sm tracking-wider font-mono">992422</span>
-                            </div>
+                            {getReceiptBrand().paybill && (
+                                <div className="flex justify-between text-xs font-black">
+                                    <span>PAYBILL NO:</span>
+                                    <span className="text-sm tracking-wider font-mono">{getReceiptBrand().paybill}</span>
+                                </div>
+                            )}
+                            {getReceiptBrand().account && (
+                                <div className="flex justify-between text-xs font-black">
+                                    <span>ACCT NO:</span>
+                                    <span className="text-sm tracking-wider font-mono">{getReceiptBrand().account}</span>
+                                </div>
+                            )}
                         </div>
                     )}
 

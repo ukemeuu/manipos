@@ -6,7 +6,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-export function QRCodeGeneratorView() {
+export function QRCodeGeneratorView({ brand = {} }) {
+    // Branding for the printed flyer. Defaults to a neutral ManiPOS mark so the
+    // platform never stamps one restaurant's identity onto another's QR code.
+    const brandName = (brand?.name || 'ManiPOS').toUpperCase();
+    const brandLogo = brand?.logo || '/manipos_logo.png';
+    const brandWebsite = brand?.website || '';
     const [label, setLabel] = useState('');
     const [url, setUrl] = useState('');
     const [previewUrl, setPreviewUrl] = useState('');
@@ -482,8 +487,8 @@ export function QRCodeGeneratorView() {
                                 {/* Brand Header */}
                                 <div className="space-y-1">
                                     <div className="flex items-center justify-center gap-1.5">
-                                        <img src="/logo.png" alt="POJ" className="w-8 h-8 object-contain" />
-                                        <span className="text-[10px] font-black tracking-widest text-white px-2 py-0.5 rounded bg-black">POJ MANAGEMENT</span>
+                                        <img src={brandLogo} alt={brandName} className="w-8 h-8 object-contain" />
+                                        <span className="text-[10px] font-black tracking-widest text-white px-2 py-0.5 rounded bg-black">{brandName}</span>
                                     </div>
                                     <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none pt-2">
                                         {printTarget.label.toLowerCase().includes('feedback') ? 'WE VALUE YOUR FEEDBACK!' : 'SCAN TO ORDER'}
@@ -508,7 +513,7 @@ export function QRCodeGeneratorView() {
                                         Open camera on your smartphone & point at the QR code to scan.
                                     </div>
                                     <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest pt-1">
-                                        Thank you for dining with us! | potofjollof.com
+                                        Thank you for dining with us!{brandWebsite ? ` | ${brandWebsite}` : ''}
                                     </div>
                                 </div>
                             </div>

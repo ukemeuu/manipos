@@ -14,6 +14,8 @@ const SHELL_ASSETS = [
   BASE,
   OFFLINE_URL,
   `${BASE}manifest.webmanifest`,
+  `${BASE}favicon.png`,
+  `${BASE}favicon.ico`,
   `${BASE}manipos_logo.png`,
   `${BASE}manipos_african_hero.png`,
 ];
