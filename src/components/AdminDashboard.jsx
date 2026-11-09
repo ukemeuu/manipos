@@ -648,9 +648,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           {onOpenAppHome && (
             <button
               onClick={onOpenAppHome}
+              title="Back to the workspace"
               className="text-xs font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              ManiPOS Home
+              <ArrowLeft size={14} />
+              Back to Workspace
             </button>
           )}
 

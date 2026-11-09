@@ -327,7 +327,7 @@ export const deobfuscateTicket = (scrambledStr) => {
     return original;
 };
 
-export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, tenantSlug }) {
+export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onBack, tenantSlug }) {
     // Tenant isolation: every query is scoped to the signed-in staff member's restaurant.
     const sessionUser = React.useMemo(() => {
         try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
@@ -3650,7 +3650,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             <header className="bg-white border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4 flex flex-col lg:flex-row gap-3 lg:justify-between lg:items-center shrink-0 shadow-sm relative z-10">
                 <div className="flex items-center justify-between lg:justify-start gap-3 w-full lg:w-auto">
                     <div className="flex items-center gap-3">
-                        <button onClick={onSignOut} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                        <button
+                            onClick={onBack || onSignOut}
+                            title="Back to workspace"
+                            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                        >
                             <ArrowLeft size={20} />
                         </button>
                         <div>
@@ -3787,10 +3791,20 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
                     <button
                         type="button"
-                        onClick={onSignOut}
+                        onClick={onBack || onSignOut}
+                        title="Back to the workspace, keep the shift open"
                         className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-gray-200 shadow-sm"
                     >
                         Exit (Keep Shift)
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={onSignOut}
+                        title="Sign out of ManiPOS"
+                        className="px-4 py-1.5 bg-white hover:bg-red-50 text-red-600 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-red-200 shadow-sm"
+                    >
+                        Sign Out
                     </button>
 
                     {/* QZ Tray connection status indicator */}

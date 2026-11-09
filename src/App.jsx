@@ -272,7 +272,16 @@ function App() {
     localStorage.removeItem('manipos_selected_brand');
     setSession(null);
     setCurrentRoute('home');
-    window.history.pushState({}, '', '/');
+
+    // Leave via a real navigation (replace, not push) so the signed-in screens
+    // stay out of the browser history. Pushing '/' used to land on the
+    // marketing page while still on the tenant subdomain, and the browser Back
+    // button then bounced back into the session.
+    const slug = tenantInfo?.tenantSlug;
+    const loginUrl = slug
+      ? `https://${slug}.pos.manipos.com/`
+      : 'https://pos.manipos.com/';
+    window.location.replace(loginUrl);
   };
 
   if (loading) {
@@ -424,7 +433,7 @@ function App() {
           tenantSlug={tenantInfo.tenantSlug}
           onSignOut={handleGlobalSignOut}
           onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
-          onOpenAppHome={isAdmin ? () => setCurrentRoute('app') : null}
+          onOpenAppHome={() => setCurrentRoute('app')}
         />
       );
     }
@@ -437,6 +446,7 @@ function App() {
             staffName={staffUser.name}
             staffRole={staffUser.role}
             onSignOut={handleGlobalSignOut}
+            onBack={isAdmin ? () => setCurrentRoute('app') : null}
             tenantSlug={tenantInfo.tenantSlug}
           />
         </div>
@@ -451,7 +461,8 @@ function App() {
             <PosTerminal 
               staffName={staffUser.name} 
               staffRole={staffUser.role} 
-              onSignOut={handleGlobalSignOut} 
+              onSignOut={handleGlobalSignOut}
+            onBack={isAdmin ? () => setCurrentRoute('app') : null} 
               tenantSlug={tenantInfo.tenantSlug}
             />
           </div>
@@ -587,9 +598,10 @@ function App() {
           <PosTerminal 
             staffName={staffUser.name} 
             staffRole={staffUser.role} 
-            onSignOut={handleGlobalSignOut} 
+            onSignOut={handleGlobalSignOut}
+            onBack={isAdmin ? () => setCurrentRoute('app') : null} 
             onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
-            onOpenAppHome={isAdmin ? () => setCurrentRoute('app') : null}
+            onOpenAppHome={() => setCurrentRoute('app')}
             tenantSlug={tenantInfo.tenantSlug}
           />
         </div>
@@ -602,7 +614,9 @@ function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative font-sans">
         <button
-          onClick={navigateToHome}
+          // A real navigation to the marketing site: pushing '/' used to show
+          // the landing page while still on the tenant subdomain.
+          onClick={() => { window.location.href = 'https://manipos.com/'; }}
           className="absolute top-6 left-6 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider border border-slate-800 px-4 py-2 rounded-xl transition-colors cursor-pointer bg-slate-900/50 backdrop-blur-sm"
         >
           &larr; Back to ManiPOS Home
