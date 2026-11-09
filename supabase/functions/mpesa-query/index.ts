@@ -1,11 +1,12 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 /**
  * Reconciles an STK push by querying Daraja directly.
  *
  * Used when the callback never arrived (customer paid but Daraja's callback was
  * lost, or the callback endpoint was briefly down). The POS can poll this for
  * orders stuck in "Pending" with a checkout request id.
+ *
+ * Uses the REST API directly rather than supabase-js so the function has no
+ * external module imports (the esm.sh import fails to boot in this runtime).
  */
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -28,6 +29,27 @@ const json = (body: unknown, status = 200) =>
 
 const host = () =>
   Deno.env.get('DARAJA_ENVIRONMENT') === 'production' ? HOST_PRODUCTION : HOST_SANDBOX;
+
+const restHeaders = {
+  apikey: SERVICE_KEY,
+  Authorization: `Bearer ${SERVICE_KEY}`,
+  'Content-Type': 'application/json',
+};
+
+async function rest(path: string, options: RequestInit = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: { ...restHeaders, ...(options.headers || {}) },
+  });
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  return { ok: res.ok, status: res.status, body };
+}
 
 function darajaTimestamp(): string {
   const d = new Date();
@@ -65,14 +87,11 @@ Deno.serve(async (req: Request) => {
   const orderId = String(payload.orderId || '');
   if (!orderId) return json({ ok: false, error: 'orderId is required' }, 400);
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+  const found = await rest(
+    `pos_orders?select=id,ticket_number,total_amount,payment_status,mpesa_checkout_request_id&id=eq.${encodeURIComponent(orderId)}`
+  );
 
-  const { data: order } = await supabase
-    .from('pos_orders')
-    .select('id, ticket_number, total_amount, payment_status, mpesa_checkout_request_id')
-    .eq('id', orderId)
-    .maybeSingle();
-
+  const order = found.ok && Array.isArray(found.body) ? found.body[0] : null;
   if (!order) return json({ ok: false, error: 'Order not found' }, 404);
   if (order.payment_status === 'Paid') return json({ ok: true, status: 'paid' });
   if (!order.mpesa_checkout_request_id) {
@@ -103,32 +122,35 @@ Deno.serve(async (req: Request) => {
 
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return json({ ok: false, error: body.errorMessage || `Daraja query failed (${res.status})` }, 502);
+      return json(
+        { ok: false, error: body.errorMessage || `Daraja query failed (${res.status})` },
+        502
+      );
     }
 
     const resultCode = Number(body.ResultCode);
     const paid = String(body.ResultCode) === '0';
 
-    await supabase
-      .from('mpesa_transactions')
-      .update({
+    await rest(`mpesa_transactions?order_id=eq.${order.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
         status: paid ? 'completed' : resultCode ? 'failed' : 'pending',
         result_code: resultCode,
         result_desc: body.ResultDesc || null,
         updated_at: new Date().toISOString(),
-      })
-      .eq('order_id', order.id);
+      }),
+    });
 
     if (paid) {
-      await supabase
-        .from('pos_orders')
-        .update({
+      await rest(`pos_orders?id=eq.${order.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
           payment_status: 'Paid',
           status: 'Pending',
           payment_method: 'M-Pesa',
           paid_at: new Date().toISOString(),
-        })
-        .eq('id', order.id);
+        }),
+      });
     }
 
     return json({

@@ -1,10 +1,11 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 /**
  * Daraja STK push callback.
  *
  * Public endpoint (Daraja cannot send a JWT), so it validates the payload
  * shape and only acts on a CheckoutRequestID that exists in the ledger.
+ *
+ * Uses the REST API directly rather than supabase-js so the function has no
+ * external module imports.
  */
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -12,19 +13,40 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const ACCEPTED = JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' });
 
+const jsonHeaders = {
+  apikey: SERVICE_KEY,
+  Authorization: `Bearer ${SERVICE_KEY}`,
+  'Content-Type': 'application/json',
+};
+
+async function rest(path: string, options: RequestInit = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: { ...jsonHeaders, ...(options.headers || {}) },
+  });
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  return { ok: res.ok, status: res.status, body };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  let body: unknown;
+  let payload: any;
   try {
-    body = await req.json();
+    payload = await req.json();
   } catch {
     return new Response('Invalid JSON', { status: 400 });
   }
 
-  const callback = (body as any)?.Body?.stkCallback;
+  const callback = payload?.Body?.stkCallback;
   if (!callback || !callback.CheckoutRequestID) {
     // Daraja still expects a well-formed acknowledgement.
     return new Response(ACCEPTED, { headers: { 'Content-Type': 'application/json' } });
@@ -43,44 +65,45 @@ Deno.serve(async (req: Request) => {
     if (item.Name === 'PhoneNumber') phone = String(item.Value || '');
   }
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+  const tx = await rest(
+    `mpesa_transactions?select=id,order_id&checkout_request_id=eq.${encodeURIComponent(checkoutRequestID)}`
+  );
 
-  const { data: tx } = await supabase
-    .from('mpesa_transactions')
-    .select('id, order_id')
-    .eq('checkout_request_id', checkoutRequestID)
-    .maybeSingle();
+  const row = Array.isArray(tx.body) ? tx.body[0] : null;
 
-  if (tx?.order_id) {
+  if (row?.order_id) {
     const paid = resultCode === 0;
 
-    await supabase
-      .from('pos_orders')
-      .update({
+    // A failed push does not cancel the order: the customer may retry, and the
+    // kitchen may already be preparing it. Only the payment state changes.
+    await rest(`pos_orders?id=eq.${row.order_id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
         payment_status: paid ? 'Paid' : 'Failed',
-        status: paid ? 'Pending' : 'Cancelled',
+        ...(paid ? { status: 'Pending', paid_at: new Date().toISOString() } : {}),
         payment_method: 'M-Pesa',
         mpesa_receipt_number: receipt || null,
-        paid_at: paid ? new Date().toISOString() : null,
-      })
-      .eq('id', tx.order_id);
+      }),
+    });
 
-    await supabase
-      .from('mpesa_transactions')
-      .update({
+    // Failed callbacks carry no metadata, so only overwrite amount/phone when
+    // the callback actually supplied them.
+    await rest(`mpesa_transactions?id=eq.${row.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
         status: paid ? 'completed' : 'failed',
         result_code: resultCode,
         result_desc: resultDesc,
         transaction_id: receipt || null,
         receipt_number: receipt || null,
-        amount,
-        phone,
-        raw_callback: body,
+        ...(amount > 0 ? { amount } : {}),
+        ...(phone ? { phone } : {}),
+        raw_callback: payload,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', tx.id);
+      }),
+    });
 
-    console.log(`[mpesa-callback] order ${tx.order_id} ${paid ? 'PAID' : 'FAILED'} (${resultDesc})`);
+    console.log(`[mpesa-callback] order ${row.order_id} ${paid ? 'PAID' : 'FAILED'} (${resultDesc})`);
   } else {
     console.warn(`[mpesa-callback] no ledger entry for ${checkoutRequestID}`);
   }

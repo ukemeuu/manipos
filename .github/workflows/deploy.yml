@@ -52,6 +52,10 @@ jobs:
         env:
           BASE: ${{ github.event.inputs.environment == 'production' && '/' || '/staging/' }}
           VITE_SUPER_ADMIN_EMAILS: ${{ secrets.VITE_SUPER_ADMIN_EMAILS || vars.VITE_SUPER_ADMIN_EMAILS }}
+          # Staging exercises the Daraja sandbox. Production stays on the manual
+          # paybill instructions until Safaricom approves Go Live and the real
+          # credentials are in place; flip the repo variable to turn it on.
+          VITE_MPESA_ENABLED: ${{ github.event.inputs.environment == 'production' && (vars.VITE_MPESA_ENABLED || 'false') || 'true' }}
         run: npm run build -- --base "$BASE"
 
       - name: Upload build artifact
