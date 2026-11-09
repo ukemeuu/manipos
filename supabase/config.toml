@@ -1,0 +1,13 @@
+# Supabase project configuration.
+# Used by the CLI to deploy edge functions: `supabase functions deploy <name>`.
+
+project_id = "ptaqejtyhdbhmhrhuxcj"
+
+[functions.mpesa-stk]
+verify_jwt = true
+
+[functions.mpesa-callback]
+verify_jwt = false
+
+[functions.mpesa-query]
+verify_jwt = true

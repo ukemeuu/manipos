@@ -8,6 +8,7 @@ import {
     CheckCircle, Loader2, Copy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { initiateStkPush } from '../lib/mpesa';
 
 function normaliseTenantMenu(tenant) {
     if (!tenant?.menu?.length) return null;
@@ -378,6 +379,26 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                             <h2 className="text-2xl font-black text-gray-950 tracking-tight">Complete Payment</h2>
                             <p className="text-xs text-gray-500 mt-1 font-medium">Please send M-Pesa payment to submit your delivery order to the kitchen.</p>
                         </div>
+
+                        {/* Daraja STK push status */}
+                        {orderSuccess.stkPending && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-left flex items-start gap-2.5">
+                                <Loader2 size={16} className="text-emerald-600 animate-spin shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-xs font-black text-emerald-800">M-Pesa prompt sent</p>
+                                    <p className="text-[11px] text-emerald-700 mt-0.5">
+                                        Check your phone for a prompt from {paybillNo || 'our paybill'} and enter your M-Pesa PIN. This screen updates automatically once the payment clears.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {orderSuccess.stkError && !orderSuccess.stkPending && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-left">
+                                <p className="text-[11px] text-amber-700">
+                                    We could not send an automatic M-Pesa prompt ({orderSuccess.stkError}). Please pay using the paybill details below.
+                                </p>
+                            </div>
+                        )}
 
                         {/* Bill Total Card */}
                         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex justify-between items-center text-left">
@@ -1362,7 +1383,26 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 }
             }
 
-            // 6. Set orderSuccess to open the interactive M-Pesa Payment Verification Modal!
+            // 6. Send the M-Pesa STK push so the customer gets a payment prompt
+            //    on their phone. If it cannot be started we fall back to the
+            //    manual paybill instructions shown in the modal.
+            let stkPending = false;
+            let stkError = '';
+            if (!isWhatsApp && import.meta.env.VITE_MPESA_ENABLED === 'true') {
+                try {
+                    const stk = await initiateStkPush({
+                        orderId: orderData.id,
+                        phone: customerPhone.trim(),
+                        ticketNumber: orderData.ticket_number,
+                    });
+                    stkPending = Boolean(stk?.ok);
+                } catch (e) {
+                    console.warn('M-Pesa STK push could not be started:', e);
+                    stkError = e.message || 'Could not start the M-Pesa prompt.';
+                }
+            }
+
+            // 7. Open the interactive M-Pesa Payment Verification Modal!
             setOrderSuccess({
                 orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
@@ -1374,7 +1414,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 notes: finalNotes,
                 customerName: customerName.trim() || (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : 'Online Guest'),
                 customerPhone: customerPhone.trim() || (guestUser?.phone || ''),
-                stage: 'payment_instructions',
+                stage: stkPending ? 'stk_pending' : 'payment_instructions',
+                stkPending,
+                stkError,
                 mpesaCode: ''
             });
 
