@@ -76,6 +76,11 @@ function normaliseTenant(row, settings, registry, slug) {
     email: settings?.email || row?.email || base.email || '',
     paybill: settings?.mpesa_paybill || base.paybill || '',
     account: settings?.mpesa_account || base.account || '',
+    // Receipt branding. Empty when the tenant has not configured them, so the
+    // print templates can hide the line rather than print a placeholder.
+    kraPin: settings?.kra_pin || base.kraPin || '',
+    website: settings?.website || base.website || '',
+    tillNumber: settings?.till_number || base.tillNumber || '',
     currency: settings?.currency || row?.currency || base.currency || 'KES',
     currencySymbol: settings?.currency_symbol || base.currencySymbol || 'KSh',
     timezone: settings?.timezone || base.timezone || 'Africa/Nairobi',

@@ -52,16 +52,30 @@ function receiptBrandHeader() {
     const address = brand.address ? escapeReceiptHtml(brand.address) : '';
     const phone = brand.phone ? escapeReceiptHtml(brand.phone) : '';
     const kraPin = brand.kraPin ? escapeReceiptHtml(brand.kraPin) : '';
+    const website = brand.website ? escapeReceiptHtml(brand.website) : '';
+
+    // Print windows are opened on about:blank, so a relative logo path would not
+    // resolve. Build an absolute URL when the tenant has uploaded a logo.
+    let logo = '';
+    if (brand.logo) {
+        const raw = String(brand.logo);
+        const absolute = /^https?:\/\//i.test(raw)
+            ? raw
+            : `${typeof window !== 'undefined' ? window.location.origin : ''}${raw.startsWith('/') ? '' : '/'}${raw}`;
+        logo = `<img src="${escapeReceiptHtml(absolute)}" alt="${name}" style="max-height:56px;max-width:160px;object-fit:contain;margin:0 auto 6px;" />`;
+    }
 
     return `
         <div class="center">
           <div style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#000;padding:4px 0 6px 0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;">
+            ${logo}
             <div style="font-size:24px;font-weight:200;letter-spacing:0.22em;line-height:1;text-transform:uppercase;">${name}</div>
             ${tagline ? `<div style="width:170px;height:1px;background:#000;margin:5px 0 4px 0;"></div><div style="font-size:9px;font-weight:400;letter-spacing:0.55em;text-indent:0.55em;text-transform:uppercase;line-height:1;">${tagline}</div>` : ''}
           </div>
           ${address ? `<p class="sub">${address}</p>` : ''}
           ${phone ? `<p class="sub">Tel: ${phone}</p>` : ''}
           ${kraPin ? `<p style="font-size:10px;font-weight:700;color:#000;white-space:nowrap;">PIN: ${kraPin}</p>` : ''}
+          ${website ? `<p class="sub">${website}</p>` : ''}
         </div>
         <div class="divider"></div>
     `;
@@ -76,9 +90,13 @@ function receiptPaybillBlock(metaClass = 'meta') {
     const brand = RECEIPT_BRAND || {};
     const paybill = String(brand.paybill || '').trim();
     const account = String(brand.account || '').trim();
-    if (!paybill && !account) return '';
+    const till = String(brand.tillNumber || '').trim();
+    if (!paybill && !account && !till) return '';
 
     const rows = [];
+    if (till) {
+        rows.push(`<div class="${metaClass}" style="font-size:13px;font-weight:900;"><span>TILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">${escapeReceiptHtml(till)}</span></div>`);
+    }
     if (paybill) {
         rows.push(`<div class="${metaClass}" style="font-size:13px;font-weight:900;"><span>PAYBILL NO:</span><span style="font-size:16px;font-weight:900;letter-spacing:0.05em;">${escapeReceiptHtml(paybill)}</span></div>`);
     }
@@ -10999,6 +11017,13 @@ ${(receipt.payment_method || '').toLowerCase().includes('app') ? '' : `${receipt
                 {/* Thermal Ticket preview (on-screen only) */}
                 <div className="flex-1 overflow-y-auto p-8 font-mono text-xs text-black select-text">
                     <div className="flex flex-col items-center justify-center text-center text-black font-sans py-1 pb-2.5">
+                        {getReceiptBrand().logo && (
+                            <img
+                                src={getReceiptBrand().logo}
+                                alt=""
+                                className="max-h-14 max-w-[160px] object-contain mb-2"
+                            />
+                        )}
                         <div className="text-2xl font-light tracking-[0.15em] leading-none uppercase">
                             {escapeReceiptHtml((getReceiptBrand().name || 'ManiPOS').toUpperCase())}
                         </div>

@@ -83,8 +83,15 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     address: '',
     phone: '',
     mpesa_paybill: '',
-    mpesa_account: ''
+    mpesa_account: '',
+    kra_pin: '',
+    website: '',
+    till_number: '',
+    logo_url: '',
+    socials: {}
   });
+  const [profileName, setProfileName] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -106,6 +113,12 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  // Seed the editable store name from the signed-in session. Saved changes
+  // write back to localStorage so the rest of the app picks the new name up.
+  useEffect(() => {
+    if (restaurantName && !profileName) setProfileName(restaurantName);
+  }, [restaurantName, profileName]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -488,27 +501,65 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
     try {
       const methods = settings.enabled_payment_methods || ['CASH', 'MPESA', 'CARD', 'UBEREATS', 'GLOVO', 'BOLTFOOD', 'BANK_TRANSFER'];
-      const payload = {
-        id: settings.id,
-        address: settings.address,
-        phone: settings.phone,
-        mpesa_paybill: settings.mpesa_paybill,
-        mpesa_account: settings.mpesa_account,
-        enabled_payment_methods: methods
-      };
-      const { error } = await supabase
-        .from('restaurant_settings')
-        .upsert([payload]);
+      const socials = settings.socials && typeof settings.socials === 'object' ? settings.socials : {};
 
+      // One call writes the store name (restaurants) and every receipt branding
+      // field (restaurant_settings), scoped to the signed-in tenant.
+      const { data, error } = await supabase.rpc('restaurant_profile_upsert', {
+        p_actor_id: pinUser.id || null,
+        p_name: profileName || null,
+        p_address: settings.address,
+        p_phone: settings.phone,
+        p_kra_pin: settings.kra_pin || null,
+        p_website: settings.website || null,
+        p_till_number: settings.till_number || null,
+        p_paybill: settings.mpesa_paybill,
+        p_account: settings.mpesa_account,
+        p_logo_url: settings.logo_url || null,
+        p_socials: socials,
+        p_enabled_payment_methods: methods
+      });
       if (error) throw error;
+      if (data?.success === false) throw new Error(data.error || 'Could not save the restaurant profile.');
+
       localStorage.setItem('manipos_payment_methods', JSON.stringify(methods));
-      alert('Payment Methods & Receipt Configuration updated successfully!');
+
+      // Keep the cached session name in sync with what was saved.
+      if (profileName) {
+        localStorage.setItem('pin_staff_user', JSON.stringify({ ...pinUser, restaurantName: profileName }));
+      }
+
+      alert('Receipt & restaurant details updated successfully!');
     } catch (err) {
       alert('Error saving settings: ' + err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Logo uploads go to the existing public bucket under a logos/ prefix.
+  const handleLogoUpload = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please choose an image file for the logo.');
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+      const restaurantId = pinUser.restaurantId || pinUser.restaurant_id || 'shared';
+      const path = `logos/${restaurantId}/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(path);
+      setSettings((prev) => ({ ...prev, logo_url: urlData?.publicUrl || '' }));
+    } catch (err) {
+      alert('Logo upload failed: ' + err.message);
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -1238,7 +1289,53 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 </div>
 
                 <form onSubmit={handleSaveSettings} className="bg-slate-900/40 border border-slate-900 p-8 rounded-2xl space-y-6">
-                  
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Store Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Pot of Jollof Kitchen"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors"
+                    />
+                    <p className="text-[11px] text-slate-500">Printed at the top of every receipt and slip.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Receipt Logo</label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+                        {settings.logo_url
+                          ? <img src={settings.logo_url} alt="Receipt logo" className="w-full h-full object-contain" />
+                          : <span className="text-slate-600 text-[10px] font-bold uppercase tracking-wider">No logo</span>}
+                      </div>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={logoUploading}
+                          onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+                        />
+                        <span className="inline-flex items-center gap-2 text-xs font-bold text-slate-300 bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl hover:border-emerald-500 transition-colors">
+                          {logoUploading ? 'Uploading…' : 'Upload logo'}
+                        </span>
+                      </label>
+                      {settings.logo_url && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings((prev) => ({ ...prev, logo_url: '' }))}
+                          className="text-[11px] font-bold text-slate-500 hover:text-red-400 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">Shown above the store name on printed receipts. A wide logo works best.</p>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Physical Address</label>
                     <div className="relative">
@@ -1267,6 +1364,59 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">KRA PIN</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. P052354624Y"
+                        value={settings.kra_pin || ''}
+                        onChange={(e) => setSettings({ ...settings, kra_pin: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Website</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. potofjollof.co.ke"
+                        value={settings.website || ''}
+                        onChange={(e) => setSettings({ ...settings, website: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Social Pages</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {['instagram', 'facebook', 'tiktok'].map((network) => (
+                        <input
+                          key={network}
+                          type="text"
+                          placeholder={network[0].toUpperCase() + network.slice(1)}
+                          value={settings.socials?.[network] || ''}
+                          onChange={(e) => setSettings((prev) => ({ ...prev, socials: { ...(prev.socials || {}), [network]: e.target.value } }))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500">Your public profile links. Not printed on receipts yet.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">M-PESA Till Number (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 174379"
+                      value={settings.till_number || ''}
+                      onChange={(e) => setSettings({ ...settings, till_number: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                    />
+                    <p className="text-[11px] text-slate-500">Use this instead of a paybill if customers pay from a till.</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
