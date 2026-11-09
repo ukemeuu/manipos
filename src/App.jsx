@@ -317,10 +317,36 @@ function App() {
   }
 
   // ROUTE 0.65: Menu builder (categories, items, images, microsite visibility)
+  // Staff-only: without this guard anonymous visitors can render the admin UI
+  // (RLS blocks the data, but the screen should not be reachable at all).
   if (currentRoute === 'menu-builder') {
+    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+    const menuRestaurantId =
+      session?.staffUser?.restaurantId || pinUser?.restaurantId || pinUser?.restaurant_id;
+
+    if (!menuRestaurantId) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-sm text-center shadow-sm">
+            <h1 className="text-lg font-semibold text-slate-900">Sign in required</h1>
+            <p className="text-sm text-slate-600 mt-2">
+              The menu builder is only available to signed-in staff.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigateToLogin(tenantInfo.tenantSlug)}
+              className="mt-5 inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <MenuBuilder
-        restaurantId={session?.staffUser?.restaurantId || JSON.parse(localStorage.getItem('pin_staff_user') || '{}')?.restaurantId}
+        restaurantId={menuRestaurantId}
         onBack={() => goTo('app', '/?page=app')}
       />
     );
