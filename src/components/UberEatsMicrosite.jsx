@@ -754,9 +754,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         if (window.google && window.google.maps && window.google.maps.Geocoder) {
             try {
                 const geocoder = new window.google.maps.Geocoder();
-                const reqParam = cleanQuery.toLowerCase().includes('kenya')
-                    ? { address: cleanQuery }
-                    : { address: `${cleanQuery}, Nairobi, Kenya` };
+                // Region-bias to Kenya rather than appending ", Nairobi, Kenya":
+                // appending the city lets a nonsense query fall back to the city
+                // centre and look like a real match.
+                const reqParam = { address: cleanQuery, region: 'ke' };
                 const result = await new Promise((resolve) => {
                     geocoder.geocode(reqParam, (results, status) => {
                         if (status === 'OK' && results && results[0]) {
