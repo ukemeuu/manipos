@@ -886,27 +886,53 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 let suggestions = [];
 
                 if (window.google && window.google.maps && window.google.maps.places) {
+                    // Prefer the current Places API. The legacy AutocompleteService
+                    // is disabled on this project, so try the new one first.
                     try {
-                        const service = new window.google.maps.places.AutocompleteService();
-                        const preds = await new Promise((resolve) => {
-                            service.getPlacePredictions(
-                                { input: cleanQuery, componentRestrictions: { country: 'ke' } },
-                                (predictions, status) => {
-                                    if (status === 'OK' && predictions && predictions.length > 0) {
-                                        resolve(predictions.map(p => ({
-                                            display_name: p.description,
-                                            place_id: p.place_id,
-                                            provider: 'Google Places'
-                                        })));
-                                    } else {
-                                        resolve([]);
-                                    }
+                        const places = window.google.maps.places;
+                        if (places.AutocompleteSuggestion && places.AutocompleteSuggestion.fetchAutocompleteSuggestions) {
+                            const res = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+                                input: cleanQuery,
+                                locationBias: {
+                                    lat: whatsappSettings.store_lat || -1.2943,
+                                    lng: whatsappSettings.store_lng || 36.7953,
+                                    radius: 25000
                                 }
-                            );
-                        });
-                        if (preds && preds.length > 0) suggestions = preds;
+                            });
+                            const preds = (res && res.suggestions ? res.suggestions : []).map(s => ({
+                                display_name: s.placePrediction && s.placePrediction.text && s.placePrediction.text.text,
+                                place_id: s.placePrediction && s.placePrediction.placeId,
+                                provider: 'Google Places'
+                            })).filter(s => s.display_name);
+                            if (preds.length > 0) suggestions = preds;
+                        }
                     } catch (e) {
-                        console.warn('Google Places autocomplete error:', e);
+                        console.warn('Google Places (new) autocomplete error:', e);
+                    }
+
+                    if (suggestions.length === 0 && window.google.maps.places.AutocompleteService) {
+                        try {
+                            const service = new window.google.maps.places.AutocompleteService();
+                            const preds = await new Promise((resolve) => {
+                                service.getPlacePredictions(
+                                    { input: cleanQuery },
+                                    (predictions, status) => {
+                                        if (status === 'OK' && predictions && predictions.length > 0) {
+                                            resolve(predictions.map(p => ({
+                                                display_name: p.description,
+                                                place_id: p.place_id,
+                                                provider: 'Google Places'
+                                            })));
+                                        } else {
+                                            resolve([]);
+                                        }
+                                    }
+                                );
+                            });
+                            if (preds && preds.length > 0) suggestions = preds;
+                        } catch (e) {
+                            console.warn('Google Places (legacy) autocomplete error:', e);
+                        }
                     }
                 }
 
@@ -939,7 +965,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         }, 120);
 
         return () => clearTimeout(timer);
-    }, [deliveryAddress, diningMode]);
+    }, [deliveryAddress, diningMode, whatsappSettings.store_lat, whatsappSettings.store_lng]);
 
     const handleSelectAddressSuggestion = (suggestion) => {
         selectedAddressRef.current = true;
