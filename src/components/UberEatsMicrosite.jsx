@@ -38,6 +38,7 @@ function normaliseTenantMenu(tenant) {
                     id: `${g.id}-${i}`,
                     name: o.name,
                     price: Number(o.price) || 0,
+                    isAvailable: o.is_available !== false,
                 })),
             })),
             isSoldOut: false,
@@ -2093,10 +2094,12 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                             return (
                                                                 <label
                                                                     key={opt.id}
-                                                                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                                                                        isSelected
-                                                                            ? 'bg-white border-black shadow-sm font-semibold'
-                                                                            : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
+                                                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                                                        opt.isAvailable === false
+                                                                            ? 'opacity-50 cursor-not-allowed bg-[#f3f3f3] border-transparent'
+                                                                            : isSelected
+                                                                                ? 'bg-white border-black shadow-sm font-semibold'
+                                                                                : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
                                                                     }`}
                                                                 >
                                                                     <div className="flex items-center gap-3">
@@ -2104,7 +2107,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                             type={isMulti ? 'checkbox' : 'radio'}
                                                                             name={`mod-${mod.id}`}
                                                                             checked={isSelected}
+                                                                            disabled={opt.isAvailable === false}
                                                                             onChange={() => {
+                                                                                if (opt.isAvailable === false) return;
                                                                                 setValidationError('');
                                                                                 if (isMulti) {
                                                                                     const current = modalSelections[mod.id] || [];
@@ -2131,6 +2136,11 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                             className="accent-black w-4 h-4"
                                                                         />
                                                                         <span className="text-xs text-black">{opt.name}</span>
+                                                                        {opt.isAvailable === false && (
+                                                                            <span className="text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded">
+                                                                                Sold out
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                     <span className="text-xs font-bold text-[#545454]">
                                                                         {opt.price > 0 ? `+KES ${opt.price.toLocaleString()}` : 'Free'}

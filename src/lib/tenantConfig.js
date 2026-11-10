@@ -3,7 +3,7 @@ import { getTenantInfo } from './tenant';
 import { getRegistryTenant } from '../data/tenantRegistry';
 
 const CACHE_PREFIX = 'manipos_tenant_config_v2_';
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 1000;
 
 /**
  * Resolve the active tenant slug using, in order:

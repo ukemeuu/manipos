@@ -7066,6 +7066,23 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                                     Include 16% VAT in this option's price
                                                                 </label>
                                                             </div>
+
+                                                            <div className="flex items-center gap-1.5 pt-1">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    id={`opt-avail-${idx}`}
+                                                                    checked={opt.is_available !== false}
+                                                                    onChange={(e) => {
+                                                                        const opts = [...editingModifierGroup.options];
+                                                                        opts[idx].is_available = e.target.checked;
+                                                                        setEditingModifierGroup({ ...editingModifierGroup, options: opts });
+                                                                    }}
+                                                                    className="w-3.5 h-3.5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                                                                />
+                                                                <label htmlFor={`opt-avail-${idx}`} className="text-[9px] font-bold text-gray-500 cursor-pointer select-none">
+                                                                    Available for ordering <span className="text-gray-400">(uncheck to mark this option sold out)</span>
+                                                                </label>
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>
