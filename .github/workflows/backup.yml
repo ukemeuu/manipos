@@ -27,7 +27,9 @@ jobs:
           sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17 > /dev/null
-          pg_dump --version
+          # The unversioned /usr/bin/pg_dump still points at 16, so use the
+          # versioned binary explicitly.
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Dump
         env:
@@ -42,7 +44,8 @@ jobs:
           # storage schemas, so the auth users are only covered by Supabase's
           # own physical backups. This file is the app data — orders, menus,
           # guests, settings and the M-Pesa ledger.
-          pg_dump "$SUPABASE_DB_URL" \
+          PG_DUMP=/usr/lib/postgresql/17/bin/pg_dump
+          "$PG_DUMP" "$SUPABASE_DB_URL" \
             --schema=public \
             --no-owner --no-privileges \
             --format=custom \
@@ -55,8 +58,8 @@ jobs:
         run: |
           # A manifest the verification job compares a restored copy against,
           # so a truncated or stale dump is caught rather than trusted.
-          SQL=$(psql "$SUPABASE_DB_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
-          psql "$SUPABASE_DB_URL" -AtF'|' -c "$SQL order by 1" > row_counts.txt
+          SQL=$(/usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
+          /usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" -AtF'|' -c "$SQL order by 1" > row_counts.txt
           wc -l row_counts.txt
 
       - name: Upload dump
@@ -109,7 +112,7 @@ jobs:
           sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17 > /dev/null
-          pg_restore --version
+          /usr/lib/postgresql/17/bin/pg_restore --version
 
       - name: Download backup
         uses: actions/download-artifact@v4
@@ -124,19 +127,19 @@ jobs:
           ls -lh backup/
           # The dump references auth.jwt() in its RLS policies, which a plain
           # Postgres does not have. Stub it so the policies can be created.
-          psql "$SCRATCH_URL" -q -c "create schema if not exists auth;" \
+          /usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -q -c "create schema if not exists auth;" \
             -c "create or replace function auth.jwt() returns jsonb language sql stable as \$\$ select '{}'::jsonb \$\$;" \
             -c "create extension if not exists pgcrypto;" \
             -c "create extension if not exists \"uuid-ossp\";" \
             -c "create extension if not exists pg_trgm;"
-          pg_restore --no-owner --no-privileges --dbname="$SCRATCH_URL" backup/manipos-*.dump
+          /usr/lib/postgresql/17/bin/pg_restore --no-owner --no-privileges --dbname="$SCRATCH_URL" backup/manipos-*.dump
 
       - name: Compare row counts
         env:
           SCRATCH_URL: postgresql://postgres:postgres@localhost:5432/scratch
         run: |
-          SQL=$(psql "$SCRATCH_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
-          psql "$SCRATCH_URL" -AtF'|' -c "$SQL order by 1" > restored_counts.txt
+          SQL=$(/usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
+          /usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -AtF'|' -c "$SQL order by 1" > restored_counts.txt
           if diff -u backup/row_counts.txt restored_counts.txt; then
             echo "✅ Restored copy matches the source row counts."
           else
