@@ -2183,14 +2183,18 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const fetchOpenOrders = async () => {
         try {
             // Fetch both:
-            // 1. All orders with payment_status = 'Pending' (any type, waiting payment)
+            // 1. Orders awaiting payment OR awaiting payment verification. Microsite
+            //    orders start as 'Pending'; as soon as the customer submits their
+            //    M-Pesa code the microsite marks them 'pending_verification'. Both
+            //    states need staff attention, so both must show up here — otherwise
+            //    an order vanishes from the accept list the moment the customer pays.
             // 2. Dine-in orders for named tables that are 'Paid' — table is still occupied and 
             //    may need more items added (e.g., customer orders extra items after first print)
             const { data: pendingData, error: err1 } = await supabase
                 .from('pos_orders')
                 .select('*, items:pos_order_items(*)')
                 .eq('restaurant_id', restaurantId)
-                .eq('payment_status', 'Pending')
+                .in('payment_status', ['Pending', 'pending_verification'])
                 .neq('status', 'Cancelled')
                 .neq('status', 'Returned')
                 .order('created_at', { ascending: false });
