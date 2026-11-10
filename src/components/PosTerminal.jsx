@@ -3993,6 +3993,14 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         <span className="text-[11px] font-bold text-gray-800">{order.customer_name}</span>
                                         <span className="text-[10px] text-gray-500">({order.dining_option})</span>
                                         <span className="font-mono text-[11px] font-black text-gray-900">KES {order.total_amount.toLocaleString()}</span>
+                                        {(order.payment_status || '').toLowerCase() === 'pending_verification' && (
+                                            <span
+                                                title="The customer submitted an M-Pesa code. Verify it against your paybill before accepting."
+                                                className="text-[9px] font-black text-sky-700 bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded uppercase tracking-wider"
+                                            >
+                                                M-Pesa code
+                                            </span>
+                                        )}
                                         <button
                                             onClick={() => handleAcceptOrder(order)}
                                             className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors"
