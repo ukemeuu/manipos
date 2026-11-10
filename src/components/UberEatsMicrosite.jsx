@@ -52,7 +52,7 @@ function normaliseTenantMenu(tenant) {
             rating: tenant.rating || 4.8,
             delivery_time: `Delivery in ${tenant.etaMinutes || '30–45 min'}`,
             delivery_fee: tenant.freeDeliveryOver
-                ? `Free delivery over ${tenant.currencySymbol || 'KSh'} ${Number(tenant.freeDeliveryOver).toLocaleString()}`
+                ? 'Free delivery within 2km'
                 : `Delivery from ${tenant.currencySymbol || 'KSh'} ${Number(tenant.deliveryFee || 0).toLocaleString()}`,
             address: tenant.address || tenant.city || '',
             hero_image: tenant.cover,
@@ -77,7 +77,7 @@ function emptyTenantMenu(tenant) {
             rating: tenant?.rating || null,
             delivery_time: `Delivery in ${tenant?.etaMinutes || '30–45 min'}`,
             delivery_fee: tenant?.freeDeliveryOver
-                ? `Free delivery over ${tenant?.currencySymbol || 'KSh'} ${Number(tenant.freeDeliveryOver).toLocaleString()}`
+                ? 'Free delivery within 2km'
                 : '',
             address: tenant?.address || tenant?.city || '',
             hero_image: tenant?.cover,
