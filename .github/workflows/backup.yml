@@ -59,7 +59,7 @@ jobs:
           # A manifest the verification job compares a restored copy against,
           # so a truncated or stale dump is caught rather than trusted.
           SQL=$(/usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
-          /usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" -AtF'|' -c "$SQL order by 1" > row_counts.txt
+          /usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" -AtF'|' -c "$SQL" | sort > row_counts.txt
           wc -l row_counts.txt
 
       - name: Upload dump
@@ -145,13 +145,34 @@ jobs:
           SCRATCH_URL: postgresql://postgres:postgres@localhost:5432/scratch
         run: |
           SQL=$(/usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
-          /usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -AtF'|' -c "$SQL order by 1" > restored_counts.txt
-          if diff -u backup/row_counts.txt restored_counts.txt; then
-            echo "✅ Restored copy matches the source row counts."
-          else
-            echo "::error::Restored row counts differ from the backup manifest"
+          /usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -AtF'|' -c "$SQL" | sort > restored_counts.txt
+          sort backup/row_counts.txt -o backup/row_counts.txt
+
+          # Production keeps moving between the dump and this check, so a table
+          # holding MORE rows than the manifest is fine. Failing means data was
+          # lost: a table is missing, or it holds fewer rows than it had when
+          # the dump was taken.
+          fail=0
+          while IFS='|' read -r table expected; do
+            [ -z "$table" ] && continue
+            actual=$(grep -F "$table|" restored_counts.txt | cut -d'|' -f2 | head -1)
+            if [ -z "$actual" ]; then
+              echo "::error::Table '$table' missing from the restored copy"
+              fail=1
+            elif [ "$actual" -lt "$expected" ]; then
+              echo "::error::Table '$table' shrank: manifest=$expected restored=$actual"
+              fail=1
+            fi
+          done < backup/row_counts.txt
+
+          echo "--- diff (informational) ---"
+          diff -u backup/row_counts.txt restored_counts.txt || true
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Restored copy lost data relative to the backup manifest"
             exit 1
           fi
+          echo "✅ Restored copy contains every table and no fewer rows than the dump."
 
       - name: Alert on failure
         if: failure()
