@@ -51,9 +51,7 @@ function normaliseTenantMenu(tenant) {
             subtitle: [tenant.cuisine, tenant.city].filter(Boolean).join(' • ') || 'Fresh food, made to order',
             rating: tenant.rating || 4.8,
             delivery_time: `Delivery in ${tenant.etaMinutes || '30–45 min'}`,
-            delivery_fee: tenant.freeDeliveryOver
-                ? 'Free delivery within 2km'
-                : `Delivery from ${tenant.currencySymbol || 'KSh'} ${Number(tenant.deliveryFee || 0).toLocaleString()}`,
+            delivery_fee: '',
             address: tenant.address || tenant.city || '',
             hero_image: tenant.cover,
             logo: tenant.logo,
@@ -76,9 +74,7 @@ function emptyTenantMenu(tenant) {
             subtitle: [tenant?.cuisine, tenant?.city].filter(Boolean).join(' • ') || '',
             rating: tenant?.rating || null,
             delivery_time: `Delivery in ${tenant?.etaMinutes || '30–45 min'}`,
-            delivery_fee: tenant?.freeDeliveryOver
-                ? 'Free delivery within 2km'
-                : '',
+            delivery_fee: '',
             address: tenant?.address || tenant?.city || '',
             hero_image: tenant?.cover,
             logo: tenant?.logo,
@@ -1720,8 +1716,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                          onClick={() => setStoreInfoOpen(true)}>
                         <MapPin size={14} className="text-black" />
                         <span className="font-medium text-black">{store.address || 'Nairobi'}</span>
-                        <span>•</span>
-                        <span className="text-[#06C167] font-semibold">{store.delivery_fee}</span>
+                        {store.delivery_fee && (<><span>•</span><span className="text-[#06C167] font-semibold">{store.delivery_fee}</span></>)}
                     </div>
 
                     {/* Right: Search, Customer Login & Cart */}
@@ -1858,9 +1853,11 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                             </div>
                             <span>•</span>
                             {/* Delivery Fee */}
-                            <div className="font-semibold text-[#06C167]">
-                                {store.delivery_fee}
-                            </div>
+                            {store.delivery_fee && (
+                                <div className="font-semibold text-[#06C167]">
+                                    {store.delivery_fee}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -2659,7 +2656,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                     <Motorbike size={16} className="text-[#06C167] mt-0.5 shrink-0" />
                                     <div>
                                         <p className="font-bold text-black">Delivery Coverage</p>
-                                        <p className="text-[#545454]">Delivery across Nairobi. {store.delivery_fee}.</p>
+                                        <p className="text-[#545454]">Delivery across Nairobi.</p>
                                     </div>
                                 </div>
                             </div>
