@@ -533,7 +533,7 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                         {/* Share Confirmation Code to WhatsApp Button */}
                         <a
                             href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
-                                `Hello ${tenant?.name || 'there'}! I have sent ${currency} ${orderSuccess.total.toLocaleString()} for Order #${orderSuccess.ticketNumber}${orderSuccess.mpesaCode ? ` (Payment Code: ${orderSuccess.mpesaCode})` : ''}. Please verify and accept my order!`
+                                `Hello ${tenant?.name || 'there'}! I have sent ${currency} ${orderSuccess.total.toLocaleString()} for Order #${orderSuccess.ticketNumber}${orderSuccess.mpesaCode ? ` (Payment Code: ${orderSuccess.mpesaCode})` : ''}.${orderSuccess.deliveryAddress ? `\n\nDelivery Address: ${orderSuccess.deliveryAddress}` : ''}\n\nPlease verify and accept my order!`
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -716,12 +716,141 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         paybill_number: tenant?.paybill || '',
         account_number: tenant?.account || '',
         base_delivery_fee: tenant?.deliveryFee ?? 100,
-        base_delivery_distance: 3,
+        base_delivery_distance: 2,
         delivery_fee_per_km: 50,
         packaging_fee: 0,
         store_lat: tenant?.lat ?? -1.2943,
         store_lng: tenant?.lng ?? 36.7953
     });
+
+    // ── Delivery distance & fee engine ────────────────────────────────────────
+    // The microsite must know how far the customer is from the store before it
+    // can decide whether delivery is free. Addresses outside the free radius
+    // are charged; an address we cannot locate is never treated as free.
+    const [calculatedDistance, setCalculatedDistance] = useState(null);
+    const [calculatedDeliveryFee, setCalculatedDeliveryFee] = useState(0);
+    const [isGeocoding, setIsGeocoding] = useState(false);
+    const [geocodingError, setGeocodingError] = useState('');
+
+    const GOOGLE_PLACES_API_KEY = 'AIzaSyDhwk7tNH19ACOUo0WUIJsVGSUtVLji_yM';
+
+    // Load the Google Maps JS SDK once so the geocoder is available.
+    useEffect(() => {
+        if (window.google && window.google.maps) return;
+        const scriptId = 'google-maps-js-sdk';
+        if (document.getElementById(scriptId)) return;
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_PLACES_API_KEY}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+    }, []);
+
+    const geocodeAddress = async (query) => {
+        if (!query || !query.trim()) return null;
+        const cleanQuery = query.trim();
+
+        if (window.google && window.google.maps && window.google.maps.Geocoder) {
+            try {
+                const geocoder = new window.google.maps.Geocoder();
+                const reqParam = cleanQuery.toLowerCase().includes('kenya')
+                    ? { address: cleanQuery }
+                    : { address: `${cleanQuery}, Nairobi, Kenya` };
+                const result = await new Promise((resolve) => {
+                    geocoder.geocode(reqParam, (results, status) => {
+                        if (status === 'OK' && results && results[0]) {
+                            resolve({
+                                lat: results[0].geometry.location.lat(),
+                                lng: results[0].geometry.location.lng()
+                            });
+                        } else {
+                            resolve(null);
+                        }
+                    });
+                });
+                if (result) return result;
+            } catch (e) {
+                console.warn('Google geocoder error:', e);
+            }
+        }
+
+        // Fallback: Nominatim (OpenStreetMap), with a short timeout.
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1500);
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Nairobi, Kenya')}&format=json&limit=1`,
+                { signal: controller.signal, headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' } }
+            );
+            clearTimeout(timeoutId);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                }
+            }
+        } catch (e) {}
+
+        return null;
+    };
+
+    // Recompute the distance and delivery fee whenever the address changes.
+    useEffect(() => {
+        if (diningMode !== 'delivery' || !deliveryAddress.trim() || deliveryAddress.trim().length < 2) {
+            setCalculatedDistance(null);
+            setCalculatedDeliveryFee(0);
+            setGeocodingError('');
+            return;
+        }
+
+        setIsGeocoding(true);
+        setGeocodingError('');
+
+        const timer = setTimeout(async () => {
+            try {
+                const geo = await geocodeAddress(deliveryAddress);
+                if (geo) {
+                    const R = 6371;
+                    const lat1 = whatsappSettings.store_lat || -1.2921;
+                    const lng1 = whatsappSettings.store_lng || 36.8219;
+                    const dLat = (geo.lat - lat1) * Math.PI / 180;
+                    const dLng = (geo.lng - lng1) * Math.PI / 180;
+                    const a = Math.pow(Math.sin(dLat / 2), 2) +
+                        Math.cos(lat1 * Math.PI / 180) * Math.cos(geo.lat * Math.PI / 180) *
+                        Math.pow(Math.sin(dLng / 2), 2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    // 1.25x road factor: straight-line distance understates driving distance.
+                    const distance = Math.round((R * c * 1.25) * 10) / 10;
+
+                    const baseFee = whatsappSettings.base_delivery_fee || 0;
+                    const freeRadius = whatsappSettings.base_delivery_distance || 2;
+                    const perKm = whatsappSettings.delivery_fee_per_km || 50;
+                    let fee = baseFee;
+                    if (distance > freeRadius) {
+                        fee += (distance - freeRadius) * perKm;
+                    }
+                    setCalculatedDistance(distance);
+                    setCalculatedDeliveryFee(Math.max(0, Math.round(fee)));
+                    setGeocodingError('');
+                } else {
+                    // Unknown location: charge the base fee rather than giving it away free.
+                    setCalculatedDistance(null);
+                    setCalculatedDeliveryFee(whatsappSettings.base_delivery_fee || 0);
+                    setGeocodingError('We could not locate this address automatically. The delivery fee may need confirmation.');
+                }
+            } catch (e) {
+                console.error('Delivery distance calculation failed:', e);
+                setCalculatedDistance(null);
+                setCalculatedDeliveryFee(whatsappSettings.base_delivery_fee || 0);
+                setGeocodingError('We could not calculate the delivery distance. Please confirm the fee.');
+            } finally {
+                setIsGeocoding(false);
+            }
+        }, 250);
+
+        return () => clearTimeout(timer);
+    }, [deliveryAddress, diningMode, whatsappSettings.store_lat, whatsappSettings.store_lng, whatsappSettings.base_delivery_fee, whatsappSettings.base_delivery_distance, whatsappSettings.delivery_fee_per_km]);
 
     useEffect(() => {
         setWhatsappSettings(prev => ({
@@ -747,7 +876,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                         paybill_number: channel.paybill_number || tenant?.paybill || '',
                         account_number: channel.account_number || tenant?.account || '',
                         base_delivery_fee: channel.base_delivery_fee ?? tenant?.deliveryFee ?? 100,
-                        base_delivery_distance: channel.base_delivery_distance ?? 3,
+                        base_delivery_distance: channel.base_delivery_distance ?? 2,
                         delivery_fee_per_km: channel.delivery_fee_per_km ?? 50,
                         packaging_fee: channel.packaging_fee ?? 0,
                         store_lat: channel.store_lat ?? tenant?.lat ?? -1.2943,
@@ -1061,8 +1190,15 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         return Math.min(appliedDiscount.value, subtotal);
     }, [appliedDiscount, subtotal]);
 
-    // Free delivery within 3km (0 for delivery, pickup, or dine in)
-    const deliveryFee = (diningMode === 'pickup' || diningMode === 'dine_in') ? 0 : 0; 
+    // Delivery is free only when the address has been located and is inside the
+    // free radius. An unlocated address is never free — it is charged instead.
+    const freeDeliveryRadius = whatsappSettings.base_delivery_distance || 2;
+    const isFreeDelivery = diningMode === 'delivery'
+        && calculatedDistance !== null
+        && calculatedDistance <= freeDeliveryRadius;
+    const deliveryFee = (diningMode === 'pickup' || diningMode === 'dine_in')
+        ? 0
+        : (isFreeDelivery ? 0 : calculatedDeliveryFee);
     const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
     const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -1372,7 +1508,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 if (appliedDiscount) {
                     message += `🏷️ *Promo (${appliedDiscount.code}):* -KES ${discountAmount.toLocaleString()}\n`;
                 }
-                message += `🛵 *Delivery:* ${deliveryFee === 0 ? 'FREE (3km)' : `KES ${deliveryFee.toLocaleString()}`}\n`;
+                message += `🛵 *Delivery:* ${deliveryFee === 0
+                    ? (diningMode === 'delivery' ? `FREE (${freeDeliveryRadius}km)` : 'FREE')
+                    : `KES ${deliveryFee.toLocaleString()}`}\n`;
                 message += `💰 *TOTAL PAYABLE:* KES ${finalTotal.toLocaleString()}\n`;
                 message += `─────────────────────────\n`;
                 message += `_Sent via ${tenant?.name || 'ManiPOS'} Digital Store_`;
@@ -2253,8 +2391,21 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                             )}
                                             <div className="flex justify-between text-[#545454]">
                                                 <span>Delivery</span>
-                                                <span className="font-bold text-[#06C167]">{deliveryFee === 0 ? 'FREE (3km)' : `KES ${deliveryFee.toLocaleString()}`}</span>
+                                                <span className="font-bold text-[#06C167]">
+                                                    {deliveryFee === 0
+                                                        ? (diningMode === 'delivery' ? `FREE (${freeDeliveryRadius}km)` : 'FREE')
+                                                        : `KES ${deliveryFee.toLocaleString()}`}
+                                                </span>
                                             </div>
+                                            {diningMode === 'delivery' && (
+                                                <div className="text-[10px] text-[#757575]">
+                                                    {isGeocoding
+                                                        ? 'Locating address…'
+                                                        : calculatedDistance !== null
+                                                            ? `${calculatedDistance.toFixed(1)} km from store • free within ${freeDeliveryRadius} km`
+                                                            : (geocodingError || 'Enter your address to calculate the delivery fee.')}
+                                                </div>
+                                            )}
                                             <div className="border-t border-[#e2e2e2] pt-2 flex justify-between font-black text-sm text-black">
                                                 <span>Total Payable</span>
                                                 <span>KES {finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
