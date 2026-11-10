@@ -706,6 +706,11 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         return '';
     });
     const [orderNote, setOrderNote] = useState('');
+    // Address autocomplete (Google Places, with OpenStreetMap fallbacks)
+    const [addressSuggestions, setAddressSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+    const selectedAddressRef = useRef(false);
     const [promoCode, setPromoCode] = useState('');
     const [appliedDiscount, setAppliedDiscount] = useState(null);
     const [promoError, setPromoError] = useState('');
@@ -859,6 +864,89 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
         return () => clearTimeout(timer);
     }, [deliveryAddress, diningMode, whatsappSettings.store_lat, whatsappSettings.store_lng, whatsappSettings.base_delivery_fee, whatsappSettings.base_delivery_distance, whatsappSettings.delivery_fee_per_km]);
+
+    // Address autocomplete: suggest matching places as the customer types.
+    useEffect(() => {
+        if (selectedAddressRef.current) {
+            selectedAddressRef.current = false;
+            setAddressSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+        if (diningMode !== 'delivery' || !deliveryAddress.trim() || deliveryAddress.trim().length < 3) {
+            setAddressSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        setIsSearchingAddress(true);
+        const timer = setTimeout(async () => {
+            try {
+                const cleanQuery = deliveryAddress.trim();
+                let suggestions = [];
+
+                if (window.google && window.google.maps && window.google.maps.places) {
+                    try {
+                        const service = new window.google.maps.places.AutocompleteService();
+                        const preds = await new Promise((resolve) => {
+                            service.getPlacePredictions(
+                                { input: cleanQuery, componentRestrictions: { country: 'ke' } },
+                                (predictions, status) => {
+                                    if (status === 'OK' && predictions && predictions.length > 0) {
+                                        resolve(predictions.map(p => ({
+                                            display_name: p.description,
+                                            place_id: p.place_id,
+                                            provider: 'Google Places'
+                                        })));
+                                    } else {
+                                        resolve([]);
+                                    }
+                                }
+                            );
+                        });
+                        if (preds && preds.length > 0) suggestions = preds;
+                    } catch (e) {
+                        console.warn('Google Places autocomplete error:', e);
+                    }
+                }
+
+                if (suggestions.length === 0) {
+                    try {
+                        const res = await fetch(
+                            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery + ', Nairobi, Kenya')}&format=json&limit=5&countrycodes=ke`,
+                            { headers: { 'User-Agent': 'ManiPOS-Microsite/1.0' } }
+                        );
+                        if (res.ok) {
+                            const data = await res.json();
+                            suggestions = (data || []).map(item => ({
+                                display_name: item.display_name,
+                                lat: item.lat,
+                                lon: item.lon,
+                                provider: 'Maps'
+                            }));
+                        }
+                    } catch (e) {}
+                }
+
+                setAddressSuggestions(suggestions);
+                setShowSuggestions(suggestions.length > 0);
+            } catch (e) {
+                console.error('Address autocomplete failed:', e);
+                setAddressSuggestions([]);
+            } finally {
+                setIsSearchingAddress(false);
+            }
+        }, 120);
+
+        return () => clearTimeout(timer);
+    }, [deliveryAddress, diningMode]);
+
+    const handleSelectAddressSuggestion = (suggestion) => {
+        selectedAddressRef.current = true;
+        setDeliveryAddress(suggestion.display_name);
+        setAddressSuggestions([]);
+        setShowSuggestions(false);
+    };
 
     useEffect(() => {
         setWhatsappSettings(prev => ({
@@ -2363,14 +2451,41 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                             ))}
                                                         </div>
                                                     )}
-                                                    <textarea
-                                                        value={deliveryAddress}
-                                                        onChange={e => setDeliveryAddress(e.target.value)}
-                                                        rows={2}
-                                                        placeholder="Delivery Location / Apartment / Office / Street *"
-                                                        className="w-full bg-[#f3f3f3] border border-[#e2e2e2] focus:bg-white focus:border-black rounded-xl p-3 text-xs text-black placeholder-[#757575] outline-none resize-none"
-                                                        required
-                                                    />
+                                                    <div className="relative">
+                                                        <textarea
+                                                            value={deliveryAddress}
+                                                            onChange={e => setDeliveryAddress(e.target.value)}
+                                                            onFocus={() => setShowSuggestions(addressSuggestions.length > 0)}
+                                                            rows={2}
+                                                            placeholder="Delivery Location / Apartment / Office / Street *"
+                                                            className="w-full bg-[#f3f3f3] border border-[#e2e2e2] focus:bg-white focus:border-black rounded-xl p-3 text-xs text-black placeholder-[#757575] outline-none resize-none"
+                                                            required
+                                                        />
+                                                        {isSearchingAddress && (
+                                                            <span className="absolute right-3 top-3 text-[10px] text-amber-600 font-bold animate-pulse">
+                                                                🔍
+                                                            </span>
+                                                        )}
+                                                        {showSuggestions && addressSuggestions.length > 0 && (
+                                                            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-black rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-[#f0f0f0] text-left">
+                                                                <div className="px-3 py-1.5 bg-[#f9f9f9] text-[10px] font-black text-[#545454] uppercase tracking-wider flex items-center justify-between">
+                                                                    <span>📍 Select your address</span>
+                                                                    <span className="text-[9px] font-normal text-[#a3a3a3]">calculates distance & fee</span>
+                                                                </div>
+                                                                {addressSuggestions.map((s, idx) => (
+                                                                    <button
+                                                                        key={idx}
+                                                                        type="button"
+                                                                        onClick={() => handleSelectAddressSuggestion(s)}
+                                                                        className="w-full px-3 py-2 text-xs text-black hover:bg-[#f3f3f3] font-medium text-left transition-colors flex items-start gap-2 cursor-pointer"
+                                                                    >
+                                                                        <span className="text-[#757575] text-sm shrink-0 mt-0.5">📍</span>
+                                                                        <span className="line-clamp-2 leading-snug">{s.display_name}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
 

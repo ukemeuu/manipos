@@ -95,6 +95,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [tenantInfo, setTenantInfo] = useState(() => getTenantInfo());
   const [tenant, setTenant] = useState(null);
+  // The microsite must not render until the tenant is known: rendering with a
+  // null tenant shows an empty "menu coming soon" page and a broken logo for a
+  // moment before the real menu arrives.
+  const [tenantLoading, setTenantLoading] = useState(true);
   const [currentRoute, setCurrentRoute] = useState(() => resolveRoute());
   const [storeStatus, setStoreStatus] = useState('approved');
   const [businessType, setBusinessType] = useState('restaurant');
@@ -108,12 +112,15 @@ function App() {
     if (!slug) {
       setTenant(null);
       setTenantContext(null);
+      setTenantLoading(false);
       return undefined;
     }
+    setTenantLoading(true);
     loadTenant(slug).then((resolved) => {
       if (!cancelled) {
         setTenant(resolved);
         setTenantContext(resolved?.id || null);
+        setTenantLoading(false);
       }
     });
     return () => { cancelled = true; };
@@ -388,6 +395,14 @@ function App() {
 
   // ROUTE 1: Guest Digital Menu Microsite (e.g. potofjollof.manipos.com or manipos.com?page=menu)
   if (currentRoute === 'microsite' || tenantInfo.isGuestMicrosite) {
+    if (tenantLoading) {
+      return (
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#e2e2e2] border-t-black rounded-full animate-spin" />
+          <p className="text-[11px] font-bold text-[#757575] uppercase tracking-widest">Loading menu…</p>
+        </div>
+      );
+    }
     const queryParams = new URLSearchParams(window.location.search);
     const wantsLegacy = queryParams.get('view') === 'legacy' || queryParams.get('mode') === 'classic';
     if (wantsLegacy && (tenantInfo.tenantSlug === 'potofjollof' || tenant?.slug === 'potofjollof')) {
