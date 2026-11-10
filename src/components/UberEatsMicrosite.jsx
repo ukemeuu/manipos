@@ -787,7 +787,14 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.length > 0) {
-                    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                    // Only accept the result if it actually matches part of the
+                    // address the customer typed. Without this, a nonsense query
+                    // falls back to the city centre and looks like a real match.
+                    const display = (data[0].display_name || '').toLowerCase();
+                    const words = cleanQuery.toLowerCase().split(/[\s,]+/).filter(w => w.length >= 4);
+                    if (words.length === 0 || words.some(w => display.includes(w))) {
+                        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                    }
                 }
             }
         } catch (e) {}
