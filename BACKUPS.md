@@ -28,6 +28,22 @@ gh secret set SUPABASE_DB_URL --body 'postgresql://postgres.<ref>:<password>@aws
 Then trigger it once from **Actions → Backup → Run workflow** and confirm the
 artifact appears.
 
+Each run uploads two files:
+
+| File | What it is |
+|---|---|
+| `manipos-<timestamp>.dump` | the logical backup (custom format, `public` schema) |
+| `row_counts.txt` | per-table row counts, taken immediately before the dump |
+
+A second job, **Verify restore**, automatically restores the dump into a
+throwaway Postgres 17 service and diffs its row counts against the manifest. A
+backup that cannot be restored, or that does not match, fails the run and alerts
+Telegram — so a silent bad backup is no longer possible.
+
+> The dump covers the `public` schema only. Supabase does not let the backup
+> role read `auth` or `storage`, so auth users and storage metadata are covered
+> by Supabase's own physical backups, not this file.
+
 > The database password is not viewable after project creation. If it is lost,
 > reset it in Project Settings → Database → Reset database password. Nothing in
 > the app uses it — the app talks to Supabase through API keys — so resetting it
