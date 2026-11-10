@@ -42,11 +42,23 @@ jobs:
             --file="manipos-${STAMP}.dump"
           ls -lh manipos-*.dump
 
+      - name: Record row counts
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # A manifest the verification job compares a restored copy against,
+          # so a truncated or stale dump is caught rather than trusted.
+          SQL=$(psql "$SUPABASE_DB_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
+          psql "$SUPABASE_DB_URL" -AtF'|' -c "$SQL order by 1" > row_counts.txt
+          wc -l row_counts.txt
+
       - name: Upload dump
         uses: actions/upload-artifact@v4
         with:
           name: manipos-db-${{ github.run_number }}
-          path: manipos-*.dump
+          path: |
+            manipos-*.dump
+            row_counts.txt
           retention-days: 90
 
       - name: Alert on failure
@@ -58,3 +70,73 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=❌ ManiPOS weekly database backup FAILED (run ${{ github.run_number }})."
+
+  verify:
+    # Restores the dump into a throwaway Postgres and compares every table's
+    # row count against the manifest the dump job recorded. A backup that
+    # cannot be restored is not a backup, so this runs automatically.
+    name: Verify restore
+    needs: dump
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scratch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client > /dev/null
+
+      - name: Download backup
+        uses: actions/download-artifact@v4
+        with:
+          name: manipos-db-${{ github.run_number }}
+          path: backup
+
+      - name: Restore into scratch database
+        env:
+          SCRATCH_URL: postgresql://postgres:postgres@localhost:5432/scratch
+        run: |
+          ls -lh backup/
+          # The dump references auth.jwt() in its RLS policies, which a plain
+          # Postgres does not have. Stub it so the policies can be created.
+          psql "$SCRATCH_URL" -q -c "create schema if not exists auth;" \
+            -c "create or replace function auth.jwt() returns jsonb language sql stable as \$\$ select '{}'::jsonb \$\$;" \
+            -c "create extension if not exists pgcrypto;" \
+            -c "create extension if not exists \"uuid-ossp\";" \
+            -c "create extension if not exists pg_trgm;"
+          pg_restore --no-owner --no-privileges --dbname="$SCRATCH_URL" backup/manipos-*.dump
+
+      - name: Compare row counts
+        env:
+          SCRATCH_URL: postgresql://postgres:postgres@localhost:5432/scratch
+        run: |
+          SQL=$(psql "$SCRATCH_URL" -Atc "select string_agg(format('select %L as t, count(*) as c from public.%I', tablename, tablename), ' union all ') from pg_tables where schemaname='public'")
+          psql "$SCRATCH_URL" -AtF'|' -c "$SQL order by 1" > restored_counts.txt
+          if diff -u backup/row_counts.txt restored_counts.txt; then
+            echo "✅ Restored copy matches the source row counts."
+          else
+            echo "::error::Restored row counts differ from the backup manifest"
+            exit 1
+          fi
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=❌ ManiPOS backup RESTORE VERIFICATION FAILED (run ${{ github.run_number }}). The dump exists but did not restore or did not match."
