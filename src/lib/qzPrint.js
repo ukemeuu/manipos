@@ -29,13 +29,20 @@ let _connectPromise = null;
  * Idempotent — safe to call multiple times.
  * @returns {Promise<void>}
  */
-export async function connectQZ() {
+export async function connectQZ(timeoutMs = 8000) {
     if (qz.websocket.isActive()) return;
     if (_connectPromise) return _connectPromise;
 
-    _connectPromise = qz.websocket
-        .connect({ retries: 2, delay: 1 })
-        .finally(() => { _connectPromise = null; });
+    // QZ Tray may be installed but not running, in which case the websocket
+    // connection can stall instead of rejecting. Race it with a timeout so the
+    // caller always falls back to the browser print dialog rather than
+    // silently printing nothing.
+    _connectPromise = Promise.race([
+        qz.websocket.connect({ retries: 2, delay: 1 }),
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('QZ Tray connection timed out')), timeoutMs)
+        ),
+    ]).finally(() => { _connectPromise = null; });
 
     return _connectPromise;
 }

@@ -1256,10 +1256,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                     .from('pos_shifts')
                                     .insert([{
                                         restaurant_id: restaurantId,
-                                        cashier_name: shift.cashier_name,
-                                        opening_float: shift.opening_float,
+                                        staff_name: shift.staff_name || shift.cashier_name,
+                                        opening_cash: shift.opening_cash != null ? shift.opening_cash : shift.opening_float,
                                         expected_cash: shift.expected_cash,
-                                        actual_cash: shift.actual_cash,
+                                        closing_cash: shift.closing_cash != null ? shift.closing_cash : shift.actual_cash,
                                         closed_at: shift.closed_at
                                     }]);
                                 if (error) throw error;
@@ -1269,8 +1269,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                     .from('pos_shifts')
                                     .insert([{
                                         restaurant_id: restaurantId,
-                                        cashier_name: shift.cashier_name,
-                                        opening_float: shift.opening_float,
+                                        staff_name: shift.staff_name || shift.cashier_name,
+                                        opening_cash: shift.opening_cash != null ? shift.opening_cash : shift.opening_float,
                                         expected_cash: shift.expected_cash
                                     }]);
                                 if (error) throw error;
@@ -1752,7 +1752,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 .from('pos_shifts')
                 .select('*')
                 .eq('restaurant_id', restaurantId)
-                .eq('cashier_name', staffName || 'Cashier')
+                .eq('staff_name', staffName || 'Cashier')
                 .is('closed_at', null)
                 .maybeSingle();
 
@@ -1782,9 +1782,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 .from('pos_shifts')
                 .insert([{
                     restaurant_id: restaurantId,
-                    cashier_name: staffName || 'Cashier',
-                    opening_float: floatVal,
-                    expected_cash: floatVal
+                    staff_name: staffName || 'Cashier',
+                    staff_role: staffRole || 'cashier',
+                    opening_cash: floatVal,
+                    expected_cash: floatVal,
+                    status: 'open'
                 }])
                 .select()
                 .single();
@@ -1797,9 +1799,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             console.warn('Failed to open shift online, opening offline shift:', err);
             const offlineShift = {
                 id: 'offline-shift-' + Date.now(),
-                cashier_name: staffName || 'Cashier',
-                opening_float: floatVal,
+                staff_name: staffName || 'Cashier',
+                opening_cash: floatVal,
                 expected_cash: floatVal,
+                status: 'open',
                 opened_at: new Date().toISOString()
             };
             setActiveShift(offlineShift);
@@ -1870,18 +1873,17 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     }
                 });
 
-                const expectedCashTotal = parseFloat(activeShift.opening_float || 0) + totalCashSales;
+                const expectedCashTotal = parseFloat(activeShift.opening_cash || 0) + totalCashSales;
                 const actualCashVal = closingCashInput !== '' ? (parseFloat(closingCashInput) || 0) : expectedCashTotal;
                 const actualCardVal = closingCardInput !== '' ? (parseFloat(closingCardInput) || 0) : totalCardSales;
 
                 const closedOfflineShift = {
                     ...activeShift,
                     closed_at: new Date().toISOString(),
-                    actual_cash: actualCashVal,
-                    actual_card: actualCardVal,
+                    closing_cash: actualCashVal,
                     expected_cash: expectedCashTotal,
-                    expected_mpesa: totalMpesaSales,
-                    expected_card: totalCardSales
+                    discrepancy: actualCashVal - expectedCashTotal,
+                    status: 'closed'
                 };
 
                 // Remove from cache and state
@@ -1954,7 +1956,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 }
             });
 
-            const expectedCashTotal = parseFloat(activeShift.opening_float || 0) + totalCashSales;
+            const expectedCashTotal = parseFloat(activeShift.opening_cash || 0) + totalCashSales;
             const actualCashVal = closingCashInput !== '' ? (parseFloat(closingCashInput) || 0) : expectedCashTotal;
             const actualCardVal = closingCardInput !== '' ? (parseFloat(closingCardInput) || 0) : totalCardSales;
 
@@ -1963,11 +1965,10 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 .from('pos_shifts')
                 .update({
                     closed_at: new Date().toISOString(),
-                    actual_cash: actualCashVal,
-                    actual_card: actualCardVal,
+                    closing_cash: actualCashVal,
                     expected_cash: expectedCashTotal,
-                    expected_mpesa: totalMpesaSales,
-                    expected_card: totalCardSales
+                    discrepancy: actualCashVal - expectedCashTotal,
+                    status: 'closed'
                 })
                 .eq('id', activeShift.id)
                 .select()
@@ -8566,7 +8567,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
                             {/* Physical Count Form Section */}
                             {(() => {
-                                const floatVal = parseFloat(activeShift?.opening_float || 0);
+                                const floatVal = parseFloat(activeShift?.opening_cash || 0);
                                 const expectedCashTill = floatVal + shiftSummary.cashSales;
                                 const countedCash = closingCashInput !== '' ? (parseFloat(closingCashInput) || 0) : expectedCashTill;
                                 const cashVariance = countedCash - expectedCashTill;
@@ -9323,7 +9324,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                     </div>
                                     <div className="flex justify-between">
                                         <span>CASHIER:</span>
-                                        <span>{zReportData.shift.cashier_name.toUpperCase()}</span>
+                                        <span>{zReportData.shift.staff_name.toUpperCase()}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span>OPENED:</span>
@@ -9344,7 +9345,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                     <div className="border-b border-dashed border-black"></div>
                                     <div className="flex justify-between">
                                         <span>OPENING FLOAT:</span>
-                                        <span>{parseFloat(zReportData.shift.opening_float).toLocaleString()}</span>
+                                        <span>{parseFloat(zReportData.shift.opening_cash).toLocaleString()}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span>CASH SALES:</span>
@@ -9375,13 +9376,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                     </div>
                                     <div className="flex justify-between">
                                         <span>ACTUAL CASH COUNTED:</span>
-                                        <span>{parseFloat(zReportData.shift.actual_cash).toLocaleString()}</span>
+                                        <span>{parseFloat(zReportData.shift.closing_cash).toLocaleString()}</span>
                                     </div>
                                     <div className={`flex justify-between font-black text-[11px] pt-1.5 border-t border-dotted border-black ${
-                                        (zReportData.shift.actual_cash - zReportData.shift.expected_cash) < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
+                                        (zReportData.shift.closing_cash - zReportData.shift.expected_cash) < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'
                                     }`}>
                                         <span>CASH VARIANCE:</span>
-                                        <span>KES {(zReportData.shift.actual_cash - zReportData.shift.expected_cash).toLocaleString()}</span>
+                                        <span>KES {(zReportData.shift.closing_cash - zReportData.shift.expected_cash).toLocaleString()}</span>
                                     </div>
                                     <div className="border-b border-dashed border-black pt-2"></div>
                                 </div>
