@@ -125,13 +125,19 @@ jobs:
           SCRATCH_URL: postgresql://postgres:postgres@localhost:5432/scratch
         run: |
           ls -lh backup/
-          # The dump references auth.jwt() in its RLS policies, which a plain
-          # Postgres does not have. Stub it so the policies can be created.
-          /usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -q -c "create schema if not exists auth;" \
+          # The dump references Supabase's roles and auth.jwt() in its RLS
+          # policies, neither of which a plain Postgres has. Create them, and
+          # start from an empty public schema so CREATE SCHEMA does not error.
+          /usr/lib/postgresql/17/bin/psql "$SCRATCH_URL" -q \
+            -c "create role anon nologin;" \
+            -c "create role authenticated nologin;" \
+            -c "create role service_role nologin bypassrls;" \
+            -c "create schema if not exists auth;" \
             -c "create or replace function auth.jwt() returns jsonb language sql stable as \$\$ select '{}'::jsonb \$\$;" \
             -c "create extension if not exists pgcrypto;" \
             -c "create extension if not exists \"uuid-ossp\";" \
-            -c "create extension if not exists pg_trgm;"
+            -c "create extension if not exists pg_trgm;" \
+            -c "drop schema public cascade;"
           /usr/lib/postgresql/17/bin/pg_restore --no-owner --no-privileges --dbname="$SCRATCH_URL" backup/manipos-*.dump
 
       - name: Compare row counts
