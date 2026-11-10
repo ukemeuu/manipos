@@ -891,6 +891,63 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const [qzError, setQzError] = useState('');
     const [loadingPrinters, setLoadingPrinters] = useState(false);
 
+    /**
+     * The header printer indicator is a status + reconnect action, not an
+     * on/off switch: QZ Tray either runs on this computer or it does not.
+     * When it does not, say so and point at the browser print path instead of
+     * silently doing nothing.
+     */
+    const handlePrinterButtonClick = async () => {
+        if (qzConnected) {
+            setActiveView('terminal_settings');
+            return;
+        }
+        setQzError('Connecting to QZ Tray…');
+        try {
+            await connectQZ(5000);
+            setQzConnected(true);
+            setQzError('');
+        } catch (err) {
+            setQzError('');
+            alert(
+                'QZ Tray is not running on this computer, so receipts cannot print silently.\n\n' +
+                'You do not need QZ Tray: when it is unavailable, receipts open in your browser’s print dialog and print to whichever printer you choose there.\n\n' +
+                'To print silently to a specific printer instead, install and run QZ Tray (https://qz.io/download), enable “Allow unsigned content” in its preferences, then click this button again.'
+            );
+        }
+    };
+
+    /** Prints a sample receipt through the browser dialog — no QZ Tray needed. */
+    const handleTestPrint = () => {
+        printOrFallback('', buildCashierSlipsHTML({
+            ticket_number: 'TEST-0001',
+            created_at: new Date().toISOString(),
+            total_amount: 0,
+            discount: 0,
+            payment_method: 'CASH',
+            payment_status: 'Paid',
+            cashier_name: staffName || 'Test',
+            customer_name: 'Test Customer',
+            dining_option: 'Takeaway',
+            items: [{ item_name: 'Test Item', quantity: 1, price: 0 }],
+            notes: '',
+            brand: 'TEST',
+        }), () => printCashierSlips({
+            ticket_number: 'TEST-0001',
+            created_at: new Date().toISOString(),
+            total_amount: 0,
+            discount: 0,
+            payment_method: 'CASH',
+            payment_status: 'Paid',
+            cashier_name: staffName || 'Test',
+            customer_name: 'Test Customer',
+            dining_option: 'Takeaway',
+            items: [{ item_name: 'Test Item', quantity: 1, price: 0 }],
+            notes: '',
+            brand: 'TEST',
+        }));
+    };
+
     // Group past orders calendar filter
     const [historyStartDate, setHistoryStartDate] = useState(() => {
         const d = new Date();
@@ -3808,18 +3865,22 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                         Sign Out
                     </button>
 
-                    {/* QZ Tray connection status indicator */}
+                    {/* Printer status. This is a status + reconnect action, not an
+                        on/off switch: QZ Tray either runs on this computer or it
+                        does not. Say so instead of silently doing nothing. */}
                     <button
                         type="button"
-                        title={qzConnected ? 'QZ Tray connected — printers ready' : 'QZ Tray not connected — click to reconnect'}
-                        onClick={() => connectQZ().then(() => setQzConnected(true)).catch(() => setQzConnected(false))}
+                        title={qzConnected
+                            ? 'QZ Tray connected — receipts print silently to the configured printer'
+                            : 'QZ Tray is not running. Receipts can still print via your browser — click for details.'}
+                        onClick={handlePrinterButtonClick}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shadow-sm ${
                             qzConnected
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-red-50 text-red-600 border-red-200 animate-pulse'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}
                     >
-                        <span className={`w-2 h-2 rounded-full ${qzConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        <span className={`w-2 h-2 rounded-full ${qzConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                         {qzConnected ? 'Printers OK' : 'Printers Off'}
                     </button>
 
@@ -7707,13 +7768,23 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 </h3>
                                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Set exact Windows printer names for silent auto-routing via QZ Tray.</p>
                             </div>
-                            <button
-                                onClick={handleDetectPrinters}
-                                disabled={loadingPrinters || !qzConnected}
-                                className="px-3 py-1.5 bg-gray-900 text-white font-bold text-[10px] rounded-xl hover:bg-black transition-colors disabled:opacity-40 flex items-center gap-1.5 shrink-0"
-                            >
-                                {loadingPrinters ? '⏳ Scanning...' : '🔍 Detect Printers'}
-                            </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    onClick={handleDetectPrinters}
+                                    disabled={loadingPrinters || !qzConnected}
+                                    title="Requires QZ Tray, and lists the printers Windows can see"
+                                    className="px-3 py-1.5 bg-gray-900 text-white font-bold text-[10px] rounded-xl hover:bg-black transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                >
+                                    {loadingPrinters ? '⏳ Scanning...' : '🔍 Detect Printers'}
+                                </button>
+                                <button
+                                    onClick={handleTestPrint}
+                                    title="Print a sample receipt using your browser's print dialog (no QZ Tray needed)"
+                                    className="px-3 py-1.5 bg-amber-100 text-amber-800 border border-amber-200 font-bold text-[10px] rounded-xl hover:bg-amber-200 transition-colors flex items-center gap-1.5"
+                                >
+                                    🧪 Test Print
+                                </button>
+                            </div>
                         </div>
 
                         {qzError && (
@@ -7777,7 +7848,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
                         {(!frontDeskPrinter && !kitchenPrinter) && (
                             <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl text-[10px] text-amber-700 font-bold">
-                                ℹ️ No printers configured yet. Click <strong>Detect Printers</strong> to auto-discover, or type the exact Windows printer name above. Names are saved automatically.
+                                ℹ️ No printers configured yet. Click <strong>Detect Printers</strong> to auto-discover, or type the exact Windows printer name above. Names are saved automatically.<br />
+                                <span className="text-amber-600">No QZ Tray? Use <strong>Test Print</strong> — receipts print through your browser instead, to any printer you pick in the print dialog.</span>
                             </div>
                         )}
                     </div>
