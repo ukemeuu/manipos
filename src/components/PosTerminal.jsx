@@ -2464,8 +2464,25 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 .order('name', { ascending: true });
 
             if (error) throw error;
-            setMenu(data || []);
-            localStorage.setItem(posCacheKey('menu'), JSON.stringify(data || []));
+
+            // "Rest of the day" items whose day has passed are turned back on
+            // automatically, so a sold-out item does not stay hidden forever.
+            const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
+            const rows = data || [];
+            const expired = rows.filter(m => m.out_of_stock_type === 'day' && m.out_of_stock_date && m.out_of_stock_date < today);
+            let menuRows = rows;
+            if (expired.length > 0) {
+                await Promise.all(expired.map(m => supabase
+                    .from('pos_menu')
+                    .update({ is_available: true, out_of_stock_type: null, out_of_stock_date: null })
+                    .eq('id', m.id)));
+                menuRows = rows.map(m => expired.some(e => e.id === m.id)
+                    ? { ...m, is_available: true, out_of_stock_type: null, out_of_stock_date: null }
+                    : m);
+            }
+
+            setMenu(menuRows);
+            localStorage.setItem(posCacheKey('menu'), JSON.stringify(menuRows));
         } catch (err) {
             console.error('Error loading menu:', err);
             const cached = localStorage.getItem(posCacheKey('menu'));
@@ -4271,6 +4288,25 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                                     <span className="font-mono font-black text-xs text-gray-900">KES {displayPrice.toLocaleString()}</span>
                                                                     {isOut && <span className="text-[8px] font-black uppercase text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">86 / Out</span>}
                                                                 </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (isOut) {
+                                                                            handleTurnOnItem(item);
+                                                                        } else {
+                                                                            setItemToTurnOffModal(item);
+                                                                        }
+                                                                    }}
+                                                                    title={isOut ? 'Click to turn this item back on' : 'Click to mark this item out of stock'}
+                                                                    className={`mt-1 px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border transition-colors cursor-pointer ${
+                                                                        isOut
+                                                                            ? 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
+                                                                            : 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                                                                    }`}
+                                                                >
+                                                                    {isOut ? 'Turn On' : 'In Stock'}
+                                                                </button>
                                                             </div>
                                                         </div>
 
