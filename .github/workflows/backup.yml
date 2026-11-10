@@ -17,10 +17,17 @@ jobs:
     name: Dump database
     runs-on: ubuntu-latest
     steps:
-      - name: Install PostgreSQL client
+      # Production runs Postgres 17.6, so the client must be 17.x too —
+      # pg_dump refuses to work across a major version.
+      - name: Install PostgreSQL 17 client
         run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo wget -qO /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client > /dev/null
+          sudo apt-get install -y -qq postgresql-client-17 > /dev/null
+          pg_dump --version
 
       - name: Dump
         env:
@@ -93,10 +100,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - name: Install PostgreSQL client
+      # Must match the postgres:17 service container.
+      - name: Install PostgreSQL 17 client
         run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo wget -qO /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client > /dev/null
+          sudo apt-get install -y -qq postgresql-client-17 > /dev/null
+          pg_restore --version
 
       - name: Download backup
         uses: actions/download-artifact@v4
