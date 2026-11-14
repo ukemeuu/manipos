@@ -1,5 +1,5 @@
 /* ManiPOS service worker — offline shell for POS terminals. */
-const VERSION = 'manipos-v4';
+const VERSION = 'manipos-v5';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 

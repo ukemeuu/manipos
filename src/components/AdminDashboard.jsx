@@ -86,6 +86,7 @@ import { TeamRolesAndAccountView } from './orda/TeamRolesAndAccountView';
 import { TableManagementView } from './orda/TableManagementView';
 import { HrAndStaffPortalView } from './orda/HrAndStaffPortalView';
 import { PojOperationsView } from './orda/PojOperationsView';
+import { PojSyncBridgeView } from './orda/PojSyncBridgeView';
 import { GuestCRMView } from './GuestCRMView';
 import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { getTenantInfo } from '../lib/tenant';
@@ -123,11 +124,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   const [activeModule, setActiveModule] = useState(() => {
     try {
       const requested = new URLSearchParams(window.location.search).get('tab');
-      if (requested === 'guest-crm' || requested === 'retention-crm' || requested === 'customers') return 'customers';
-      if (requested === 'hr-admin' || requested === 'qr-vault') return 'settings';
+      if (requested === 'guest-crm' || requested === 'customer-retention' || requested === 'retention-crm' || requested === 'customers') return 'customers';
+      if (requested === 'hr-admin' || requested === 'qr-vault' || requested === 'poj-sync') return 'settings';
       if (requested === 'staff-portal') return 'account';
       if (requested === 'fpa-expenses') return 'dashboard';
-      if (requested === 'inv-receiving' || requested === 'inv-requisitions' || requested === 'inv-waste') return 'inventory';
+      if (requested === 'receiving' || requested === 'store-ops' || requested === 'waste' || requested === 'inv-receiving' || requested === 'inv-requisitions' || requested === 'inv-waste') return 'inventory';
     } catch (_) {}
     return setupCompleted ? 'orders' : 'dashboard';
   });
@@ -1350,6 +1351,15 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   >
                     <QrCode size={15} /> QR Code Vault
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'poj-sync')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'poj-sync' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-emerald-700 bg-emerald-50/40 hover:bg-emerald-100 border border-emerald-200/70'
+                    }`}
+                  >
+                    <RefreshCw size={15} /> POJ Migration &amp; Sync
+                  </button>
                 </>
               )}
               {tenantSlug && (
@@ -1797,11 +1807,20 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               restaurantId={activeRestaurantId}
               restaurantName={profileName || restaurantName}
               staffUser={{
+                id: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').id || null,
                 name: pinStaffName,
                 role: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').role || 'admin',
                 email: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').email || '',
               }}
               staffList={staffList}
+            />
+          ) : activeTab === 'poj-sync' ? (
+            <PojSyncBridgeView
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              actorId={JSON.parse(localStorage.getItem('pin_staff_user') || '{}').id || null}
+              actorName={pinStaffName}
+              onSyncCompleted={fetchDashboardData}
             />
           ) : activeTab === 'fpa-expenses' || activeTab === 'receiving' || activeTab === 'waste' || activeTab === 'store-ops' || activeTab === 'qr-vault' ? (
             <PojOperationsView

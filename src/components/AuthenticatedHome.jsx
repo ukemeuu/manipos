@@ -11,7 +11,8 @@ import {
   ChefHat,
   Armchair,
   Package,
-  ClipboardList
+  ClipboardList,
+  Link2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -158,7 +159,8 @@ export function AuthenticatedHome({
               { url: '/?page=dashboard&tab=guest-crm', page: 'crm', label: 'Guest CRM & Retention', desc: 'Guest directory, VIP tags, visits, retention & feedback.', Icon: UserCheck, tone: 'text-teal-400 border-teal-500/30 hover:border-teal-400/60', bg: 'bg-teal-500/10' },
               { url: '/?page=dashboard&tab=hr-admin', page: 'hr', label: 'Staff HR & Approvals', desc: 'Leave, overtime, advances, loans, warnings & checklists.', Icon: UserCheck, tone: 'text-indigo-400 border-indigo-500/30 hover:border-indigo-400/60', bg: 'bg-indigo-500/10' },
               { url: '/?page=dashboard&tab=fpa-expenses', page: 'accountant', label: 'Accountant & Expenses', desc: 'Gross sales P&L, operating expenses & department budgets.', Icon: Building2, tone: 'text-rose-400 border-rose-500/30 hover:border-rose-400/60', bg: 'bg-rose-500/10' },
-              { url: '/?page=dashboard&tab=staff-portal', page: 'staff-portal', label: 'My Staff Portal', desc: 'Submit leave, overtime, salary advance & daily checklists.', Icon: Sparkles, tone: 'text-lime-400 border-lime-500/30 hover:border-lime-400/60', bg: 'bg-lime-500/10' },
+              { url: '/?page=dashboard&tab=staff-portal', page: 'staff-portal', label: 'My Staff Portal', desc: 'Leave, loans, salary advances, shifts, HR signatures & ID card.', Icon: Sparkles, tone: 'text-lime-400 border-lime-500/30 hover:border-lime-400/60', bg: 'bg-lime-500/10' },
+              { url: '/?page=dashboard&tab=poj-sync', page: 'poj-sync', label: 'POJ Migration & Sync', desc: 'Import all POJ staff accounts, loans, leave, CRM & keep both linked.', Icon: Link2, tone: 'text-cyan-400 border-cyan-500/30 hover:border-cyan-400/60', bg: 'bg-cyan-500/10' },
             ].map((mod) => (
               <motion.button
                 key={mod.page}

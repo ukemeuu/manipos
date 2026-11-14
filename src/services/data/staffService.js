@@ -15,10 +15,68 @@ const OFFLINE_STAFF_KEY = 'manipos_offline_staff_credentials';
  *      migrated to Supabase Auth yet.
  *   3. Offline fallback against strictly provisioned credentials.
  */
+async function buildStaffSessionFromAuth(data, cleanEmail, password) {
+    const appMeta = data.user?.app_metadata || {};
+    const userMeta = data.user?.user_metadata || {};
+    let staffId = userMeta.staff_id || data.user.id;
+    let resolvedRole = appMeta.role || userMeta.role || null;
+    let resolvedName = appMeta.name || userMeta.name || userMeta.full_name || null;
+    let resolvedTenantId = appMeta.tenant_id || null;
+    let resolvedTenantName = appMeta.tenant_name || '';
+    let resolvedTenantSlug = appMeta.tenant_slug || '';
+
+    // Resolve tenant & role from staff_access via RPC/lookup if JWT app_metadata is absent
+    if (!resolvedTenantId || !resolvedRole) {
+        try {
+            const { data: staffRow } = await supabase
+                .from('staff_access')
+                .select('id, name, role, restaurant_id, restaurants(id, name, slug)')
+                .ilike('email', cleanEmail)
+                .limit(1)
+                .maybeSingle();
+            if (staffRow) {
+                staffId = staffRow.id || staffId;
+                resolvedRole = resolvedRole || staffRow.role;
+                resolvedName = resolvedName || staffRow.name;
+                resolvedTenantId = resolvedTenantId || staffRow.restaurant_id;
+                resolvedTenantName = resolvedTenantName || staffRow.restaurants?.name || '';
+                resolvedTenantSlug = resolvedTenantSlug || staffRow.restaurants?.slug || '';
+            }
+        } catch (_) {}
+    }
+
+    let permissions = [];
+    try {
+        const { data: perms } = await supabase.rpc('effective_permissions', {
+            p_staff_id: staffId,
+        });
+        if (Array.isArray(perms) && perms.length) permissions = perms;
+    } catch (_) {}
+    const finalRole = resolvedRole || 'staff';
+    if (!permissions.length) permissions = roleDefaults(finalRole);
+
+    const staffUser = {
+        id: staffId,
+        authUid: data.user.id,
+        name: resolvedName || cleanEmail.split('@')[0] || 'Staff',
+        email: data.user.email || cleanEmail,
+        role: finalRole,
+        restaurantId: resolvedTenantId || null,
+        restaurantName: resolvedTenantName || '',
+        tenantSlug: resolvedTenantSlug || '',
+        mustChangePassword: userMeta.must_change_password === true,
+        permissions,
+    };
+    setTenantContext(staffUser.restaurantId);
+    localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+    await provisionOfflineStaffCredential(cleanEmail, staffUser, password);
+    return { success: true, staffUser, session: data.session, auth: 'supabase' };
+}
+
 export async function authenticateStaffLogin(email, password) {
     const cleanEmail = (email || '').toLowerCase().trim();
 
-    // 1. Preferred: Supabase Auth.
+    // 1. Preferred: Supabase Auth (with automatic POJ Auth Bridge fallback).
     if (isOnline()) {
         try {
             const { data, error } = await supabase.auth.signInWithPassword({
@@ -27,69 +85,26 @@ export async function authenticateStaffLogin(email, password) {
             });
 
             if (!error && data?.session) {
-                const appMeta = data.user?.app_metadata || {};
-                const userMeta = data.user?.user_metadata || {};
-                let staffId = userMeta.staff_id || data.user.id;
-                let resolvedRole = appMeta.role || userMeta.role || null;
-                let resolvedName = appMeta.name || userMeta.name || userMeta.full_name || null;
-                let resolvedTenantId = appMeta.tenant_id || null;
-                let resolvedTenantName = appMeta.tenant_name || '';
-                let resolvedTenantSlug = appMeta.tenant_slug || '';
-
-                // Resolve tenant & role from staff_access if JWT app_metadata is absent (e.g., POJ Management Auth accounts)
-                if (!resolvedTenantId || !resolvedRole) {
-                    try {
-                        const { data: staffRow } = await supabase
-                            .from('staff_access')
-                            .select('id, name, role, restaurant_id, restaurants(id, name, slug)')
-                            .ilike('email', cleanEmail)
-                            .limit(1)
-                            .maybeSingle();
-                        if (staffRow) {
-                            staffId = staffRow.id || staffId;
-                            resolvedRole = resolvedRole || staffRow.role;
-                            resolvedName = resolvedName || staffRow.name;
-                            resolvedTenantId = resolvedTenantId || staffRow.restaurant_id;
-                            resolvedTenantName = resolvedTenantName || staffRow.restaurants?.name || '';
-                            resolvedTenantSlug = resolvedTenantSlug || staffRow.restaurants?.slug || '';
-                        }
-                    } catch (_) {}
-                }
-
-                // Resolve the authoritative permission list (role defaults or a
-                // per-user override) from the staff record.
-                let permissions = [];
-                try {
-                    const { data: perms } = await supabase.rpc('effective_permissions', {
-                        p_staff_id: staffId,
-                    });
-                    if (Array.isArray(perms) && perms.length) permissions = perms;
-                } catch (_) {
-                    // Fall through to the role defaults below.
-                }
-                const finalRole = resolvedRole || 'staff';
-                if (!permissions.length) permissions = roleDefaults(finalRole);
-
-                const staffUser = {
-                    // Prefer the staff_access id so the RPCs can resolve the actor.
-                    id: staffId,
-                    authUid: data.user.id,
-                    name: resolvedName || cleanEmail.split('@')[0] || 'Staff',
-                    email: data.user.email || cleanEmail,
-                    role: finalRole,
-                    restaurantId: resolvedTenantId || null,
-                    restaurantName: resolvedTenantName || '',
-                    tenantSlug: resolvedTenantSlug || '',
-                    mustChangePassword: userMeta.must_change_password === true,
-                    permissions,
-                };
-                setTenantContext(staffUser.restaurantId);
-                localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
-                await provisionOfflineStaffCredential(cleanEmail, staffUser, password);
-                return { success: true, staffUser, session: data.session, auth: 'supabase' };
+                return await buildStaffSessionFromAuth(data, cleanEmail, password);
             }
 
-            // Auth user not found / password mismatch — try the legacy RPC below.
+            // Try linked POJ Management Supabase Auth Bridge for migrated accounts
+            try {
+                const bridgeRes = await supabase.functions.invoke('poj-auth-bridge', {
+                    body: { email: cleanEmail, password },
+                });
+                if (bridgeRes?.data?.success) {
+                    const retry = await supabase.auth.signInWithPassword({
+                        email: cleanEmail,
+                        password,
+                    });
+                    if (!retry.error && retry.data?.session) {
+                        return await buildStaffSessionFromAuth(retry.data, cleanEmail, password);
+                    }
+                }
+            } catch (_) {}
+
+            // Auth user not found / password mismatch — try the legacy PIN RPC below.
             console.info('[StaffService] Supabase Auth unavailable for this account, trying legacy PIN.');
         } catch (err) {
             console.warn('[StaffService] Supabase Auth notice:', err);
