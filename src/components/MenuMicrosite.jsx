@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Clock, ShoppingCart, Search, Utensils, Award, CheckCircle, ArrowLeft, Loader2, Plus, Minus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { recordQrScan } from '../lib/qrScanService';
+import { loadTenant } from '../lib/tenantConfig';
 
 export const BRAND_CONFIGS = {
     'POT OF JOLLOF': {
@@ -48,15 +49,15 @@ export const getItemImage = (item) => {
     return "/jollof_logo.png";
 };
 
-export const getBrandForItem = (item) => {
-    if (!item) return 'POT OF JOLLOF';
+export const getBrandForItem = (item, fallbackBrand = null) => {
+    if (!item) return fallbackBrand || 'General Restaurant';
     if (item.brand && item.brand.trim()) return item.brand.trim();
     if (item.brands && Array.isArray(item.brands) && item.brands.length > 0) return item.brands[0];
-    return 'POT OF JOLLOF';
+    return fallbackBrand || 'General Restaurant';
 };
 
 // Helper: check if item belongs to a brand (supports multi-brand arrays and strict POS brand assignment)
-export const itemBelongsToBrand = (item, brand) => {
+export const itemBelongsToBrand = (item, brand, tenantDefaultBrand = null) => {
     if (!brand || brand === 'All') return true;
     if (!item) return false;
 
@@ -75,20 +76,23 @@ export const itemBelongsToBrand = (item, brand) => {
         return false;
     }
 
-    // 3. Fallback for unassigned items: default to POT OF JOLLOF
-    return targetBrandUpper === 'POT OF JOLLOF';
+    // 3. Fallback for unassigned items: match tenant's default/only brand
+    if (tenantDefaultBrand) {
+        return targetBrandUpper === tenantDefaultBrand.trim().toUpperCase();
+    }
+    return targetBrandUpper === 'ALL' || targetBrandUpper === 'POT OF JOLLOF';
 };
 
 // Interactive Order Success & M-Pesa Payment Verification Modal Component
-const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSettings }) => {
+const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSettings, tenantProfile }) => {
     const [copiedPaybill, setCopiedPaybill] = useState(false);
     const [copiedAccount, setCopiedAccount] = useState(false);
     const [inputMpesaCode, setInputMpesaCode] = useState(orderSuccess?.mpesaCode || '');
     const [isUpdating, setIsUpdating] = useState(false);
 
-    const paybillNo = whatsappSettings?.paybill_number || '542542';
-    const accountNo = whatsappSettings?.account_number || '992422';
-    const whatsappPhone = orderSuccess?.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617';
+    const paybillNo = tenantProfile?.paybill || whatsappSettings?.paybill_number || '542542';
+    const accountNo = tenantProfile?.account || whatsappSettings?.account_number || '992422';
+    const whatsappPhone = tenantProfile?.whatsapp || tenantProfile?.phone || (orderSuccess?.brand === 'POT OF JOLLOF' ? '254795384140' : '254799034617');
 
     // Realtime WebSockets + 2s Polling Engine to automatically update customer screen when cashier accepts order
     useEffect(() => {
@@ -450,12 +454,13 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
 };
 
 export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand, tenantSlug = 'potofjollof' }) {
-    const isSingleBrand = window.location.hostname.includes('potofjollof') || tenantSlug === 'potofjollof';
     const [menu, setMenu] = useState([]);
     const [categories, setCategories] = useState(['All']);
+    const [tenantProfile, setTenantProfile] = useState(null);
+    // Brands derived from live menu data — never hardcoded per-tenant
+    const [menuBrands, setMenuBrands] = useState([]); // e.g. ['POT OF JOLLOF', 'SAMAKI STREET']
     const [activeBrand, setActiveBrand] = useState(() => {
         if (defaultBrand) return defaultBrand;
-        if (isSingleBrand) return 'POT OF JOLLOF';
         return 'All';
     });
     const [activeCategory, setActiveCategory] = useState('All');
@@ -623,7 +628,18 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     };
 
     useEffect(() => {
-        document.title = "Pot of Jollof | Order Online & Digital Menu";
+        let cancelled = false;
+        loadTenant(tenantSlug).then((t) => {
+            if (!cancelled && t) {
+                setTenantProfile(t);
+                document.title = `${t.name || 'Restaurant'} | Order Online & Digital Menu`;
+            }
+        }).catch(e => console.warn('Could not load tenant in microsite:', e));
+        return () => { cancelled = true; };
+    }, [tenantSlug]);
+
+    useEffect(() => {
+        document.title = `${tenantProfile?.name || 'Restaurant'} | Order Online & Digital Menu`;
         fetchMenu();
         fetchDiscounts();
 
@@ -631,7 +647,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         try {
             recordQrScan({
                 qr_code_id: 'menu_qr',
-                qr_label: 'Pot of Jollof Digital Menu',
+                qr_label: `${tenantProfile?.name || 'Restaurant'} Digital Menu`,
                 destination_url: window.location.href,
                 channel: 'Digital Menu QR'
             });
@@ -1072,6 +1088,20 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             // Capture restaurant_id from the first menu item so orders are tagged correctly
             const rid = validData[0]?.restaurant_id || null;
             if (rid) setRestaurantId(rid);
+
+            // Derive distinct brands from live menu data — never show another tenant's brands
+            const rawBrands = [...new Set(
+                validData
+                    .map(item => (item.brand || '').trim().toUpperCase())
+                    .filter(Boolean)
+            )];
+            setMenuBrands(rawBrands);
+            // Auto-select: skip brand picker if only 0 or 1 distinct brand in the menu
+            if (rawBrands.length <= 1) {
+                setActiveBrand(rawBrands[0] || 'All');
+            } else {
+                setActiveBrand(prev => prev === 'All' ? 'All' : prev);
+            }
             try {
                 localStorage.setItem('poj_microsite_menu_cache_v2', JSON.stringify(validData));
             } catch(e) {}
@@ -1507,7 +1537,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 total_amount: finalTotal,
                 discount: discountAmount + loyaltyDiscountAmount,
                 cashier_name: "Self-Service Microsite",
-                brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0]) : "POT OF JOLLOF") : activeBrand,
+                brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0], tenantProfile?.name) : (tenantProfile?.name || "General Restaurant")) : activeBrand,
                 delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
                 guest_id: guestUser ? guestUser.id : null,
                 notes: finalNotes,
@@ -1571,7 +1601,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 orderId: orderData.id,
                 ticketNumber: orderData.ticket_number,
                 total: finalTotal,
-                brand: activeBrand === 'All' ? (cart.length > 0 ? getBrandForItem(cart[0]) : 'POT OF JOLLOF') : activeBrand,
+                brand: activeBrand === 'All' ? (cart.length > 0 ? getBrandForItem(cart[0], tenantProfile?.name) : (tenantProfile?.name || 'General Restaurant')) : activeBrand,
                 items: cart.map(i => `${i.quantity}x ${i.name}${i.instructions ? ` (${i.instructions})` : ''}`).join('\n'),
                 diningOption: diningOption,
                 deliveryAddress: diningOption === 'Delivery' ? deliveryAddress : '',
@@ -1643,24 +1673,27 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 orderSuccess={orderSuccess} 
                 setOrderSuccess={setOrderSuccess} 
                 whatsappSettings={whatsappSettings} 
+                tenantProfile={tenantProfile}
             />
         );
     }
 
     const handleExitMenu = () => {
-        if (activeBrand === "Pot of Jollof" || window.location.hostname.includes("potofjollof")) {
+        if (tenantProfile?.website) {
+            window.location.href = tenantProfile.website;
+        } else if (tenantSlug === 'potofjollof' || window.location.hostname.includes("potofjollof")) {
             window.location.href = "https://potofjollof.co.ke";
         } else if (onBack) {
             onBack();
         } else {
-            window.location.href = "https://potofjollof.co.ke";
+            window.location.href = "/";
         }
     };
 
     const activeBrandConfig = BRAND_CONFIGS[activeBrand] || {
-        name: 'MUTE KITCHENS',
-        desc: 'Explore our menus and place your orders directly to our chefs from your phone.',
-        logo: '/logo.png',
+        name: tenantProfile?.name || 'Restaurant Menu',
+        desc: tenantProfile?.description || tenantProfile?.tagline || 'Explore our menu and place your orders directly to our chefs from your phone.',
+        logo: tenantProfile?.logo || '/manipos_logo.png',
         color: 'from-neutral-900 to-black'
     };
 
@@ -1726,45 +1759,50 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 </div>
             </div>
 
-            {activeBrand === 'All' ? (
-                /* Brand Selection Landing Page */
+            {activeBrand === 'All' && menuBrands.length > 1 ? (
+                /* Brand Selection Landing Page — built from live menu data, never hardcoded */
                 <div className="flex-1 bg-gray-50 py-12 px-6 overflow-y-auto">
                     <div className="max-w-6xl mx-auto w-full">
                         <div className="text-center mb-12">
                             <h2 className="text-2xl md:text-4xl font-black text-gray-950 tracking-tight">EXPLORE OUR BRANDS</h2>
                             <p className="text-sm text-gray-500 mt-2 font-medium">Select a brand below to view its specific menu and order.</p>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {[
-                                { id: 'POT OF JOLLOF', name: 'Pot of Jollof Kitchen', desc: '🥘 Signature Jollof rice, combos & West African classics', logo: '/jollof_logo.png', hoverColor: 'hover:border-black' },
-                                { id: 'SAMAKI STREET', name: 'Samaki Street', desc: '🐟 Whole Tilapia, Mackerel & hot fish specialties', logo: '/samaki_logo.jpg', hoverColor: 'hover:border-black' },
-                                { id: 'CAFÉ SWAHILI', name: 'Café Swahili', desc: '☕ Traditional Swahili breakfast, tea & hot brews', logo: '/swahili_logo.png', hoverColor: 'hover:border-black' },
-                                { id: 'LITTLE LAGOS', name: 'Little Lagos', desc: '🍛 Authentic Nigerian soups, stews & swallows', logo: '/lagos_logo.png', hoverColor: 'hover:border-black' }
-                            ].map(brand => (
-                                <motion.div
-                                    key={brand.id}
-                                    whileHover={{ scale: 1.03 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={() => {
-                                        setActiveBrand(brand.id);
-                                        setActiveCategory('All');
-                                    }}
-                                    className={`bg-white border border-gray-200 ${brand.hoverColor} rounded-[2.5rem] p-6 flex flex-col justify-between items-center text-center cursor-pointer transition-all shadow-sm hover:shadow-md group relative overflow-hidden h-80`}
-                                >
-                                    <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                                        <div className="w-28 h-28 rounded-full overflow-hidden bg-gray-50 border border-gray-200 flex items-center justify-center shrink-0 shadow-sm">
-                                            <img src={brand.logo} alt={brand.name} className="w-full h-full object-contain bg-white group-hover:scale-110 transition-transform duration-300" onError={(e) => { e.target.style.display = 'none'; }} />
+                        <div className={`grid grid-cols-1 ${menuBrands.length === 2 ? 'sm:grid-cols-2' : menuBrands.length >= 3 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-1 max-w-sm mx-auto'} gap-6`}>
+                            {menuBrands.map(brandId => {
+                                // Pull display metadata from BRAND_CONFIGS if available, else use sensible defaults
+                                const cfg = BRAND_CONFIGS[brandId] || {};
+                                const displayName = cfg.name || brandId.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+                                const desc = cfg.desc || '';
+                                const logo = cfg.logo || null;
+                                return (
+                                    <motion.div
+                                        key={brandId}
+                                        whileHover={{ scale: 1.03 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => {
+                                            setActiveBrand(brandId);
+                                            setActiveCategory('All');
+                                        }}
+                                        className="bg-white border border-gray-200 hover:border-black rounded-[2.5rem] p-6 flex flex-col justify-between items-center text-center cursor-pointer transition-all shadow-sm hover:shadow-md group relative overflow-hidden h-80"
+                                    >
+                                        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                                            <div className="w-28 h-28 rounded-full overflow-hidden bg-gray-50 border border-gray-200 flex items-center justify-center shrink-0 shadow-sm">
+                                                {logo
+                                                    ? <img src={logo} alt={displayName} className="w-full h-full object-contain bg-white group-hover:scale-110 transition-transform duration-300" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                    : <span className="text-4xl font-black text-gray-300">{brandId.charAt(0)}</span>
+                                                }
+                                            </div>
+                                            <div className="text-center">
+                                                <h3 className="font-black text-lg text-gray-900 group-hover:text-black transition-colors">{displayName}</h3>
+                                                {desc && <p className="text-xs text-gray-500 mt-2 leading-relaxed">{desc}</p>}
+                                            </div>
                                         </div>
-                                        <div className="text-center">
-                                            <h3 className="font-black text-lg text-gray-900 group-hover:text-black transition-colors">{brand.name}</h3>
-                                            <p className="text-xs text-gray-500 mt-2 leading-relaxed">{brand.desc}</p>
-                                        </div>
-                                    </div>
-                                    <span className="mt-4 px-5 py-2.5 bg-black hover:bg-neutral-850 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shrink-0 text-center">
-                                        View Menu
-                                    </span>
-                                </motion.div>
-                            ))}
+                                        <span className="mt-4 px-5 py-2.5 bg-black hover:bg-neutral-850 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shrink-0 text-center">
+                                            View Menu
+                                        </span>
+                                    </motion.div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

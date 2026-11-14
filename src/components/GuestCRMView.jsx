@@ -613,9 +613,14 @@ function GuestEditModal({ guest, onClose, onSave }) {
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none font-medium text-sm"
                             >
                                 <option value="All">All Brands</option>
-                                <option value="LITTLE LAGOS">🌶️ Little Lagos</option>
-                                <option value="CAFE SWAHILI">☕ Cafe Swahili</option>
-                                <option value="SAMAKI STREET">🐟 Samaki Street</option>
+                                {sessionUser?.tenantSlug === 'potofjollof' && (
+                                    <>
+                                        <option value="POT OF JOLLOF">🫕 Pot of Jollof</option>
+                                        <option value="LITTLE LAGOS">🌶️ Little Lagos</option>
+                                        <option value="CAFE SWAHILI">☕ Cafe Swahili</option>
+                                        <option value="SAMAKI STREET">🐟 Samaki Street</option>
+                                    </>
+                                )}
                                 <option value="General Brand">🏢 General Restaurant</option>
                             </select>
                         </div>

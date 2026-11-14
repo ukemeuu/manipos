@@ -339,6 +339,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     // and key the offline caches to this tenant.
     React.useEffect(() => { setTenantContext(restaurantId); setPosTenantId(restaurantId); }, [restaurantId]);
 
+    const [tenantProfile, setTenantProfile] = React.useState(null);
+
     // Load this tenant's profile so printed receipts and slips carry the
     // restaurant's own name, address, phone and M-Pesa details rather than a
     // hard-coded brand. Falls back to a neutral header when nothing is set.
@@ -346,11 +348,56 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         let cancelled = false;
         loadTenant(activeTenantSlug)
             .then((tenant) => {
-                if (!cancelled) setReceiptBrand(tenant);
+                if (!cancelled) {
+                    setReceiptBrand(tenant);
+                    setTenantProfile(tenant);
+                }
             })
             .catch((err) => console.warn('[PosTerminal] Could not load receipt branding:', err?.message || err));
         return () => { cancelled = true; };
     }, [activeTenantSlug]);
+
+    const isPojTenant = activeTenantSlug === 'potofjollof' || (tenantProfile?.slug === 'potofjollof');
+
+    // Dynamically derive brand options for the active tenant.
+    // POJ has 4 distinct virtual brands; other tenants only show their own brand(s) — never foreign brands.
+    const availableBrandOptions = React.useMemo(() => {
+        if (isPojTenant) {
+            return BRAND_OPTIONS;
+        }
+
+        // For non-POJ tenants: discover distinct brands assigned in their menu items
+        const menuBrandNames = [...new Set(
+            (menu || [])
+                .map(item => (item.brand || '').trim())
+                .filter(b => Boolean(b) && b.toUpperCase() !== 'MANIPOS')
+        )];
+
+        if (menuBrandNames.length > 1) {
+            return menuBrandNames.map(bName => ({
+                id: bName,
+                name: bName,
+                tagline: '',
+                icon: '🍽️',
+                logo: tenantProfile?.logo || '/manipos_logo.png',
+                color: 'from-emerald-500 to-teal-600',
+                borderColor: 'border-emerald-500/30'
+            }));
+        }
+
+        const tenantName = tenantProfile?.name || (activeTenantSlug ? activeTenantSlug.toUpperCase() : 'General Restaurant');
+        return [{
+            id: tenantName,
+            name: tenantName,
+            tagline: tenantProfile?.tagline || '',
+            icon: '🍽️',
+            logo: tenantProfile?.logo || '/manipos_logo.png',
+            color: 'from-emerald-500 to-teal-600',
+            borderColor: 'border-emerald-500/30'
+        }];
+    }, [isPojTenant, menu, tenantProfile, activeTenantSlug]);
+
+    const isSingleBrand = availableBrandOptions.length <= 1;
 
     const isSystemAdmin = React.useMemo(() => {
         try {
@@ -581,7 +628,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         }
         setSavingGuest(true);
         try {
-            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : 'POT OF JOLLOF');
+            const defaultBrandName = availableBrandOptions[0]?.id || 'General Restaurant';
+            const brandVal = newGuestBrand || (activeBrand !== 'All' ? activeBrand : defaultBrandName);
             const channelVal = newGuestChannel || orderChannel || 'Walk-in';
             const userNotes = newGuestNotes.trim();
             const noteDetails = userNotes 
@@ -1193,13 +1241,15 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         }
     };
 
-    // Preload all brand logos eagerly so they're cached before the picker renders
+    // Preload brand logos eagerly so they're cached before the picker renders
     useEffect(() => {
-        BRAND_OPTIONS.forEach(br => {
-            const img = new Image();
-            img.src = br.logo;
+        availableBrandOptions.forEach(br => {
+            if (br.logo) {
+                const img = new Image();
+                img.src = br.logo;
+            }
         });
-    }, []);
+    }, [availableBrandOptions]);
 
     // Sync linked modifier group selection when editingItem updates
     useEffect(() => {
@@ -4041,7 +4091,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             {/* Main Terminal Split Screen */}
             <div className="flex-1 flex overflow-hidden relative">
                 {/* Left Panel: Menu Item Selector / Order History View */}
-                {activeView === 'menu' && !activeBrand ? (
+                {activeView === 'menu' && !activeBrand && !isSingleBrand ? (
                     <div className={`flex-1 flex flex-col items-center justify-center p-6 md:p-10 bg-slate-950 text-white overflow-y-auto ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200 relative`}>
                         {/* Background ambient lighting */}
                         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -4060,7 +4110,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-                                {BRAND_OPTIONS.map(br => {
+                                {availableBrandOptions.map(br => {
                                     const itemCount = menu.filter(item => itemBelongsToBrand(item, br.id)).length;
                                     return (
                                         <motion.button
@@ -4119,57 +4169,61 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     </div>
                 ) : activeView === 'menu' && (
                     <div className={`flex-1 flex flex-col overflow-hidden bg-gray-50/50 p-2.5 sm:p-6 gap-2.5 sm:gap-4 pb-20 sm:pb-6 ${cartOpen ? 'sm:mr-[440px]' : ''} transition-all duration-200`}>
-                        {/* 1-Tap Brand Tabs Carousel (Always visible on mobile & desktop) */}
-                        <div className="flex items-center gap-1.5 pb-2 border-b border-gray-200/80 shrink-0 overflow-x-auto custom-scrollbar -mx-1 px-1">
-                            {BRAND_OPTIONS.map(br => {
-                                const isSelected = activeBrand === br.id;
-                                const itemCount = menu.filter(item => itemBelongsToBrand(item, br.id)).length;
-                                return (
+                        {/* 1-Tap Brand Tabs Carousel (Only shown when tenant has multiple brands) */}
+                        {!isSingleBrand && (
+                            <div className="flex items-center gap-1.5 pb-2 border-b border-gray-200/80 shrink-0 overflow-x-auto custom-scrollbar -mx-1 px-1">
+                                {availableBrandOptions.map(br => {
+                                    const isSelected = activeBrand === br.id;
+                                    const itemCount = menu.filter(item => itemBelongsToBrand(item, br.id)).length;
+                                    return (
+                                        <button
+                                            key={br.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setActiveBrand(br.id);
+                                                setSelectedBrand(br.id);
+                                            }}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black shrink-0 transition-all border cursor-pointer ${
+                                                isSelected
+                                                    ? 'bg-gray-950 text-white border-gray-950 shadow-sm scale-[1.02]'
+                                                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {br.logo && (
+                                                <img
+                                                    src={br.logo}
+                                                    alt={br.name}
+                                                    className="w-4 h-4 object-contain rounded shrink-0"
+                                                    onError={e => { e.target.style.display = 'none'; }}
+                                                />
+                                            )}
+                                            <span className="truncate">{br.name}</span>
+                                            <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                                                isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                                            }`}>
+                                                {itemCount}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                                {isSystemAdmin && (
                                     <button
-                                        key={br.id}
                                         type="button"
                                         onClick={() => {
-                                            setActiveBrand(br.id);
-                                            setSelectedBrand(br.id);
+                                            setActiveBrand('All');
+                                            setSelectedBrand('All');
                                         }}
-                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black shrink-0 transition-all border cursor-pointer ${
-                                            isSelected
-                                                ? 'bg-gray-950 text-white border-gray-950 shadow-sm scale-[1.02]'
-                                                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                                        className={`flex items-center gap-1 px-3 py-1.5 rounded-2xl text-xs font-black shrink-0 transition-all border cursor-pointer ${
+                                            activeBrand === 'All'
+                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                                         }`}
                                     >
-                                        <img
-                                            src={br.logo}
-                                            alt={br.name}
-                                            className="w-4 h-4 object-contain rounded shrink-0"
-                                            onError={e => { e.target.style.display = 'none'; }}
-                                        />
-                                        <span className="truncate">{br.name}</span>
-                                        <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
-                                            isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
-                                        }`}>
-                                            {itemCount}
-                                        </span>
+                                        <span>✨ All Brands</span>
                                     </button>
-                                );
-                            })}
-                            {isSystemAdmin && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setActiveBrand('All');
-                                        setSelectedBrand('All');
-                                    }}
-                                    className={`flex items-center gap-1 px-3 py-1.5 rounded-2xl text-xs font-black shrink-0 transition-all border cursor-pointer ${
-                                        activeBrand === 'All'
-                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                                            : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    <span>✨ All Brands</span>
-                                </button>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Mobile-Only Horizontal Category Carousel */}
                         <div className="sm:hidden flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 shrink-0 -mx-1 px-1">
@@ -6075,51 +6129,49 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                         className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all text-xs font-bold"
                                                     />
                                                 </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Virtual Brands (Select all brands this item belongs to)</label>
-                                                    <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl">
-                                                        {[
-                                                            { id: 'POT OF JOLLOF', name: 'Pot of Jollof', icon: '🫕' },
-                                                            { id: 'LITTLE LAGOS', name: 'Little Lagos', icon: '🌶️' },
-                                                            { id: 'CAFE SWAHILI', name: 'Cafe Swahili', icon: '☕' },
-                                                            { id: 'SAMAKI STREET', name: 'Samaki Street', icon: '🐟' }
-                                                        ].map(br => {
-                                                            const currentBrands = editingItem.brands && editingItem.brands.length > 0 
-                                                                ? editingItem.brands 
-                                                                : (editingItem.brand && editingItem.brand !== 'ManiPOS' ? [editingItem.brand] : ['POT OF JOLLOF']);
-                                                            const isChecked = currentBrands.includes(br.id);
+                                                {!isSingleBrand && (
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Virtual Brands (Select all brands this item belongs to)</label>
+                                                        <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                                                            {availableBrandOptions.map(br => {
+                                                                const fallbackBrand = availableBrandOptions[0]?.id || 'General Brand';
+                                                                const currentBrands = editingItem.brands && editingItem.brands.length > 0 
+                                                                    ? editingItem.brands 
+                                                                    : (editingItem.brand && editingItem.brand !== 'ManiPOS' ? [editingItem.brand] : [fallbackBrand]);
+                                                                const isChecked = currentBrands.includes(br.id);
 
-                                                            const toggleBrand = () => {
-                                                                let updated;
-                                                                if (isChecked) {
-                                                                    updated = currentBrands.filter(b => b !== br.id);
-                                                                    if (updated.length === 0) updated = ['POT OF JOLLOF'];
-                                                                } else {
-                                                                    updated = [...currentBrands, br.id];
-                                                                }
-                                                                setEditingItem({
-                                                                    ...editingItem,
-                                                                    brand: updated[0],
-                                                                    brands: updated
-                                                                });
-                                                            };
+                                                                const toggleBrand = () => {
+                                                                    let updated;
+                                                                    if (isChecked) {
+                                                                        updated = currentBrands.filter(b => b !== br.id);
+                                                                        if (updated.length === 0) updated = [fallbackBrand];
+                                                                    } else {
+                                                                        updated = [...currentBrands, br.id];
+                                                                    }
+                                                                    setEditingItem({
+                                                                        ...editingItem,
+                                                                        brand: updated[0],
+                                                                        brands: updated
+                                                                    });
+                                                                };
 
-                                                            return (
-                                                                <label key={br.id} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-white rounded-lg transition-colors select-none">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={isChecked}
-                                                                        onChange={toggleBrand}
-                                                                        className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
-                                                                    />
-                                                                    <span className="text-[11px] font-bold text-gray-800 flex items-center gap-1.5">
-                                                                        <span>{br.icon}</span> {br.name}
-                                                                    </span>
-                                                                </label>
-                                                            );
-                                                        })}
+                                                                return (
+                                                                    <label key={br.id} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-white rounded-lg transition-colors select-none">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={isChecked}
+                                                                            onChange={toggleBrand}
+                                                                            className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
+                                                                        />
+                                                                        <span className="text-[11px] font-bold text-gray-800 flex items-center gap-1.5">
+                                                                            <span>{br.icon || '🍽️'}</span> {br.name}
+                                                                        </span>
+                                                                    </label>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-600 mb-1.5 uppercase ml-1">Category</label>
@@ -8259,10 +8311,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                         onChange={(e) => setSelectedBrand(e.target.value)}
                                                         className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
                                                     >
-                                                        <option value="POT OF JOLLOF">POT OF JOLLOF</option>
-                                                        <option value="LITTLE LAGOS">LITTLE LAGOS</option>
-                                                        <option value="CAFE SWAHILI">CAFE SWAHILI</option>
-                                                        <option value="SAMAKI STREET">SAMAKI STREET</option>
+                                                        {availableBrandOptions.map(b => (
+                                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                                        ))}
                                                     </select>
                                                 </div>
                                                 <div>
@@ -8887,10 +8938,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         onChange={(e) => setClearBrand(e.target.value)}
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 outline-none focus:border-primary"
                                     >
-                                        <option value="POT OF JOLLOF">POT OF JOLLOF</option>
-                                        <option value="LITTLE LAGOS">LITTLE LAGOS</option>
-                                        <option value="CAFE SWAHILI">CAFE SWAHILI</option>
-                                        <option value="SAMAKI STREET">SAMAKI STREET</option>
+                                        {availableBrandOptions.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -9568,10 +9618,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         onChange={(e) => setClearingBrand(e.target.value)}
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-900 outline-none focus:border-primary"
                                     >
-                                        <option value="POT OF JOLLOF">POT OF JOLLOF</option>
-                                        <option value="LITTLE LAGOS">LITTLE LAGOS</option>
-                                        <option value="CAFE SWAHILI">CAFE SWAHILI</option>
-                                        <option value="SAMAKI STREET">SAMAKI STREET</option>
+                                        {availableBrandOptions.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -10483,10 +10532,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         onChange={e => setNewGuestBrand(e.target.value)}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:border-[#18A07A] outline-none"
                                     >
-                                        <option value="POT OF JOLLOF">🫕 Pot of Jollof</option>
-                                        <option value="LITTLE LAGOS">🌶️ Little Lagos</option>
-                                        <option value="CAFE SWAHILI">☕ Cafe Swahili</option>
-                                        <option value="SAMAKI STREET">🐟 Samaki Street</option>
+                                        {availableBrandOptions.map(b => (
+                                            <option key={b.id} value={b.id}>{b.icon ? `${b.icon} ` : ''}{b.name}</option>
+                                        ))}
                                         <option value="General Brand">🏢 General Restaurant</option>
                                     </select>
                                 </div>
