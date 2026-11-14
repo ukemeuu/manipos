@@ -465,6 +465,8 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const [cartOpen, setCartOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    // Restaurant ID captured from menu rows — required so orders appear in the POS dashboard
+    const [restaurantId, setRestaurantId] = useState(null);
     
     // Checkout form state
     const [customerName, setCustomerName] = useState('');
@@ -1067,6 +1069,9 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             if (error) throw error;
             const validData = (data || []).filter(item => item.show_on_microsite !== false && !item.name.toUpperCase().includes('DELIVERY FEE'));
             setMenu(validData);
+            // Capture restaurant_id from the first menu item so orders are tagged correctly
+            const rid = validData[0]?.restaurant_id || null;
+            if (rid) setRestaurantId(rid);
             try {
                 localStorage.setItem('poj_microsite_menu_cache_v2', JSON.stringify(validData));
             } catch(e) {}
@@ -1505,7 +1510,8 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0]) : "POT OF JOLLOF") : activeBrand,
                 delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
                 guest_id: guestUser ? guestUser.id : null,
-                notes: finalNotes
+                notes: finalNotes,
+                ...(restaurantId ? { restaurant_id: restaurantId } : {})
             };
 
             // 1. Insert order header
