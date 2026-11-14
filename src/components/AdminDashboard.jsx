@@ -59,7 +59,10 @@ import {
   LogOut,
   Building2,
   Globe,
-  RefreshCw
+  RefreshCw,
+  ExternalLink,
+  Plug,
+  KeyRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
@@ -74,6 +77,10 @@ import { CustomersCrmView } from './orda/CustomersCrmView';
 import { PromotionsVouchersLoyaltyView } from './orda/PromotionsVouchersLoyaltyView';
 import { DeliveryAreasView } from './orda/DeliveryAreasView';
 import { OrdaInventoryErpView } from './orda/OrdaInventoryErpView';
+import { WalletBillingView } from './orda/WalletBillingView';
+import { IntegrationsAndOmnichannelView } from './orda/IntegrationsAndOmnichannelView';
+import { TeamRolesAndAccountView } from './orda/TeamRolesAndAccountView';
+import { TableManagementView } from './orda/TableManagementView';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
@@ -1204,6 +1211,42 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   >
                     <MapPin size={15} /> Delivery Areas (Zones)
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'table-management')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'table-management' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Armchair size={15} /> Table Management & QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'integrations')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'integrations' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Plug size={15} /> Integrations Hub
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'omnichannel')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'omnichannel' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Globe size={15} /> Omnichannel (Glovo/Bolt/Uber)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'api-webhooks')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'api-webhooks' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <KeyRound size={15} /> API Keys & Webhooks
+                  </button>
                 </>
               )}
               <button
@@ -1216,15 +1259,36 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 <MapPin size={15} /> Locations & Branches
               </button>
               {canDo(TAB_PERMISSION.staff) && (
-                <button
-                  type="button"
-                  onClick={() => selectModule('settings', 'staff')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
-                    activeTab === 'staff' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
+                <>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'team-roles')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'team-roles' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <ShieldCheck size={15} /> Team Roles (24 POS Perms)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'staff')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'staff' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Users size={15} /> Staff PINs & Access
+                  </button>
+                </>
+              )}
+              {tenantSlug && (
+                <a
+                  href={`/?tenant=${encodeURIComponent(tenantSlug)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 border border-emerald-100 mt-1"
                 >
-                  <Users size={15} /> Staff & Access
-                </button>
+                  <ExternalLink size={15} /> Preview Live Storefront
+                </a>
               )}
               {canDo(TAB_PERMISSION.suppliers) && (
                 <button
@@ -1318,8 +1382,41 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             </>
           )}
 
-          {(activeModule === 'wallet' || activeModule === 'account') && (
+          {activeModule === 'wallet' && (
             <>
+              {[
+                { id: 'wallet', label: 'Wallet & Ledger', icon: Wallet },
+                { id: 'subscriptions', label: 'Subscriptions & Billing', icon: Receipt },
+                { id: 'paystack', label: 'Paystack Sub-Account', icon: CreditCard },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectModule('wallet', item.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === item.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon size={15} /> {item.label}
+                  </button>
+                );
+              })}
+            </>
+          )}
+
+          {activeModule === 'account' && (
+            <>
+              <button
+                type="button"
+                onClick={() => selectModule('account', 'account')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                  activeTab === 'account' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck size={15} /> Security & Support PIN
+              </button>
               <button
                 type="button"
                 onClick={() => setCloseStoreOpen(true)}
@@ -1334,6 +1431,16 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               >
                 <MapPin size={15} /> Manage Locations
               </button>
+              {tenantSlug && (
+                <a
+                  href={`/?tenant=${encodeURIComponent(tenantSlug)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                >
+                  <ExternalLink size={15} /> Open Live Storefront
+                </a>
+              )}
             </>
           )}
         </div>
@@ -1538,53 +1645,44 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               staffName={pinStaffName}
               onRefreshDashboard={fetchDashboardData}
             />
-          ) : activeTab === 'wallet' || activeTab === 'account' ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-3xl space-y-4">
-              <h2 className="text-lg font-black text-slate-900 capitalize">{activeTab} Hub</h2>
-              <p className="text-sm text-slate-600">
-                {activeTab === 'inventory'
-                  ? 'Launch Stock, Recipes, Kitchen Display (KDS), or Floor Plan directly.'
-                  : activeTab === 'wallet'
-                    ? 'Online Paystack settlements, withdrawal bank settings, and automated EOD reports arrive in Waves 2–5.'
-                    : 'Manage storefront Open/Closed pause schedule, locations, and POS register access.'}
-              </p>
-              <div className="flex flex-wrap gap-3 pt-2">
-                {activeTab === 'inventory' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
-                    >
-                      Open Inventory & Recipes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
-                      className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs font-bold hover:bg-slate-100"
-                    >
-                      Open Kitchen Display
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
-                      className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs font-bold hover:bg-slate-100"
-                    >
-                      Open Floor & Reservations
-                    </button>
-                  </>
-                )}
-                {activeTab === 'account' && (
-                  <button
-                    type="button"
-                    onClick={() => setCloseStoreOpen(true)}
-                    className="px-4 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
-                  >
-                    {settings.store_closed ? 'Reopen Storefront' : 'Close Store (End of Day)'}
-                  </button>
-                )}
-              </div>
-            </div>
+          ) : activeTab === 'wallet' || activeTab === 'subscriptions' || activeTab === 'paystack' ? (
+            <WalletBillingView
+              mode={activeTab === 'wallet' ? 'payments' : activeTab}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              settings={settings}
+              orders={scopedOrders}
+              staffName={pinStaffName}
+            />
+          ) : activeTab === 'integrations' || activeTab === 'omnichannel' || activeTab === 'api-webhooks' ? (
+            <IntegrationsAndOmnichannelView
+              mode={activeTab}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              tenantSlug={tenantSlug}
+              settings={settings}
+              onSettingsUpdated={fetchDashboardData}
+            />
+          ) : activeTab === 'table-management' ? (
+            <TableManagementView
+              restaurantId={activeRestaurantId}
+              tenantSlug={tenantSlug}
+              branches={branches}
+              settings={settings}
+              onSettingsUpdated={fetchDashboardData}
+              onOpenFloorPlan={() => (onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor'))}
+            />
+          ) : activeTab === 'team-roles' || activeTab === 'account' ? (
+            <TeamRolesAndAccountView
+              mode={activeTab}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              staffList={staffList}
+              branches={branches}
+              settings={settings}
+              onOpenCloseStore={() => setCloseStoreOpen(true)}
+              onStaffUpdated={fetchDashboardData}
+            />
           ) : null}
 
           {!showWebPos && (

@@ -687,8 +687,22 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
     // UI state
     const [searchQuery, setSearchQuery] = useState('');
-    const [diningMode, setDiningMode] = useState('delivery'); // 'delivery' | 'pickup' | 'dine_in'
-    const [tableNumber, setTableNumber] = useState('');
+    const [diningMode, setDiningMode] = useState(() => {
+        try {
+            const p = new URLSearchParams(window.location.search);
+            return p.get('table') ? 'dine_in' : 'delivery';
+        } catch {
+            return 'delivery';
+        }
+    }); // 'delivery' | 'pickup' | 'dine_in'
+    const [tableNumber, setTableNumber] = useState(() => {
+        try {
+            const p = new URLSearchParams(window.location.search);
+            return p.get('table') || '';
+        } catch {
+            return '';
+        }
+    });
     const [selectedBranchId, setSelectedBranchId] = useState(() => tenant?.branches?.[0]?.id || null);
     const [activeCategory, setActiveCategory] = useState(sourceMenu.categories[0]?.name || 'Most Popular');
 
