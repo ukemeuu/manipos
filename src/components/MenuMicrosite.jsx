@@ -713,14 +713,13 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             (async () => {
                 try {
                     const activeRid = restaurantId || tenantProfile?.id || (await loadTenant(tenantSlug).catch(() => null))?.id || null;
-                    let guestQuery = supabase
+                    if (!activeRid) return;
+                    const { data: guestData, error: guestErr } = await supabase
                         .from('guests')
-                        .select('*')
-                        .eq('phone', cleanPhone);
-                    if (activeRid) {
-                        guestQuery = guestQuery.eq('restaurant_id', activeRid);
-                    }
-                    const { data: guestData, error: guestErr } = await guestQuery.maybeSingle();
+                        .select('id, first_name, last_name, phone, email, loyalty_points, visit_count, lifetime_spend')
+                        .eq('restaurant_id', activeRid)
+                        .eq('phone', cleanPhone)
+                        .maybeSingle();
                     
                     if (guestErr) throw guestErr;
                     
@@ -1186,12 +1185,15 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             const input = loginInput.trim().toLowerCase();
             const isEmail = input.includes('@');
             
-            // Try fetching existing guest scoped by tenant
+            // Try fetching existing guest scoped strictly by tenant
             const activeRid = restaurantId || tenantProfile?.id || null;
-            let query = supabase.from('guests').select('*');
-            if (activeRid) {
-                query = query.eq('restaurant_id', activeRid);
+            if (!activeRid) {
+                throw new Error('Store identity is still loading. Please try again in a moment.');
             }
+            let query = supabase
+                .from('guests')
+                .select('id, first_name, last_name, phone, email, loyalty_points, visit_count, lifetime_spend')
+                .eq('restaurant_id', activeRid);
             if (isEmail) {
                 query = query.eq('email', input);
             } else {
@@ -1662,14 +1664,18 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                         const newVisits = (guestUser.visit_count || 0) + 1;
                         const newSpend = parseFloat(guestUser.lifetime_spend || 0) + finalTotal;
                         
-                        await supabase
-                            .from('guests')
-                            .update({
-                                visit_count: newVisits,
-                                lifetime_spend: newSpend,
-                                delivery_address: deliveryAddress.trim() || guestUser.delivery_address
-                            })
-                            .eq('id', guestUser.id);
+                        const activeRid = restaurantId || tenantProfile?.id || null;
+                        if (activeRid) {
+                            await supabase
+                                .from('guests')
+                                .update({
+                                    visit_count: newVisits,
+                                    lifetime_spend: newSpend,
+                                    delivery_address: deliveryAddress.trim() || guestUser.delivery_address
+                                })
+                                .eq('id', guestUser.id)
+                                .eq('restaurant_id', activeRid);
+                        }
                         
                         await supabase
                             .from('guest_visits')

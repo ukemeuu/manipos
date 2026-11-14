@@ -268,7 +268,8 @@ export function FeedbackDashboardView({ onBack }) {
                 const dummyElem = document.createElement('div');
                 const service = new window.google.maps.places.PlacesService(dummyElem);
 
-                const placeQuery = sessionUser?.restaurantName ? `${sessionUser.restaurantName} Nairobi Kenya` : 'Pot of Jollof Nairobi Kenya';
+                const storeLabel = activeSession?.restaurantName || 'this restaurant';
+                const placeQuery = `${storeLabel} Kenya`;
                 service.textSearch({ query: placeQuery }, (results, status) => {
                     if (status === 'OK' && results && results[0]) {
                         const placeId = results[0].place_id;
@@ -309,7 +310,7 @@ export function FeedbackDashboardView({ onBack }) {
                             setSyncingGoogleReviews(false);
                         });
                     } else {
-                        alert("Google Place 'Pot of Jollof Nairobi' not found. Defaulting to cached reviews.");
+                        alert(`Google Place '${storeLabel}' not found. Defaulting to cached reviews.`);
                         setSyncingGoogleReviews(false);
                     }
                 });
@@ -553,16 +554,18 @@ export function FeedbackDashboardView({ onBack }) {
                         Export CSV
                     </button>
 
-                    <a
-                        href={SPREADSHEET_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold"
-                        title="Open Connected Google Spreadsheet"
-                    >
-                        <ExternalLink size={14} />
-                        <span className="hidden sm:inline">Open Sheet</span>
-                    </a>
+                    {isPojTenant && (
+                        <a
+                            href={SPREADSHEET_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold"
+                            title="Open Connected Google Spreadsheet"
+                        >
+                            <ExternalLink size={14} />
+                            <span className="hidden sm:inline">Open Sheet</span>
+                        </a>
+                    )}
                 </div>
             </div>
 
@@ -692,29 +695,48 @@ export function FeedbackDashboardView({ onBack }) {
 
                 {/* Google Sheet Sync Information */}
                 <div className="bg-gradient-to-br from-emerald-950 to-slate-900 text-white p-6 rounded-2xl border border-emerald-900/50 shadow-sm flex flex-col justify-between">
-                    <div>
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 border border-emerald-500/30">
-                            <CheckCircle size={20} />
-                        </div>
-                        <h3 className="font-black text-lg text-white mb-1">Attached Google Sheet</h3>
-                        <p className="text-xs text-gray-300 leading-relaxed font-medium mb-4">
-                            All submissions from the Guest Feedback Tool auto-sync to your Google Spreadsheet in real time.
-                        </p>
-                        <div className="bg-black/40 border border-emerald-800/40 p-3 rounded-xl text-xs space-y-1 font-mono text-emerald-300">
-                            <div><strong>Sheet ID:</strong> {SPREADSHEET_ID.slice(0, 16)}...</div>
-                            <div><strong>Tab GID:</strong> 1130350999</div>
-                            <div><strong>Status:</strong> Active & Connected</div>
-                        </div>
-                    </div>
+                    {isPojTenant ? (
+                        <>
+                            <div>
+                                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 border border-emerald-500/30">
+                                    <CheckCircle size={20} />
+                                </div>
+                                <h3 className="font-black text-lg text-white mb-1">Attached Google Sheet</h3>
+                                <p className="text-xs text-gray-300 leading-relaxed font-medium mb-4">
+                                    All submissions from the Guest Feedback Tool auto-sync to your Google Spreadsheet in real time.
+                                </p>
+                                <div className="bg-black/40 border border-emerald-800/40 p-3 rounded-xl text-xs space-y-1 font-mono text-emerald-300">
+                                    <div><strong>Sheet ID:</strong> {SPREADSHEET_ID.slice(0, 16)}...</div>
+                                    <div><strong>Tab GID:</strong> 1130350999</div>
+                                    <div><strong>Status:</strong> Active & Connected</div>
+                                </div>
+                            </div>
 
-                    <a
-                        href={SPREADSHEET_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-6 w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
-                    >
-                        View Full Spreadsheet <ExternalLink size={14} />
-                    </a>
+                            <a
+                                href={SPREADSHEET_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-6 w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition-all text-center flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                            >
+                                View Full Spreadsheet <ExternalLink size={14} />
+                            </a>
+                        </>
+                    ) : (
+                        <div>
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 border border-emerald-500/30">
+                                <CheckCircle size={20} />
+                            </div>
+                            <h3 className="font-black text-lg text-white mb-1">Live Supabase Feedback</h3>
+                            <p className="text-xs text-gray-300 leading-relaxed font-medium mb-4">
+                                Guest ratings submitted from your QR feedback link are stored securely per store in real time.
+                            </p>
+                            <div className="bg-black/40 border border-emerald-800/40 p-3 rounded-xl text-xs space-y-1 font-mono text-emerald-300">
+                                <div><strong>Table:</strong> pos_feedback</div>
+                                <div><strong>Scope:</strong> Tenant-Isolated</div>
+                                <div><strong>Status:</strong> Active & Connected</div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

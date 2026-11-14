@@ -1923,7 +1923,8 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                 lifetime_spend: newSpend,
                                 delivery_address: deliveryAddress.trim() || guestUser.delivery_address
                             })
-                            .eq('id', guestUser.id);
+                            .eq('id', guestUser.id)
+                            .eq('restaurant_id', tenant.id);
 
                         const updatedGuest = {
                             ...guestUser,

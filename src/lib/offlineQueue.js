@@ -85,21 +85,58 @@ export async function syncOfflineQueue(tenantId = null) {
     try {
         for (const order of queue) {
             try {
-                // Strip client-side transient flags before sending to Supabase
-                const { is_offline_order, queued_at, ...dbPayload } = order;
+                // Strip client-side transient flags and line items before inserting pos_orders header
+                const { is_offline_order, queued_at, items, ...headerPayload } = order;
 
-                const { error } = await supabase
+                let serverOrderId = headerPayload.id;
+                const { data: insertedHeader, error: headerError } = await supabase
                     .from('pos_orders')
-                    .insert([dbPayload]);
+                    .insert([headerPayload])
+                    .select('id')
+                    .single();
 
-                // 23505 is Postgres unique constraint violation (idempotency key match) -> order already synced!
-                if (!error || error.code === '23505') {
-                    removeQueuedOrder(order.idempotency_key || order.id, order.restaurant_id || tenantId);
-                    synced++;
-                } else {
-                    console.warn(`[OfflineQueue] Failed to sync order ${order.id}:`, error.message);
-                    failed++;
+                // 23505 = Postgres unique constraint violation (idempotency key match) -> fetch existing order ID
+                if (headerError) {
+                    if (headerError.code === '23505' && headerPayload.idempotency_key) {
+                        const { data: existingHeader, error: lookupErr } = await supabase
+                            .from('pos_orders')
+                            .select('id')
+                            .eq('idempotency_key', headerPayload.idempotency_key)
+                            .maybeSingle();
+                        if (lookupErr || !existingHeader) throw headerError;
+                        serverOrderId = existingHeader.id;
+                    } else {
+                        throw headerError;
+                    }
+                } else if (insertedHeader?.id) {
+                    serverOrderId = insertedHeader.id;
                 }
+
+                // Persist line items only if none exist yet for this order
+                if (Array.isArray(items) && items.length > 0 && serverOrderId) {
+                    const { data: existingItems } = await supabase
+                        .from('pos_order_items')
+                        .select('id')
+                        .eq('order_id', serverOrderId)
+                        .limit(1);
+
+                    if (!existingItems || existingItems.length === 0) {
+                        const itemRows = items.map((it) => ({
+                            order_id: serverOrderId,
+                            item_name: it.item_name || it.name || 'Item',
+                            quantity: Number(it.quantity ?? it.qty ?? 1),
+                            price: Number(it.price ?? 0),
+                            instructions: it.instructions || (it.sku ? `SKU: ${it.sku}` : ''),
+                        }));
+                        const { error: itemsError } = await supabase
+                            .from('pos_order_items')
+                            .insert(itemRows);
+                        if (itemsError) throw itemsError;
+                    }
+                }
+
+                removeQueuedOrder(order.idempotency_key || order.id, order.restaurant_id || tenantId);
+                synced++;
             } catch (err) {
                 console.error(`[OfflineQueue] Exception syncing order ${order.id}:`, err);
                 failed++;

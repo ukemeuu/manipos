@@ -23,7 +23,6 @@ import {
   Package,
   Layers,
   ArrowLeft,
-  DollarSign,
   Receipt,
   X,
   Scan
@@ -41,14 +40,14 @@ const RETAIL_CATEGORIES = [
 ];
 
 const DEFAULT_RETAIL_PRODUCTS = [
-  { id: 'ret-1', name: 'Premium Arabica Coffee 500g', barcode: '8901234567890', sku: 'COF-500', price: 14.50, cost_price: 9.00, stock_quantity: 42, category: 'Beverages & Drinks', unit: 'pcs' },
-  { id: 'ret-2', name: 'Organic Cold-Pressed Olive Oil 1L', barcode: '8905556667770', sku: 'OIL-100', price: 22.00, cost_price: 15.00, stock_quantity: 7, category: 'Groceries & Pantry', unit: 'bottle' },
-  { id: 'ret-3', name: 'Wireless Ergonomic Optical Mouse', barcode: '8909876543210', sku: 'ACC-MOU', price: 29.99, cost_price: 18.50, stock_quantity: 18, category: 'Electronics & Acc.', unit: 'pcs' },
-  { id: 'ret-4', name: 'Cotton Crewneck T-Shirt - L/Navy', barcode: '8901112223330', sku: 'APP-TEE-L', price: 18.00, cost_price: 8.50, stock_quantity: 25, category: 'Apparel & Footwear', unit: 'pcs' },
-  { id: 'ret-5', name: 'Dark Roast Chocolate Bar 100g', barcode: '8903334445550', sku: 'SNK-CHOC', price: 4.50, cost_price: 2.20, stock_quantity: 65, category: 'Snacks & Confectionery', unit: 'bar' },
-  { id: 'ret-6', name: 'Herbal Moisturizing Shampoo 400ml', barcode: '8907778889990', sku: 'HYG-SHP', price: 11.25, cost_price: 6.80, stock_quantity: 12, category: 'Toiletries & Personal', unit: 'bottle' },
-  { id: 'ret-7', name: 'Multi-Surface Antibacterial Spray 750ml', barcode: '8904445556660', sku: 'HSH-CLN', price: 7.99, cost_price: 4.10, stock_quantity: 3, category: 'Household & Cleaning', unit: 'spray' },
-  { id: 'ret-8', name: 'USB-C Fast Charging Cable 2M', barcode: '8906667778880', sku: 'ACC-CBL', price: 12.00, cost_price: 4.50, stock_quantity: 34, category: 'Electronics & Acc.', unit: 'pcs' },
+  { id: 'ret-1', name: 'Premium Arabica Coffee 500g', barcode: '8901234567890', sku: 'COF-500', price: 1450, cost_price: 900, stock_quantity: 42, category: 'Beverages & Drinks', unit: 'pcs' },
+  { id: 'ret-2', name: 'Organic Cold-Pressed Olive Oil 1L', barcode: '8905556667770', sku: 'OIL-100', price: 2200, cost_price: 1500, stock_quantity: 7, category: 'Groceries & Pantry', unit: 'bottle' },
+  { id: 'ret-3', name: 'Wireless Ergonomic Optical Mouse', barcode: '8909876543210', sku: 'ACC-MOU', price: 2999, cost_price: 1850, stock_quantity: 18, category: 'Electronics & Acc.', unit: 'pcs' },
+  { id: 'ret-4', name: 'Cotton Crewneck T-Shirt - L/Navy', barcode: '8901112223330', sku: 'APP-TEE-L', price: 1800, cost_price: 850, stock_quantity: 25, category: 'Apparel & Footwear', unit: 'pcs' },
+  { id: 'ret-5', name: 'Dark Roast Chocolate Bar 100g', barcode: '8903334445550', sku: 'SNK-CHOC', price: 450, cost_price: 220, stock_quantity: 65, category: 'Snacks & Confectionery', unit: 'bar' },
+  { id: 'ret-6', name: 'Herbal Moisturizing Shampoo 400ml', barcode: '8907778889990', sku: 'HYG-SHP', price: 1125, cost_price: 680, stock_quantity: 12, category: 'Toiletries & Personal', unit: 'bottle' },
+  { id: 'ret-7', name: 'Multi-Surface Antibacterial Spray 750ml', barcode: '8904445556660', sku: 'HSH-CLN', price: 799, cost_price: 410, stock_quantity: 3, category: 'Household & Cleaning', unit: 'spray' },
+  { id: 'ret-8', name: 'USB-C Fast Charging Cable 2M', barcode: '8906667778880', sku: 'ACC-CBL', price: 1200, cost_price: 450, stock_quantity: 34, category: 'Electronics & Acc.', unit: 'pcs' },
 ];
 
 export function RetailPosTerminal({
@@ -59,6 +58,9 @@ export function RetailPosTerminal({
   onOpenDashboard,
   onOpenAppHome
 }) {
+  const [storeId, setStoreId] = useState(null);
+  const [storeName, setStoreName] = useState('ManiPOS Retail');
+  const [taxRate, setTaxRate] = useState(0.16);
   const [products, setProducts] = useState(DEFAULT_RETAIL_PRODUCTS);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All Products');
@@ -123,6 +125,22 @@ export function RetailPosTerminal({
         .maybeSingle();
 
       if (store) {
+        setStoreId(store.id);
+        if (store.name) setStoreName(store.name);
+
+        const { data: settings } = await supabase
+          .from('restaurant_settings')
+          .select('tax_rate, vat_rate, store_name')
+          .eq('restaurant_id', store.id)
+          .maybeSingle();
+        if (settings) {
+          if (settings.store_name) setStoreName(settings.store_name);
+          const rawTax = Number(settings.tax_rate ?? settings.vat_rate);
+          if (Number.isFinite(rawTax) && rawTax >= 0) {
+            setTaxRate(rawTax > 1 ? rawTax / 100 : rawTax);
+          }
+        }
+
         const { data: items } = await supabase
           .from('pos_menu')
           .select('*')
@@ -132,9 +150,10 @@ export function RetailPosTerminal({
         if (items && items.length > 0) {
           const formatted = items.map(it => ({
             id: it.id,
+            isDbItem: true,
             name: it.name,
             barcode: it.barcode || '',
-            sku: it.sku || `SKU-${it.id.slice(0, 4)}`,
+            sku: it.sku || `SKU-${String(it.id).slice(0, 4)}`,
             price: Number(it.price) || 0,
             cost_price: Number(it.cost_price) || 0,
             stock_quantity: it.stock_quantity ?? 50,
@@ -256,10 +275,9 @@ export function RetailPosTerminal({
     }
   };
 
-  // Calculations
+  // Calculations (uses tenant-configured inclusive tax rate)
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const taxRate = 0.08;
-  const taxAmount = subtotal * taxRate;
+  const taxAmount = taxRate > 0 ? (subtotal * taxRate) / (1 + taxRate) : 0;
   const totalAmount = subtotal;
   const itemCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
@@ -286,27 +304,20 @@ export function RetailPosTerminal({
     const resolvedRestaurantId = (() => {
       try {
         const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-        return pinUser.restaurantId || pinUser.restaurant_id || getTenantContext() || null;
+        return storeId || pinUser.restaurantId || pinUser.restaurant_id || getTenantContext() || null;
       } catch (e) {
-        return getTenantContext() || null;
+        return storeId || getTenantContext() || null;
       }
     })();
 
-    const orderPayload = {
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord-' + Date.now(),
+    const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `retail-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const orderHeader = {
       restaurant_id: resolvedRestaurantId,
       ticket_number: 'R-' + Math.floor(1000 + Math.random() * 9000),
-      brand: 'RETAIL POS',
+      idempotency_key: idempotencyKey,
+      brand: storeName || 'RETAIL POS',
       customer_name: 'Walk-in Retail Customer',
-      items: cart.map(item => ({
-        id: item.id,
-        name: item.name,
-        barcode: item.barcode,
-        sku: item.sku,
-        price: item.price,
-        qty: item.qty,
-        subtotal: item.price * item.qty
-      })),
       total_amount: totalAmount,
       discount: 0,
       payment_method: paymentMethod,
@@ -317,8 +328,69 @@ export function RetailPosTerminal({
       created_at: new Date().toISOString()
     };
 
-    // 1. Queue to offline/local storage engine
-    queueOfflineOrder(orderPayload);
+    const orderItems = cart.map(item => ({
+      id: item.id,
+      isDbItem: Boolean(item.isDbItem),
+      item_name: item.name,
+      name: item.name,
+      barcode: item.barcode,
+      sku: item.sku,
+      price: item.price,
+      quantity: item.qty,
+      qty: item.qty,
+      subtotal: item.price * item.qty,
+      instructions: item.sku ? `SKU: ${item.sku}` : ''
+    }));
+
+    const orderPayload = {
+      id: idempotencyKey,
+      ...orderHeader,
+      items: orderItems
+    };
+
+    // 1. Persist online when connected, otherwise queue safely per-tenant offline
+    let persistedOnline = false;
+    if (navigator.onLine && resolvedRestaurantId) {
+      try {
+        const { data: insertedOrder, error: headerErr } = await supabase
+          .from('pos_orders')
+          .insert([orderHeader])
+          .select('id')
+          .single();
+
+        if (!headerErr && insertedOrder?.id) {
+          const itemRows = orderItems.map((it) => ({
+            order_id: insertedOrder.id,
+            item_name: it.item_name,
+            quantity: it.quantity,
+            price: it.price,
+            instructions: it.instructions
+          }));
+          const { error: itemsErr } = await supabase.from('pos_order_items').insert(itemRows);
+          if (!itemsErr) {
+            persistedOnline = true;
+            // Best-effort stock decrement for real DB-backed items
+            await Promise.all(
+              cart
+                .filter((c) => c.isDbItem)
+                .map((sold) =>
+                  supabase
+                    .from('pos_menu')
+                    .update({ stock_quantity: Math.max(0, Number(sold.stock_quantity || 0) - sold.qty) })
+                    .eq('id', sold.id)
+                    .eq('restaurant_id', resolvedRestaurantId)
+                )
+            );
+          }
+        }
+      } catch (netErr) {
+        console.warn('[RetailPos] Online persistence failed, queueing offline:', netErr?.message);
+      }
+    }
+
+    if (!persistedOnline) {
+      queueOfflineOrder(orderPayload);
+    }
 
     // 2. Decrement local state stock
     setProducts(prev => prev.map(p => {
@@ -333,7 +405,7 @@ export function RetailPosTerminal({
     try {
       const receiptText = `
 ================================
-         MANIPOS RETAIL         
+  ${(storeName || 'MANIPOS RETAIL').toUpperCase().slice(0, 28)}
          RECEIPT #${orderPayload.ticket_number}
 ================================
 Date: ${new Date().toLocaleString()}
@@ -355,6 +427,7 @@ Change:            KES ${Math.max(0, (Number(amountTendered) || totalAmount) - t
     }
 
     setCompletedOrder(orderPayload);
+    setCheckoutModalOpen(false);
     setIsProcessingPayment(false);
     setCart([]);
   };

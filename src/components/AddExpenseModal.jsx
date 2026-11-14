@@ -817,7 +817,6 @@ export function AddExpenseModal({ onClose, onSuccess, capturedBy = null, initial
                                             checked={vatIncluded === 'yes'}
                                             onChange={() => {
                                                 setVatIncluded('yes');
-                                                if (!vatCalculationMode) setVatCalculationMode('inclusive');
                                             }}
                                             className="text-primary focus:ring-primary h-4 w-4"
                                         />
@@ -831,7 +830,6 @@ export function AddExpenseModal({ onClose, onSuccess, capturedBy = null, initial
                                             checked={vatIncluded === 'no'}
                                             onChange={() => {
                                                 setVatIncluded('no');
-                                                setVatCalculationMode('inclusive');
                                             }}
                                             className="text-primary focus:ring-primary h-4 w-4"
                                         />

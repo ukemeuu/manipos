@@ -37,10 +37,10 @@ export function CampaignsView() {
             }
             setLoading(true);
             try {
-                // Fetch WhatsApp configs
+                // Fetch WhatsApp channel status (never select client_secret into browser memory)
                 const { data: channelData } = await supabase
                     .from('pos_channels')
-                    .select('*')
+                    .select('id, name, is_active, client_id, microsite_url')
                     .eq('restaurant_id', restaurantId)
                     .eq('name', 'whatsapp')
                     .maybeSingle();
@@ -80,7 +80,7 @@ export function CampaignsView() {
             }
         };
         loadData();
-    }, []);
+    }, [restaurantId]);
 
     // Calculate promotional price
     const originalPrice = selectedItem ? selectedItem.price || 0 : 0;
@@ -133,8 +133,12 @@ export function CampaignsView() {
     });
 
     const handleSendBroadcast = async () => {
-        if (!waConfig || !waConfig.client_id || !waConfig.client_secret) {
-            alert("WhatsApp channel credentials are not configured! Go to settings and set Phone Number ID and Access Token.");
+        if (!restaurantId) {
+            alert("No active restaurant session found.");
+            return;
+        }
+        if (!waConfig || !waConfig.client_id) {
+            alert("WhatsApp channel Phone Number ID is not configured! Go to Settings -> Integrations to configure WhatsApp.");
             return;
         }
 
@@ -152,55 +156,32 @@ export function CampaignsView() {
         setSendSummary(null);
         setProgress({ current: 0, total: targets.length, successes: 0, failures: 0 });
 
-        const phoneId = waConfig.client_id;
-        const token = waConfig.client_secret;
-        let successes = 0;
-        let failures = 0;
+        try {
+            const payloadMessages = targets.map((guest) => ({
+                phone: String(guest.phone || '').trim().replace('+', ''),
+                text: getPreviewMessage(guest),
+            }));
 
-        for (let i = 0; i < targets.length; i++) {
-            const guest = targets[i];
-            const textContent = getPreviewMessage(guest);
-            const rawPhone = guest.phone.trim().replace('+', '');
+            const { data, error: fnError } = await supabase.functions.invoke('whatsapp-campaign', {
+                body: {
+                    restaurantId,
+                    actorId: sessionUser?.id || null,
+                    messages: payloadMessages,
+                },
+            });
 
-            try {
-                // Post to Meta WhatsApp Cloud API messages endpoint
-                const response = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        messaging_product: "whatsapp",
-                        to: rawPhone,
-                        type: "text",
-                        text: {
-                            body: textContent
-                        }
-                    })
-                });
-
-                const resData = await response.json();
-                if (response.ok && !resData.error) {
-                    successes += 1;
-                    setProgress({ current: i + 1, total: targets.length, successes, failures });
-                } else {
-                    console.error("Meta Graph API error response:", resData);
-                    failures += 1;
-                    setProgress({ current: i + 1, total: targets.length, successes, failures });
-                }
-            } catch (err) {
-                console.error("Error sending message to +", rawPhone, err);
-                failures += 1;
-                setProgress({ current: i + 1, total: targets.length, successes, failures });
-            }
-
-            // Slight rate-limiting delay between messages to prevent spam blocks
-            await new Promise(r => setTimeout(r, 200));
+            if (fnError) throw fnError;
+            const successes = Number(data?.successes || 0);
+            const failures = Number(data?.failures || 0);
+            setProgress({ current: targets.length, total: targets.length, successes, failures });
+            setSendSummary({ successes, failures });
+        } catch (err) {
+            console.error("WhatsApp campaign Edge Function failed:", err);
+            alert("Failed to send WhatsApp campaign: " + (err?.message || 'Unknown error'));
+            setSendSummary({ successes: 0, failures: targets.length });
+        } finally {
+            setSending(false);
         }
-
-        setSending(false);
-        setSendSummary({ successes, failures });
     };
 
     if (loading) {

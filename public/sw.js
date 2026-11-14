@@ -1,5 +1,5 @@
 /* ManiPOS service worker — offline shell for POS terminals. */
-const VERSION = 'manipos-v5';
+const VERSION = 'manipos-v6';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 
@@ -7,8 +7,10 @@ const ASSET_CACHE = `${VERSION}-assets`;
 // staging. registration.scope is therefore '/' or '/staging/' respectively,
 // which keeps each environment's cache and offline shell separate.
 const BASE = self.registration.scope;
+const BASE_PATHNAME = new URL(BASE).pathname;
 const OFFLINE_URL = `${BASE}offline.html`;
-const ASSET_PREFIX = `${BASE}assets/`;
+const ASSET_PREFIX = `${BASE_PATHNAME.endsWith('/') ? BASE_PATHNAME : `${BASE_PATHNAME}/`}assets/`;
+const MAX_ASSET_CACHE_ENTRIES = 80;
 
 const SHELL_ASSETS = [
   BASE,
@@ -60,8 +62,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: stale-while-revalidate.
+  // Static assets: stale-while-revalidate with bounded cache size.
   if (url.pathname.startsWith(ASSET_PREFIX) || /\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$/.test(url.pathname)) {
+    event.respondWith(
+      caches.open(ASSET_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        const networkPromise = fetch(request)
+          .then(async (res) => {
+            if (res && res.ok) {
+              await cache.put(request, res.clone());
+              const keys = await cache.keys();
+              if (keys.length > MAX_ASSET_CACHE_ENTRIES) {
+                const excess = keys.slice(0, keys.length - MAX_ASSET_CACHE_ENTRIES);
+                await Promise.all(excess.map((oldReq) => cache.delete(oldReq)));
+              }
+            }
+            return res;
+          })
+          .catch(() => cached);
+        return cached || networkPromise;
+      })
+    );
+    return;
+  }
     event.respondWith(
       caches.match(request).then((cached) => {
         const network = fetch(request)

@@ -106,11 +106,9 @@ export function MenuBuilder({ restaurantId, onBack }) {
 
   const visibleItems = useMemo(() => {
     let list = items;
-    if (selectedCatId === 'all') {
-      list = list;
-    } else if (selectedCatId === 'uncategorised') {
+    if (selectedCatId === 'uncategorised') {
       list = list.filter((i) => !i.category);
-    } else {
+    } else if (selectedCatId !== 'all') {
       const selectedCat = categories.find((c) => c.id === selectedCatId);
       const names = new Set();
       const collect = (cat) => {
