@@ -49,11 +49,25 @@ import {
   ArrowLeft,
   ChefHat,
   Armchair,
-  UtensilsCrossed
+  UtensilsCrossed,
+  ClipboardList,
+  BarChart3,
+  Wallet,
+  Boxes,
+  UserCheck,
+  Power,
+  LogOut,
+  Building2,
+  Globe,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 import { PERMISSION_GROUPS, currentPermissions, roleDefaults } from '../lib/permissions';
+import { LiveOrdersView, computeOrderBucketCounts } from './orda/LiveOrdersView';
+import { OrdaCatalogView } from './orda/OrdaCatalogView';
+import { WebPosView } from './orda/WebPosView';
+import { LocationsManagerView, CloseStoreModal } from './orda/LocationsManagerView';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
@@ -79,9 +93,16 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       return false;
     }
   });
-  const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'analytics' : 'onboarding');
+  const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'orders' : 'onboarding');
+  const [activeModule, setActiveModule] = useState(() => setupCompleted ? 'orders' : 'dashboard');
+  const [orderBucket, setOrderBucket] = useState('active');
+  const [branches, setBranches] = useState([]);
+  const [activeBranchId, setActiveBranchId] = useState('all');
+  const [showWebPos, setShowWebPos] = useState(false);
+  const [settleTargetOrder, setSettleTargetOrder] = useState(null);
+  const [closeStoreOpen, setCloseStoreOpen] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(() => {
-    return ['onboarding', 'suppliers', 'feedback', 'linkhub', 'audit', 'settings'].includes(activeTab);
+    return ['onboarding', 'suppliers', 'feedback', 'linkhub', 'audit', 'settings', 'locations'].includes(activeTab);
   });
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -131,6 +152,28 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
   useEffect(() => {
     fetchDashboardData();
+    const restId = getActiveRestaurantId();
+    if (!restId) return undefined;
+    const channel = supabase
+      .channel(`admin-orders-${restId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pos_orders', filter: `restaurant_id=eq.${restId}` },
+        () => {
+          supabase
+            .from('pos_orders')
+            .select('*, items:pos_order_items(*)')
+            .eq('restaurant_id', restId)
+            .order('created_at', { ascending: false })
+            .then(({ data }) => {
+              if (data) setOrders(data);
+            });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Seed the editable store name from the signed-in session. Saved changes
@@ -217,6 +260,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           setSetupCompleted(false);
           localStorage.removeItem(setupCompletedKey());
           setActiveTab('onboarding');
+          setActiveModule('dashboard');
         }
       } else if (currentRestaurantId) {
         const { data: newSettings } = await supabase
@@ -238,6 +282,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         setSetupCompleted(false);
         localStorage.removeItem(setupCompletedKey());
         setActiveTab('onboarding');
+        setActiveModule('dashboard');
       }
 
       // 7. Fetch Suppliers
@@ -282,6 +327,19 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       } catch (auditLoadErr) {
         setAuditLogs(getLocalAuditLogs(currentRestaurantId));
       }
+
+      // 10. Fetch Branches (Wave 1 multi-location support, optional table)
+      try {
+        const { data: fetchedBranches, error: brErr } = await supabase
+          .from('branches')
+          .select('*')
+          .eq('restaurant_id', currentRestaurantId)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: true });
+        if (!brErr && Array.isArray(fetchedBranches)) {
+          setBranches(fetchedBranches);
+        }
+      } catch (_) {}
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     } finally {
@@ -590,6 +648,28 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       if (error) throw error;
       if (data?.success === false) throw new Error(data.error || 'Could not save the restaurant profile.');
 
+      // Additive Wave 1 Storefront SEO / Analytics / Post-Order CTA update (safe if columns not yet migrated)
+      const currentRestId = getActiveRestaurantId();
+      if (currentRestId) {
+        const wave1Patch = {
+          seo_title: settings.seo_title || null,
+          seo_description: settings.seo_description || null,
+          google_analytics_id: settings.google_analytics_id || null,
+          meta_pixel_id: settings.meta_pixel_id || null,
+          confirmation_cta_label: settings.confirmation_cta_label || null,
+          confirmation_cta_url: settings.confirmation_cta_url || null,
+          cuisines: Array.isArray(settings.cuisines)
+            ? settings.cuisines
+            : String(settings.cuisines_input || '')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean),
+        };
+        try {
+          await supabase.from('restaurant_settings').update(wave1Patch).eq('restaurant_id', currentRestId);
+        } catch (_) {}
+      }
+
       localStorage.setItem('manipos_payment_methods', JSON.stringify(methods));
 
       // Keep the cached session name in sync with what was saved.
@@ -597,7 +677,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         localStorage.setItem('pin_staff_user', JSON.stringify({ ...pinUser, restaurantName: profileName }));
       }
 
-      alert('Receipt & restaurant details updated successfully!');
+      alert('Receipt & store details updated successfully!');
     } catch (err) {
       alert('Error saving settings: ' + err.message);
     } finally {
@@ -735,295 +815,589 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     settings: 'manage_settings',
   };
 
+  const activeRestaurantId = getActiveRestaurantId();
+  const activeBranchObj = branches.find((b) => b.id === activeBranchId) || null;
+  const scopedOrders = useMemo(() => {
+    if (activeBranchId === 'all') return orders;
+    return orders.filter((o) => !o.branch_id || o.branch_id === activeBranchId);
+  }, [orders, activeBranchId]);
+  const bucketCounts = useMemo(() => computeOrderBucketCounts(scopedOrders), [scopedOrders]);
+  const pinStaffName = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('pin_staff_user') || '{}').name || 'Staff';
+    } catch {
+      return 'Staff';
+    }
+  }, []);
+
+  const selectModule = (mod, tab) => {
+    setShowWebPos(false);
+    setSettleTargetOrder(null);
+    setActiveModule(mod);
+    if (tab) setActiveTab(tab);
+  };
+
+  const ORDER_BUCKETS = [
+    { id: 'active', label: 'Active Orders', count: bucketCounts.active },
+    { id: 'new', label: 'New', count: bucketCounts.new },
+    { id: 'verifying', label: 'Verifying', count: bucketCounts.verifying },
+    { id: 'processing', label: 'In Progress', count: bucketCounts.processing },
+    { id: 'ready', label: 'Ready', count: bucketCounts.ready },
+    { id: 'shipped', label: 'Shipped', count: bucketCounts.shipped },
+    { id: 'completed', label: 'Completed', count: bucketCounts.completed },
+    { id: 'cancelled', label: 'Cancelled', count: bucketCounts.cancelled },
+    { id: 'declined', label: 'Declined', count: bucketCounts.declined },
+    { id: 'failed', label: 'Payment Failed', count: bucketCounts.failed },
+    { id: 'voided', label: 'Voided', count: bucketCounts.voided },
+    { id: 'open', label: 'Pending Open', count: bucketCounts.open },
+    { id: 'unknown', label: 'Other', count: bucketCounts.unknown },
+  ];
+
+  const isLegacyDarkTab = [
+    'onboarding',
+    'analytics',
+    'staff',
+    'settings',
+    'suppliers',
+    'offers',
+    'feedback',
+    'linkhub',
+    'audit',
+  ].includes(activeTab);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="animate-spin text-emerald-400 mx-auto" size={40} />
-          <p className="text-slate-400 text-sm font-semibold tracking-wide uppercase">Loading Partner Dashboard...</p>
+          <Loader2 className="animate-spin text-emerald-700 mx-auto" size={40} />
+          <p className="text-slate-500 text-sm font-semibold tracking-wide uppercase">Loading ManiPOS Command Center...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-hidden">
-      {/* Decorative Gradients */}
-      <div className="absolute top-0 left-0 w-[40%] h-[40%] rounded-full bg-emerald-500/5 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[40%] h-[40%] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans overflow-hidden">
+      {/* 1. ORDA FAR-LEFT DEEP GREEN ICON RAIL */}
+      <nav className="w-16 sm:w-[70px] bg-[#0B3B24] text-emerald-100 flex flex-col justify-between items-center py-4 shrink-0 z-30 border-r border-emerald-950">
+        <div className="w-full flex flex-col items-center gap-2">
+          <div
+            onClick={() => selectModule('orders', 'orders')}
+            className="w-10 h-10 rounded-xl bg-white text-[#0B3B24] font-black text-lg flex items-center justify-center shadow-md cursor-pointer mb-3"
+            title={profileName || restaurantName}
+          >
+            {(profileName || restaurantName || 'M')[0].toUpperCase()}
+          </div>
 
-      {/* Header */}
-      <header className="bg-slate-900/60 backdrop-blur-md border-b border-slate-900 px-8 py-5 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-500 text-slate-950 flex items-center justify-center rounded-xl font-black text-xl shadow-lg shadow-emerald-500/10">
-            M
-          </div>
-          <div>
-            <h1 className="text-lg font-black tracking-tight text-white uppercase">{restaurantName}</h1>
-            <p className="text-slate-400 text-xs font-semibold">Management Dashboard</p>
-          </div>
+          {[
+            { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
+            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'analytics', visible: canDo(TAB_PERMISSION.analytics) },
+            { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'offers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
+            { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) },
+            { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
+            { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
+            { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
+            { id: 'account', label: 'Account', icon: Building2, tab: 'account' },
+          ]
+            .filter((item) => item.visible !== false)
+            .map((item) => {
+              const Icon = item.icon;
+              const isActive = activeModule === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectModule(item.id, item.tab)}
+                  title={item.label}
+                  className={`relative w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-emerald-700/80 text-white shadow-inner ring-1 ring-emerald-400/30'
+                      : 'text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span className="text-[9px] font-bold tracking-tight leading-none">{item.label}</span>
+                  {item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
         </div>
 
-        <div className="flex items-center gap-3">
-          {onOpenAppHome && (
-            <button
-              onClick={onOpenAppHome}
-              title="Back to the workspace"
-              className="text-xs font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <ArrowLeft size={14} />
-              Back to Workspace
-            </button>
-          )}
-
+        <div className="w-full flex flex-col items-center gap-2 pt-3 border-t border-emerald-900/80">
           <button
-            onClick={onBackToTerminal}
-            className="text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 px-5 py-2.5 rounded-xl transition-all shadow-md shadow-amber-400/10 flex items-center gap-1.5 cursor-pointer"
+            type="button"
+            onClick={() => setCloseStoreOpen(true)}
+            title={settings.store_closed ? 'Store Closed — Click to Reopen' : 'Close Store (End of Day)'}
+            className={`w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+              settings.store_closed
+                ? 'bg-rose-600 text-white'
+                : 'text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white'
+            }`}
           >
-            <span>Open POS Register</span>
-            <ChevronRight size={16} />
+            <Power size={17} />
+            <span className="text-[9px] font-bold leading-none">
+              {settings.store_closed ? 'Closed' : 'Store'}
+            </span>
           </button>
 
           {onSignOut && (
             <button
+              type="button"
               onClick={onSignOut}
-              className="text-xs font-bold text-slate-400 hover:text-red-400 bg-slate-950 border border-slate-800 hover:border-red-500/30 px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ml-2"
+              title="Sign Out"
+              className="w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 text-emerald-200/70 hover:bg-rose-950/60 hover:text-rose-200 transition cursor-pointer"
             >
-              Sign Out
+              <LogOut size={17} />
+              <span className="text-[9px] font-bold leading-none">Exit</span>
             </button>
           )}
         </div>
-      </header>
+      </nav>
 
-      <div className="flex flex-1 z-10">
-        
-        {/* Navigation Sidebar */}
-        <aside className="w-64 bg-slate-900/40 border-r border-slate-900/80 p-6 space-y-2 shrink-0">
-          {!setupCompleted ? (
-            <div className="space-y-4">
-              <button
-                onClick={() => setActiveTab('onboarding')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/10`}
-              >
-                <ShieldCheck size={18} />
-                Store Setup Checklist
-              </button>
+      {/* 2. CONTEXTUAL SECONDARY WHITE SIDEBAR (ORDA SUB-NAVIGATION) */}
+      <aside className="w-60 bg-white border-r border-slate-200 hidden md:flex flex-col shrink-0 z-20">
+        <div className="px-4 py-4 border-b border-slate-100">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            {activeModule} Module
+          </p>
+          <h2 className="text-sm font-black text-slate-900 truncate mt-0.5">
+            {profileName || restaurantName}
+          </h2>
+        </div>
 
-              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs">
-                <span className="px-2 py-0.5 bg-amber-400/10 text-amber-400 font-bold rounded text-[10px] uppercase">Setup In Progress</span>
-                <p className="text-slate-400 leading-relaxed">Complete your initial store setup checklist to unlock full partner management modules.</p>
-              </div>
-            </div>
-          ) : (
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {!setupCompleted && (
+            <button
+              type="button"
+              onClick={() => selectModule('dashboard', 'onboarding')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold mb-2 ${
+                activeTab === 'onboarding'
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+              }`}
+            >
+              <ShieldCheck size={15} />
+              <span>Finish Setup Checklist</span>
+            </button>
+          )}
+
+          {activeModule === 'orders' && (
             <>
-              {/* PRIMARY WORKSPACE MODULES */}
+              {ORDER_BUCKETS.map((b) => {
+                const selected = !showWebPos && activeTab === 'orders' && orderBucket === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => {
+                      setShowWebPos(false);
+                      setSettleTargetOrder(null);
+                      setActiveTab('orders');
+                      setOrderBucket(b.id);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition ${
+                      selected
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>{b.label}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                        selected ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {b.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </>
+          )}
+
+          {activeModule === 'dashboard' && (
+            <>
               {canDo(TAB_PERMISSION.analytics) && (
-              <button
-                onClick={() => setActiveTab('analytics')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === 'analytics' 
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                }`}
-              >
-                <TrendingUp size={18} />
-                Analytics & Sales
-              </button>
-              )}
-          
-              {canDo(TAB_PERMISSION.menu) && (
-              <button
-                onClick={() => setActiveTab('menu')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === 'menu' 
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                }`}
-              >
-                <Package size={18} />
-                Menu Management
-              </button>
-              )}
-
-              {canDo(TAB_PERMISSION.staff) && (
-              <button
-                onClick={() => setActiveTab('staff')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === 'staff' 
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10' 
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-                }`}
-              >
-                <Users size={18} />
-                Staff & Access
-              </button>
-              )}
-
-              <div className="pt-3 pb-1 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Operations
-              </div>
-
-              <button
-                onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-              >
-                <ChefHat size={18} />
-                Kitchen Display
-              </button>
-
-              <button
-                onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-              >
-                <Armchair size={18} />
-                Floor & Reservations
-              </button>
-
-              <button
-                onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-              >
-                <Package size={18} />
-                Inventory & Recipes
-              </button>
-
-              {canDo(TAB_PERMISSION.offers) && (
-              <button
-                onClick={() => setActiveTab("offers")}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === "offers"
-                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                }`}
-              >
-                <Gift size={18} />
-                Offers & Promotions
-              </button>
-              )}
-
-              {canDo(TAB_PERMISSION.feedback) && (
-              <button
-                onClick={() => setActiveTab("feedback")}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
-                  activeTab === "feedback"
-                    ? "bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/10"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                }`}
-              >
-                <MessageSquare size={18} />
-                Customer Feedback
-              </button>
-              )}
-
-              {/* COLLAPSIBLE SETTINGS & TOOLS GROUP */}
-              <div className="pt-2">
                 <button
-                  onClick={() => setShowSettingsMenu(v => !v)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-all border ${
-                    ['onboarding', 'suppliers', 'feedback', 'linkhub', 'audit', 'settings'].includes(activeTab)
-                      ? 'text-amber-400 font-bold bg-slate-900/80 border-amber-400/30'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border-transparent'
+                  type="button"
+                  onClick={() => selectModule('dashboard', 'analytics')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Settings size={18} />
-                    <span>Settings & Tools</span>
-                  </div>
-                  {showSettingsMenu ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  <TrendingUp size={15} /> Analytics & Overview
                 </button>
-
-                {showSettingsMenu && (
-                  <div className="mt-1 space-y-1 pl-3 border-l-2 border-slate-800 ml-4 py-1">
-                    <button
-                      onClick={() => setActiveTab('onboarding')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'onboarding' 
-                          ? 'bg-amber-400 text-slate-950 font-bold' 
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                      }`}
-                    >
-                      <ShieldCheck size={14} />
-                      Store Setup Checklist
-                    </button>
-
-                    {canDo(TAB_PERMISSION.suppliers) && (
-                    <button
-                      onClick={() => setActiveTab('suppliers')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'suppliers'
-                          ? 'bg-amber-400 text-slate-950 font-bold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                      }`}
-                    >
-                      <Truck size={14} />
-                      Supplier Management
-                    </button>
-                    )}
-
-                    
-
-                    {canDo(TAB_PERMISSION.linkhub) && (
-                    <button
-                      onClick={() => setActiveTab('linkhub')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'linkhub'
-                          ? 'bg-amber-400 text-slate-950 font-bold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                      }`}
-                    >
-                      <Link2 size={14} />
-                      Link Hub & Socials
-                    </button>
-                    )}
-
-                    {canDo(TAB_PERMISSION.audit) && (
-                    <button
-                      onClick={() => setActiveTab('audit')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'audit'
-                          ? 'bg-amber-400 text-slate-950 font-bold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                      }`}
-                    >
-                      <ShieldCheck size={14} />
-                      Security & Audit Logs
-                    </button>
-                    )}
-
-                    {canDo(TAB_PERMISSION.settings) && (
-                    <button
-                      onClick={() => setActiveTab('settings')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-xs transition-all ${
-                        activeTab === 'settings'
-                          ? 'bg-amber-400 text-slate-950 font-bold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                      }`}
-                    >
-                      <Settings size={14} />
-                      Receipt Configuration
-                    </button>
-                    )}
-                  </div>
-                )}
+              )}
+              <button
+                type="button"
+                onClick={() => selectModule('dashboard', 'onboarding')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                  activeTab === 'onboarding' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck size={15} /> Store Setup Checklist
+              </button>
+              <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500">
+                <p className="font-black text-slate-700">Wave 2 Coming Next</p>
+                <p className="mt-0.5">Sales, Taxes, Cash Management & 6am–6am PDF EOD Reports.</p>
               </div>
             </>
           )}
-        </aside>
 
-        {/* Workspace Panels */}
-        <main className="flex-1 p-8 overflow-y-auto">
-          {!setupCompleted && activeTab !== 'onboarding' && (
-            <div className="mb-6">
+          {activeModule === 'customers' && (
+            <>
+              {canDo(TAB_PERMISSION.offers) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('customers', 'offers')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'offers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Gift size={15} /> Offers & Promotions
+                </button>
+              )}
+              {canDo(TAB_PERMISSION.feedback) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('customers', 'feedback')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'feedback' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <MessageSquare size={15} /> Customer Feedback
+                </button>
+              )}
+              <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500">
+                <p className="font-black text-slate-700">Wave 3 Coming</p>
+                <p className="mt-0.5">Full Guest CRM, Order History, Store Credit & Loyalty Points.</p>
+              </div>
+            </>
+          )}
+
+          {activeModule === 'menu' && (
+            <button
+              type="button"
+              onClick={() => selectModule('menu', 'menu')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                activeTab === 'menu' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Package size={15} /> Catalog, Modifiers & Combos
+            </button>
+          )}
+
+          {activeModule === 'settings' && (
+            <>
+              {canDo(TAB_PERMISSION.settings) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('settings', 'settings')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Settings size={15} /> Store Settings & SEO
+                </button>
+              )}
               <button
-                onClick={() => setActiveTab('onboarding')}
-                className="text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-300 px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                type="button"
+                onClick={() => selectModule('settings', 'locations')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                  activeTab === 'locations' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
               >
-                <ArrowLeft size={16} />
+                <MapPin size={15} /> Locations & Branches
+              </button>
+              {canDo(TAB_PERMISSION.staff) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('settings', 'staff')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'staff' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Users size={15} /> Staff & Access
+                </button>
+              )}
+              {canDo(TAB_PERMISSION.suppliers) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('settings', 'suppliers')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'suppliers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Truck size={15} /> Supplier Management
+                </button>
+              )}
+              {canDo(TAB_PERMISSION.linkhub) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('settings', 'linkhub')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'linkhub' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Link2 size={15} /> Link Hub & Socials
+                </button>
+              )}
+              {canDo(TAB_PERMISSION.audit) && (
+                <button
+                  type="button"
+                  onClick={() => selectModule('settings', 'audit')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    activeTab === 'audit' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <ShieldCheck size={15} /> Security & Audit Logs
+                </button>
+              )}
+            </>
+          )}
+
+          {activeModule === 'inventory' && (
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <Package size={15} /> Inventory & Recipes →
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <ChefHat size={15} /> Kitchen Display →
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <Armchair size={15} /> Floor & Reservations →
+              </button>
+            </>
+          )}
+
+          {(activeModule === 'wallet' || activeModule === 'account') && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCloseStoreOpen(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <Power size={15} /> {settings.store_closed ? 'Reopen Storefront' : 'Close Store (End of Day)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => selectModule('settings', 'locations')}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <MapPin size={15} /> Manage Locations
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {/* 3. RIGHT WORKSPACE COLUMN */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* ORDA TOP HEADER */}
+        <header className="bg-white border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-black text-slate-900 truncate">
+                  {profileName || restaurantName}
+                </h1>
+                <span
+                  onClick={() => setCloseStoreOpen(true)}
+                  className={`cursor-pointer text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                    settings.store_closed
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}
+                >
+                  {settings.store_closed ? 'Closed' : 'Open'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                ManiPOS Operations · Signed in as {pinStaffName}
+              </p>
+            </div>
+
+            {branches.length > 0 && (
+              <select
+                value={activeBranchId}
+                onChange={(e) => setActiveBranchId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+              >
+                <option value="all">All Branches ({branches.length})</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setSettleTargetOrder(null);
+                setShowWebPos((v) => !v);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <Plus size={15} />
+              <span>{showWebPos ? 'View Live Orders' : 'Create Order'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onBackToTerminal}
+              className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <span>Open POS Register</span>
+              <ChevronRight size={14} />
+            </button>
+
+            {onOpenAppHome && (
+              <button
+                type="button"
+                onClick={onOpenAppHome}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <ArrowLeft size={13} />
+                <span className="hidden sm:inline">Workspace</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={fetchDashboardData}
+              title="Refresh data"
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 cursor-pointer"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
+        </header>
+
+        {/* WORKSPACE MAIN */}
+        <main className="flex-1 p-5 sm:p-6 overflow-y-auto bg-slate-50">
+          {!setupCompleted && activeTab !== 'onboarding' && (
+            <div className="mb-5">
+              <button
+                onClick={() => selectModule('dashboard', 'onboarding')}
+                className="text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-300 px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+              >
+                <ArrowLeft size={15} />
                 <span>Back to Store Setup Checklist</span>
               </button>
             </div>
           )}
 
+          {showWebPos ? (
+            <WebPosView
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              tenantSlug={tenantSlug}
+              activeBranch={activeBranchObj}
+              staffName={pinStaffName}
+              initialOrder={settleTargetOrder}
+              onBackToOrders={() => {
+                setShowWebPos(false);
+                setSettleTargetOrder(null);
+                setActiveModule('orders');
+                setActiveTab('orders');
+              }}
+              onOrderPlaced={() => fetchDashboardData()}
+            />
+          ) : activeTab === 'orders' ? (
+            <LiveOrdersView
+              orders={orders}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              activeBranch={activeBranchId}
+              statusFilter={orderBucket}
+              onRefresh={fetchDashboardData}
+              onCreateOrder={() => {
+                setSettleTargetOrder(null);
+                setShowWebPos(true);
+              }}
+              onResumeOpenOrder={(order) => {
+                setSettleTargetOrder(order);
+                setShowWebPos(true);
+              }}
+            />
+          ) : activeTab === 'locations' ? (
+            <LocationsManagerView
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              tenantSlug={tenantSlug}
+              onBranchesUpdated={fetchDashboardData}
+            />
+          ) : activeTab === 'wallet' || activeTab === 'inventory' || activeTab === 'account' ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-3xl space-y-4">
+              <h2 className="text-lg font-black text-slate-900 capitalize">{activeTab} Hub</h2>
+              <p className="text-sm text-slate-600">
+                {activeTab === 'inventory'
+                  ? 'Launch Stock, Recipes, Kitchen Display (KDS), or Floor Plan directly.'
+                  : activeTab === 'wallet'
+                    ? 'Online Paystack settlements, withdrawal bank settings, and automated EOD reports arrive in Waves 2–5.'
+                    : 'Manage storefront Open/Closed pause schedule, locations, and POS register access.'}
+              </p>
+              <div className="flex flex-wrap gap-3 pt-2">
+                {activeTab === 'inventory' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+                    >
+                      Open Inventory & Recipes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs font-bold hover:bg-slate-100"
+                    >
+                      Open Kitchen Display
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs font-bold hover:bg-slate-100"
+                    >
+                      Open Floor & Reservations
+                    </button>
+                  </>
+                )}
+                {activeTab === 'account' && (
+                  <button
+                    type="button"
+                    onClick={() => setCloseStoreOpen(true)}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+                  >
+                    {settings.store_closed ? 'Reopen Storefront' : 'Close Store (End of Day)'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {!showWebPos && (
+          <div className={isLegacyDarkTab ? 'bg-slate-950 text-slate-100 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-sm' : ''}>
           <AnimatePresence mode="wait">
             
             {/* STORE ONBOARDING CHECKLIST */}
@@ -1320,76 +1694,18 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
             {/* MENU PANEL */}
-            {activeTab === 'menu' && canDo(TAB_PERMISSION.menu) && (
+            {activeTab === 'menu' && !showWebPos && canDo(TAB_PERMISSION.menu) && (
               <motion.div
                 key="menu"
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
+                exit={{ opacity: 0, y: -12 }}
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-black text-white">Menu Management</h2>
-                    <p className="text-slate-400 text-sm mt-1">Manage catalog details, pricing structures, and stock availability status.</p>
-                  </div>
-                  <button
-                    onClick={() => setEditingItem({ name: '', price: '', category: '', description: '', is_available: true })}
-                    className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
-                  >
-                    <Plus size={16} /> Add Menu Item
-                  </button>
-                </div>
-
-                {/* Menu Table */}
-                <div className="bg-slate-900/40 border border-slate-900 rounded-2xl overflow-hidden shadow-inner">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-900/80 bg-slate-900/20 text-xs text-slate-500 font-bold uppercase tracking-wider">
-                        <th className="py-4 px-6">Name</th>
-                        <th className="py-4 px-6">Category</th>
-                        <th className="py-4 px-6">Price</th>
-                        <th className="py-4 px-6">Status</th>
-                        <th className="py-4 px-6 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-900/80 text-sm">
-                      {menuItems.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-900/20 transition-colors">
-                          <td className="py-4 px-6 font-bold text-white">{item.name}</td>
-                          <td className="py-4 px-6 text-slate-400">{item.category}</td>
-                          <td className="py-4 px-6 text-slate-200">KES {item.price.toLocaleString()}</td>
-                          <td className="py-4 px-6">
-                            <button
-                              onClick={() => handleToggleAvailability(item)}
-                              className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
-                                item.is_available 
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                              }`}
-                            >
-                              {item.is_available ? 'Available' : 'Sold Out'}
-                            </button>
-                          </td>
-                          <td className="py-4 px-6 text-right space-x-2">
-                            <button
-                              onClick={() => setEditingItem(item)}
-                              className="text-slate-400 hover:text-white p-1"
-                            >
-                              <Edit3 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMenuItem(item.id)}
-                              className="text-slate-500 hover:text-rose-400 p-1"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <OrdaCatalogView
+                  restaurantId={activeRestaurantId}
+                  branches={branches}
+                  onCatalogChanged={fetchDashboardData}
+                />
               </motion.div>
             )}
 
@@ -1724,6 +2040,98 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                             </button>
                           </span>
                         ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Wave 1 Storefront SEO, Tracking & Post-Order Confirmation CTA */}
+                  <div className="pt-4 border-t border-slate-800 space-y-4">
+                    <div>
+                      <h3 className="text-sm font-black text-white">Storefront SEO, Analytics & Confirmation CTA</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Boost Google search discoverability, attach tracking pixels, and customize post-checkout links.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">SEO Page Title</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Pot of Jollof — Westlands"
+                          value={settings.seo_title || ''}
+                          onChange={(e) => setSettings({ ...settings, seo_title: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Cuisines (Comma-Separated)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. West African, Nigerian, Grill"
+                          value={Array.isArray(settings.cuisines) ? settings.cuisines.join(', ') : (settings.cuisines_input || '')}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            cuisines_input: e.target.value,
+                            cuisines: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+                          })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">SEO Meta Description</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Order authentic smoky Jollof rice, suya & grilled chicken delivered fast in Nairobi..."
+                        value={settings.seo_description || ''}
+                        onChange={(e) => setSettings({ ...settings, seo_description: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Google Analytics 4 ID</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. G-XXXXXXXXXX"
+                          value={settings.google_analytics_id || ''}
+                          onChange={(e) => setSettings({ ...settings, google_analytics_id: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Meta Pixel ID</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 123456789012345"
+                          value={settings.meta_pixel_id || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_pixel_id: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Post-Order Button Label</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Follow Us on Instagram"
+                          value={settings.confirmation_cta_label || ''}
+                          onChange={(e) => setSettings({ ...settings, confirmation_cta_label: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Post-Order Button URL</label>
+                        <input
+                          type="url"
+                          placeholder="https://instagram.com/..."
+                          value={settings.confirmation_cta_url || ''}
+                          onChange={(e) => setSettings({ ...settings, confirmation_cta_url: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                        />
                       </div>
                     </div>
                   </div>
@@ -2474,6 +2882,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             )}
 
           </AnimatePresence>
+          </div>
+          )}
         </main>
       </div>
 
@@ -2940,6 +3350,16 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           </div>
         )}
       </AnimatePresence>
+
+      <CloseStoreModal
+        open={closeStoreOpen}
+        onClose={() => setCloseStoreOpen(false)}
+        restaurantId={activeRestaurantId}
+        restaurantName={profileName || restaurantName}
+        currentlyClosed={Boolean(settings.store_closed)}
+        nextOpeningAt={settings.next_opening_at || ''}
+        onUpdated={(patch) => setSettings((prev) => ({ ...prev, ...patch }))}
+      />
 
     </div>
   );

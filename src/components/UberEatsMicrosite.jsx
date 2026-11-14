@@ -11,27 +11,37 @@ import { supabase } from '../lib/supabase';
 import { initiateStkPush } from '../lib/mpesa';
 
 function normaliseTenantMenu(tenant) {
-    if (!tenant?.menu?.length) return null;
     const groups = new Map();
-    tenant.menu.forEach((item, index) => {
+    (tenant?.menu || []).forEach((item, index) => {
         if (item.is_available === false || item.show_on_microsite === false) return;
         const category = item.category || 'Menu';
         const subcategory = item.subcategory || '';
         const key = `${category}||${subcategory}`;
         if (!groups.has(key)) groups.set(key, { category, subcategory, items: [] });
+        const variations = Array.isArray(item.variations) ? item.variations : [];
+        const additions = Array.isArray(item.additions) ? item.additions : [];
+        const basePrice = Number(item.price) || 0;
+        const effectivePrice = item.effective_price !== undefined ? Number(item.effective_price) : basePrice;
         groups.get(key).items.push({
             id: item.id || `tenant-item-${index}`,
             title: item.name || item.title || 'Menu item',
             description: item.description || '',
-            price: Number(item.price) || 0,
+            price: effectivePrice,
+            originalPrice: basePrice,
             image_url: item.image_url || tenant.logo,
             category,
             subcategory,
-            hasCustomizations: (item.modifierGroups || []).length > 0,
+            branchId: item.branch_id || null,
+            isUpsell: item.is_upsell === true,
+            isAlcoholic: item.is_alcoholic === true,
+            variations,
+            additions,
+            hasCustomizations: (item.modifierGroups || []).length > 0 || variations.length > 0 || additions.length > 0,
             modifiers: (item.modifierGroups || []).map((g) => ({
                 id: g.id,
                 title: g.name,
                 required: g.is_required === true,
+                allowMultiple: g.allow_multiple === true,
                 max: g.max_selected || 1,
                 min: g.min_selected || 0,
                 options: (g.options || []).map((o, i) => ({
@@ -46,6 +56,43 @@ function normaliseTenantMenu(tenant) {
             rating: null,
         });
     });
+
+    const categories = Array.from(groups.values()).map((g) => ({
+        name: g.subcategory ? `${g.category} · ${g.subcategory}` : g.category,
+        items: g.items,
+    }));
+
+    if (Array.isArray(tenant?.combos) && tenant.combos.length > 0) {
+        categories.unshift({
+            name: 'Combos & Deals',
+            items: tenant.combos.map((c) => ({
+                id: `combo-${c.id}`,
+                title: c.name,
+                description:
+                    Array.isArray(c.free_items) && c.free_items.length > 0
+                        ? `Combo bundle (${c.free_items.length} included items)`
+                        : 'Special combo bundle',
+                price: Number(c.price) || 0,
+                originalPrice: Number(c.price) || 0,
+                image_url: c.image_url || tenant.logo,
+                category: 'Combos & Deals',
+                subcategory: '',
+                branchId: null,
+                isUpsell: false,
+                isCombo: true,
+                variations: [],
+                additions: [],
+                hasCustomizations: false,
+                modifiers: [],
+                isSoldOut: false,
+                isPopular: true,
+                rating: null,
+            })),
+        });
+    }
+
+    if (categories.length === 0) return null;
+
     return {
         store: {
             name: tenant.name,
@@ -57,10 +104,7 @@ function normaliseTenantMenu(tenant) {
             hero_image: tenant.cover,
             logo: tenant.logo,
         },
-        categories: Array.from(groups.values()).map((g) => ({
-            name: g.subcategory ? `${g.category} · ${g.subcategory}` : g.category,
-            items: g.items,
-        })),
+        categories,
     };
 }
 
@@ -577,6 +621,17 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                         {/* Integrated Order Rating & Experience Feedback */}
                         <OrderRatingWidget order={orderSuccess} tenant={tenant} />
 
+                        {tenant?.confirmationCta?.label && tenant?.confirmationCta?.url && (
+                            <a
+                                href={tenant.confirmationCta.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full py-3.5 bg-[#06C167] hover:bg-[#05a357] text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                            >
+                                {tenant.confirmationCta.label}
+                            </a>
+                        )}
+
                         <button
                             onClick={() => setOrderSuccess(null)}
                             className="w-full py-4 bg-black hover:bg-neutral-850 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
@@ -624,7 +679,50 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     const [searchQuery, setSearchQuery] = useState('');
     const [diningMode, setDiningMode] = useState('delivery'); // 'delivery' | 'pickup' | 'dine_in'
     const [tableNumber, setTableNumber] = useState('');
+    const [selectedBranchId, setSelectedBranchId] = useState(() => tenant?.branches?.[0]?.id || null);
     const [activeCategory, setActiveCategory] = useState(sourceMenu.categories[0]?.name || 'Most Popular');
+
+    // Sync branch selection if tenant changes
+    useEffect(() => {
+        if (tenant?.branches?.length && !tenant.branches.some((b) => b.id === selectedBranchId)) {
+            setSelectedBranchId(tenant.branches[0].id);
+        }
+    }, [tenant?.branches]);
+
+    // Dynamic SEO & Analytics injection (GA4 + Meta Pixel)
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        const seoTitle = tenant?.seo?.title || (tenant?.name ? `${tenant.name} — Order Online` : '');
+        if (seoTitle) document.title = seoTitle;
+        if (tenant?.seo?.description) {
+            let meta = document.querySelector('meta[name="description"]');
+            if (!meta) {
+                meta = document.createElement('meta');
+                meta.name = 'description';
+                document.head.appendChild(meta);
+            }
+            meta.content = tenant.seo.description;
+        }
+        const gaId = tenant?.analytics?.googleAnalyticsId?.trim();
+        if (gaId && /^G-[A-Z0-9]+$/i.test(gaId) && !document.getElementById(`ga-script-${gaId}`)) {
+            const s1 = document.createElement('script');
+            s1.id = `ga-script-${gaId}`;
+            s1.async = true;
+            s1.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
+            document.head.appendChild(s1);
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = function gtag() { window.dataLayer.push(arguments); };
+            window.gtag('js', new Date());
+            window.gtag('config', gaId);
+        }
+        const pixelId = tenant?.analytics?.metaPixelId?.trim();
+        if (pixelId && /^[0-9]+$/.test(pixelId) && !document.getElementById(`fb-pixel-${pixelId}`)) {
+            const s = document.createElement('script');
+            s.id = `fb-pixel-${pixelId}`;
+            s.text = `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixelId}');fbq('track','PageView');`;
+            document.head.appendChild(s);
+        }
+    }, [tenant?.seo, tenant?.analytics, tenant?.name]);
 
     useEffect(() => {
         if (!sourceMenu.categories.some((cat) => cat.name === activeCategory)) {
@@ -1013,6 +1111,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     // Modal Customization State (when an item modal is open)
     const [modalQuantity, setModalQuantity] = useState(1);
     const [modalSelections, setModalSelections] = useState({}); // { [modId]: selectedOptionId or array of optionIds }
+    const [modalModCounts, setModalModCounts] = useState({}); // { [modId]: { [optId]: count } } for allow_multiple
+    const [modalVariation, setModalVariation] = useState(null);
+    const [modalAdditions, setModalAdditions] = useState([]);
     const [modalSpecialInstructions, setModalSpecialInstructions] = useState('');
     const [validationError, setValidationError] = useState('');
 
@@ -1192,20 +1293,36 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         alert('You have logged out.');
     };
 
-    // Filtered Menu
+    // Filtered Menu (supports Search + Multi-Branch isolation)
     const filteredCategories = useMemo(() => {
-        if (!searchQuery.trim()) return allCategories;
         const query = searchQuery.toLowerCase().trim();
         return allCategories
             .map(cat => ({
                 ...cat,
-                items: cat.items.filter(it => 
-                    it.title.toLowerCase().includes(query) || 
-                    (it.description && it.description.toLowerCase().includes(query))
-                )
+                items: cat.items.filter(it => {
+                    if (selectedBranchId && it.branchId && it.branchId !== selectedBranchId) return false;
+                    if (!query) return true;
+                    return (
+                        it.title.toLowerCase().includes(query) ||
+                        (it.description && it.description.toLowerCase().includes(query))
+                    );
+                })
             }))
             .filter(cat => cat.items.length > 0);
-    }, [allCategories, searchQuery]);
+    }, [allCategories, searchQuery, selectedBranchId]);
+
+    const upsellItems = useMemo(() => {
+        const inCartIds = new Set(cart.map(c => c.id));
+        const pool = [];
+        allCategories.forEach(cat => {
+            cat.items.forEach(it => {
+                if (it.isUpsell && !inCartIds.has(it.id) && (!selectedBranchId || !it.branchId || it.branchId === selectedBranchId)) {
+                    pool.push(it);
+                }
+            });
+        });
+        return pool.slice(0, 6);
+    }, [allCategories, cart, selectedBranchId]);
 
     // Listen to scroll for sticky nav shadow and category scrollspy
     useEffect(() => {
@@ -1345,12 +1462,20 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         setModalQuantity(1);
         setModalSpecialInstructions('');
         setValidationError('');
+        setModalVariation(item.variations && item.variations.length > 0 ? item.variations[0] : null);
+        setModalAdditions([]);
 
         // Initialize default selections
         const initial = {};
+        const initialCounts = {};
         if (item.modifiers && item.modifiers.length > 0) {
             item.modifiers.forEach(mod => {
-                if (mod.required && mod.options && mod.options.length > 0) {
+                if (mod.allowMultiple) {
+                    initialCounts[mod.id] = {};
+                    if (mod.required && mod.options && mod.options.length > 0) {
+                        initialCounts[mod.id][mod.options[0].id] = 1;
+                    }
+                } else if (mod.required && mod.options && mod.options.length > 0) {
                     // Default select the first option for required single-select
                     initial[mod.id] = mod.options[0].id;
                 } else if (!mod.required) {
@@ -1359,37 +1484,63 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             });
         }
         setModalSelections(initial);
+        setModalModCounts(initialCounts);
     };
 
     // Calculate dynamic price inside modal
     const modalItemPrice = useMemo(() => {
         if (!selectedItem) return 0;
-        let base = selectedItem.price;
+        let base =
+            modalVariation && Number(modalVariation.price || 0) > 0
+                ? Number(modalVariation.price)
+                : selectedItem.price;
         if (selectedItem.modifiers) {
             selectedItem.modifiers.forEach(mod => {
-                const sel = modalSelections[mod.id];
-                if (Array.isArray(sel)) {
-                    sel.forEach(optId => {
+                if (mod.allowMultiple) {
+                    const counts = modalModCounts[mod.id] || {};
+                    Object.entries(counts).forEach(([optId, qty]) => {
                         const opt = mod.options.find(o => o.id === optId);
-                        if (opt) base += opt.price;
+                        if (opt && qty > 0) base += opt.price * Number(qty);
                     });
-                } else if (sel) {
-                    const opt = mod.options.find(o => o.id === sel);
-                    if (opt) base += opt.price;
+                } else {
+                    const sel = modalSelections[mod.id];
+                    if (Array.isArray(sel)) {
+                        sel.forEach(optId => {
+                            const opt = mod.options.find(o => o.id === optId);
+                            if (opt) base += opt.price;
+                        });
+                    } else if (sel) {
+                        const opt = mod.options.find(o => o.id === sel);
+                        if (opt) base += opt.price;
+                    }
                 }
             });
         }
+        if (selectedItem.additions && modalAdditions.length > 0) {
+            modalAdditions.forEach(addName => {
+                const found = selectedItem.additions.find(a => a.name === addName);
+                if (found) base += Number(found.price || 0);
+            });
+        }
         return base;
-    }, [selectedItem, modalSelections]);
+    }, [selectedItem, modalSelections, modalModCounts, modalVariation, modalAdditions]);
 
     // Validate and Add to Cart
     const handleAddToCartFromModal = () => {
         if (!selectedItem) return;
 
-        // Check required modifiers
+        // Check required modifiers & min selection rules
         if (selectedItem.modifiers) {
             for (const mod of selectedItem.modifiers) {
-                if (mod.required) {
+                if (mod.allowMultiple) {
+                    const counts = modalModCounts[mod.id] || {};
+                    const picked = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
+                    const minReq = mod.required ? Math.max(1, mod.min || 1) : (mod.min || 0);
+                    if (picked < minReq) {
+                        setValidationError(`Please select at least ${minReq} option(s) for "${mod.title}"`);
+                        return;
+                    }
+                } else if (mod.required) {
                     const sel = modalSelections[mod.id];
                     if (!sel || (Array.isArray(sel) && sel.length === 0)) {
                         setValidationError(`Please make a selection for "${mod.title}"`);
@@ -1401,33 +1552,58 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
         // Build list of chosen modifier texts
         const chosenModifierLabels = [];
+        if (modalVariation?.name) {
+            chosenModifierLabels.push(`Size: ${modalVariation.name}`);
+        }
         if (selectedItem.modifiers) {
             selectedItem.modifiers.forEach(mod => {
-                const sel = modalSelections[mod.id];
-                if (Array.isArray(sel)) {
-                    sel.forEach(optId => {
-                        const opt = mod.options.find(o => o.id === optId);
+                if (mod.allowMultiple) {
+                    const counts = modalModCounts[mod.id] || {};
+                    Object.entries(counts).forEach(([optId, qty]) => {
+                        if (qty > 0) {
+                            const opt = mod.options.find(o => o.id === optId);
+                            if (opt) {
+                                chosenModifierLabels.push(
+                                    `${qty > 1 ? `${qty}x ` : ''}${opt.name}${opt.price > 0 ? ` (+KES ${(opt.price * qty).toLocaleString()})` : ''}`
+                                );
+                            }
+                        }
+                    });
+                } else {
+                    const sel = modalSelections[mod.id];
+                    if (Array.isArray(sel)) {
+                        sel.forEach(optId => {
+                            const opt = mod.options.find(o => o.id === optId);
+                            if (opt) {
+                                chosenModifierLabels.push(`${opt.name}${opt.price > 0 ? ` (+KES ${opt.price.toLocaleString()})` : ''}`);
+                            }
+                        });
+                    } else if (sel) {
+                        const opt = mod.options.find(o => o.id === sel);
                         if (opt) {
                             chosenModifierLabels.push(`${opt.name}${opt.price > 0 ? ` (+KES ${opt.price.toLocaleString()})` : ''}`);
                         }
-                    });
-                } else if (sel) {
-                    const opt = mod.options.find(o => o.id === sel);
-                    if (opt) {
-                        chosenModifierLabels.push(`${opt.name}${opt.price > 0 ? ` (+KES ${opt.price.toLocaleString()})` : ''}`);
                     }
                 }
             });
         }
+        if (modalAdditions.length > 0) {
+            modalAdditions.forEach(addName => {
+                const found = (selectedItem.additions || []).find(a => a.name === addName);
+                chosenModifierLabels.push(
+                    `+${addName}${found && Number(found.price) > 0 ? ` (+KES ${Number(found.price).toLocaleString()})` : ''}`
+                );
+            });
+        }
 
-        // Create unique cart line key based on item + modifiers + instructions
-        const lineKey = `${selectedItem.id}-${JSON.stringify(modalSelections)}-${modalSpecialInstructions.trim()}`;
+        // Create unique cart line key based on item + variation + modifiers + additions + instructions
+        const lineKey = `${selectedItem.id}-${modalVariation?.name || ''}-${JSON.stringify(modalSelections)}-${JSON.stringify(modalModCounts)}-${JSON.stringify(modalAdditions)}-${modalSpecialInstructions.trim()}`;
 
         const cartItem = {
             id: selectedItem.id,
             lineKey,
-            title: selectedItem.title,
-            basePrice: selectedItem.price,
+            title: modalVariation?.name ? `${selectedItem.title} (${modalVariation.name})` : selectedItem.title,
+            basePrice: modalVariation && Number(modalVariation.price || 0) > 0 ? Number(modalVariation.price) : selectedItem.price,
             totalPrice: modalItemPrice,
             image_url: selectedItem.image_url,
             quantity: modalQuantity,
@@ -1519,16 +1695,34 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 brand: (tenant?.name || 'ManiPOS').toUpperCase(),
                 ...(tenant?.id ? { restaurant_id: tenant.id } : {}),
                 order_channel: 'Online',
+                sales_channel: 'Microsite',
+                ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
                 notes: finalNotes,
                 guest_id: guestUser ? guestUser.id : null
             };
 
-            // 1. Insert order header
-            const { data: orderData, error: orderError } = await supabase
-                .from('pos_orders')
-                .insert([orderPayload])
-                .select('id, ticket_number')
-                .single();
+            // 1. Insert order header (with graceful fallback for optional Wave 1 columns)
+            let orderInsertAttempt = { ...orderPayload };
+            let orderData = null;
+            let orderError = null;
+            for (const optCol of ['sales_channel', 'branch_id', null]) {
+                const res = await supabase
+                    .from('pos_orders')
+                    .insert([orderInsertAttempt])
+                    .select('id, ticket_number')
+                    .single();
+                orderData = res.data;
+                orderError = res.error;
+                if (!orderError) break;
+                const msg = String(orderError.message || '');
+                if (optCol && msg.toLowerCase().includes(optCol)) {
+                    const next = { ...orderInsertAttempt };
+                    delete next[optCol];
+                    orderInsertAttempt = next;
+                } else {
+                    break;
+                }
+            }
 
             if (orderError) throw orderError;
 
@@ -1709,6 +1903,17 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     return (
         <div className="min-h-screen bg-[#f6f6f6] text-[#000000] font-sans antialiased selection:bg-black selection:text-white pb-28">
 
+            {tenant?.storeClosed && (
+                <div className="bg-rose-600 text-white px-4 py-2.5 text-center text-xs sm:text-sm font-bold flex flex-wrap items-center justify-center gap-2">
+                    <span>Store is temporarily closed for online orders.</span>
+                    {tenant?.nextOpeningAt && (
+                        <span className="bg-black/25 px-2.5 py-0.5 rounded-full text-[11px]">
+                            Reopens: {new Date(tenant.nextOpeningAt).toLocaleString()}
+                        </span>
+                    )}
+                </div>
+            )}
+
             {/* ========================================================= */}
             {/* 1. TOP HEADER (UBER EATS NAVIGATION) */}
             {/* ========================================================= */}
@@ -1730,12 +1935,27 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                         </div>
                     </div>
 
-                    {/* Middle: Deliver To Pill (Desktop) */}
-                    <div className="hidden md:flex items-center gap-2 text-xs text-[#545454] bg-[#f3f3f3] hover:bg-[#eaeaea] px-4 py-2 rounded-full cursor-pointer transition-colors"
-                         onClick={() => setStoreInfoOpen(true)}>
-                        <MapPin size={14} className="text-black" />
-                        <span className="font-medium text-black">{store.address || 'Nairobi'}</span>
-                        {store.delivery_fee && (<><span>•</span><span className="text-[#06C167] font-semibold">{store.delivery_fee}</span></>)}
+                    {/* Middle: Branch Switcher & Deliver To Pill (Desktop) */}
+                    <div className="hidden md:flex items-center gap-2">
+                        {Array.isArray(tenant?.branches) && tenant.branches.length > 1 && (
+                            <select
+                                value={selectedBranchId || ''}
+                                onChange={(e) => setSelectedBranchId(e.target.value)}
+                                className="bg-[#f3f3f3] hover:bg-[#eaeaea] text-black text-xs font-bold px-3.5 py-2 rounded-full outline-none cursor-pointer"
+                            >
+                                {tenant.branches.map((b) => (
+                                    <option key={b.id} value={b.id}>
+                                        {b.name}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                        <div className="flex items-center gap-2 text-xs text-[#545454] bg-[#f3f3f3] hover:bg-[#eaeaea] px-4 py-2 rounded-full cursor-pointer transition-colors"
+                             onClick={() => setStoreInfoOpen(true)}>
+                            <MapPin size={14} className="text-black" />
+                            <span className="font-medium text-black">{store.address || 'Nairobi'}</span>
+                            {store.delivery_fee && (<><span>•</span><span className="text-[#06C167] font-semibold">{store.delivery_fee}</span></>)}
+                        </div>
                     </div>
 
                     {/* Right: Search, Customer Login & Cart */}
@@ -1975,10 +2195,15 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                 </p>
                                             </div>
 
-                                            <div className="mt-3 flex items-center gap-2">
+                                            <div className="mt-3 flex items-center gap-2 flex-wrap">
                                                 <span className="font-extrabold text-sm sm:text-base text-black">
                                                     KES {item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </span>
+                                                {item.originalPrice > item.price && (
+                                                    <span className="text-xs line-through text-[#8c8c8c]">
+                                                        KES {item.originalPrice.toLocaleString()}
+                                                    </span>
+                                                )}
                                                 {item.rating && (
                                                     <span className="text-[11px] font-medium text-[#047857] bg-[#ecfdf5] px-2 py-0.5 rounded-full flex items-center gap-1">
                                                         👍 {item.rating}
@@ -2082,32 +2307,132 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                     </div>
                                 )}
 
+                                {/* Variations Selector (Wave 1) */}
+                                {selectedItem.variations && selectedItem.variations.length > 0 && (
+                                    <div className="bg-[#f9f9f9] border border-[#e8e8e8] rounded-2xl p-4 space-y-2.5">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-bold text-sm text-black">Choose Size / Variation</h4>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded-full">
+                                                Required
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {selectedItem.variations.map(v => {
+                                                const active = modalVariation?.name === v.name;
+                                                return (
+                                                    <button
+                                                        key={v.name}
+                                                        type="button"
+                                                        onClick={() => setModalVariation(v)}
+                                                        className={`p-3 rounded-xl border text-left transition-all ${
+                                                            active
+                                                                ? 'bg-white border-black shadow-sm font-bold'
+                                                                : 'bg-white/60 border-[#e2e2e2] hover:border-[#a3a3a3]'
+                                                        }`}
+                                                    >
+                                                        <div className="text-xs text-black">{v.name}</div>
+                                                        <div className="text-[11px] font-extrabold text-[#047857]">
+                                                            KES {Number(v.price || 0).toLocaleString()}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Modifier Groups */}
                                 {selectedItem.modifiers && selectedItem.modifiers.length > 0 && (
                                     <div className="space-y-6 pt-2">
                                         {selectedItem.modifiers.map(mod => {
-                                            const isMulti = !mod.required && mod.max > 1;
+                                            const isMulti = mod.allowMultiple || (!mod.required && mod.max > 1);
+                                            const groupCounts = modalModCounts[mod.id] || {};
+                                            const totalPickedCount = mod.allowMultiple
+                                                ? Object.values(groupCounts).reduce((s, n) => s + Number(n || 0), 0)
+                                                : isMulti
+                                                    ? (modalSelections[mod.id] || []).length
+                                                    : (modalSelections[mod.id] ? 1 : 0);
                                             return (
                                                 <div key={mod.id} className="bg-[#f9f9f9] border border-[#e8e8e8] rounded-2xl p-4">
                                                     <div className="flex items-center justify-between mb-3">
                                                         <div>
                                                             <h4 className="font-bold text-sm text-black">{mod.title}</h4>
                                                             <p className="text-[11px] text-[#757575]">
-                                                                {mod.required ? 'Required • Choose 1' : `Optional • Select up to ${mod.max}`}
+                                                                {mod.required
+                                                                    ? `Required • Choose ${mod.min > 0 ? `at least ${mod.min}` : 1}${mod.max > 1 ? ` (up to ${mod.max})` : ''}`
+                                                                    : `Optional • Select up to ${mod.max}`}
                                                             </p>
                                                         </div>
                                                         {mod.required && (
                                                             <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded-full">
-                                                                Required
+                                                                {totalPickedCount >= Math.max(1, mod.min || 1) ? '✓ Done' : 'Required'}
                                                             </span>
                                                         )}
                                                     </div>
 
                                                     <div className="space-y-2">
                                                         {mod.options.map(opt => {
-                                                            const isSelected = isMulti
-                                                                ? (modalSelections[mod.id] || []).includes(opt.id)
-                                                                : modalSelections[mod.id] === opt.id;
+                                                            const optQty = Number(groupCounts[opt.id] || 0);
+                                                            const isSelected = mod.allowMultiple
+                                                                ? optQty > 0
+                                                                : isMulti
+                                                                    ? (modalSelections[mod.id] || []).includes(opt.id)
+                                                                    : modalSelections[mod.id] === opt.id;
+
+                                                            if (mod.allowMultiple) {
+                                                                return (
+                                                                    <div
+                                                                        key={opt.id}
+                                                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                                                            opt.isAvailable === false
+                                                                                ? 'opacity-50 bg-[#f3f3f3] border-transparent'
+                                                                                : optQty > 0
+                                                                                    ? 'bg-white border-black shadow-sm font-semibold'
+                                                                                    : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
+                                                                        }`}
+                                                                    >
+                                                                        <div>
+                                                                            <p className="text-xs text-black font-semibold">{opt.name}</p>
+                                                                            {opt.price > 0 && (
+                                                                                <p className="text-[11px] text-[#047857] font-bold">+KES {opt.price.toLocaleString()}</p>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <button
+                                                                                type="button"
+                                                                                disabled={opt.isAvailable === false || optQty <= 0}
+                                                                                onClick={() => {
+                                                                                    setModalModCounts(prev => {
+                                                                                        const cur = { ...(prev[mod.id] || {}) };
+                                                                                        const nextQty = Math.max(0, Number(cur[opt.id] || 0) - 1);
+                                                                                        if (nextQty === 0) delete cur[opt.id];
+                                                                                        else cur[opt.id] = nextQty;
+                                                                                        return { ...prev, [mod.id]: cur };
+                                                                                    });
+                                                                                }}
+                                                                                className="w-7 h-7 rounded-full bg-[#f3f3f3] hover:bg-[#e2e2e2] disabled:opacity-40 flex items-center justify-center text-black"
+                                                                            >
+                                                                                <Minus size={12} />
+                                                                            </button>
+                                                                            <span className="w-4 text-center text-xs font-black">{optQty}</span>
+                                                                            <button
+                                                                                type="button"
+                                                                                disabled={opt.isAvailable === false || (mod.max > 0 && totalPickedCount >= mod.max)}
+                                                                                onClick={() => {
+                                                                                    setModalModCounts(prev => {
+                                                                                        const cur = { ...(prev[mod.id] || {}) };
+                                                                                        cur[opt.id] = Number(cur[opt.id] || 0) + 1;
+                                                                                        return { ...prev, [mod.id]: cur };
+                                                                                    });
+                                                                                }}
+                                                                                className="w-7 h-7 rounded-full bg-black text-white hover:bg-[#262626] disabled:opacity-40 flex items-center justify-center"
+                                                                            >
+                                                                                <Plus size={12} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }
 
                                                             return (
                                                                 <label
@@ -2170,6 +2495,43 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                )}
+
+                                {/* Additions / Extras (Wave 1) */}
+                                {selectedItem.additions && selectedItem.additions.length > 0 && (
+                                    <div className="bg-[#f9f9f9] border border-[#e8e8e8] rounded-2xl p-4 space-y-2">
+                                        <h4 className="font-bold text-sm text-black">Optional Additions</h4>
+                                        <div className="space-y-2">
+                                            {selectedItem.additions.map(add => {
+                                                const checked = modalAdditions.includes(add.name);
+                                                return (
+                                                    <label
+                                                        key={add.name}
+                                                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                                                            checked ? 'bg-white border-black shadow-sm font-semibold' : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
+                                                        }`}
+                                                    >
+                                                        <span className="text-xs text-black">{add.name}</span>
+                                                        <div className="flex items-center gap-2.5">
+                                                            {Number(add.price || 0) > 0 && (
+                                                                <span className="text-xs font-bold text-[#047857]">+KES {Number(add.price).toLocaleString()}</span>
+                                                            )}
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={() =>
+                                                                    setModalAdditions(prev =>
+                                                                        checked ? prev.filter(n => n !== add.name) : [...prev, add.name]
+                                                                    )
+                                                                }
+                                                                className="rounded text-black"
+                                                            />
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
 
@@ -2331,6 +2693,33 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                         </div>
 
                                         {/* Promo Code Box */}
+                                        {upsellItems.length > 0 && (
+                                            <div className="bg-[#f9f9f9] border border-[#e2e2e2] rounded-2xl p-3.5 space-y-2.5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-black text-black flex items-center gap-1.5">
+                                                        <Sparkles size={14} className="text-amber-500" /> Complete your meal
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                                                    {upsellItems.map(up => (
+                                                        <div key={up.id} className="w-36 shrink-0 bg-white border border-[#e2e2e2] rounded-xl p-2 flex flex-col justify-between gap-1.5">
+                                                            <div>
+                                                                <p className="text-[11px] font-bold text-black line-clamp-1">{up.title}</p>
+                                                                <p className="text-[11px] font-extrabold text-[#047857]">KES {up.price.toLocaleString()}</p>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleItemClick(up)}
+                                                                className="w-full py-1.5 rounded-lg bg-black hover:bg-[#262626] text-white text-[10px] font-bold"
+                                                            >
+                                                                + Add
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <div className="bg-[#f9f9f9] border border-[#e2e2e2] rounded-2xl p-3.5 space-y-2">
                                             <div className="flex items-center gap-2">
                                                 <Tag size={15} className="text-[#06C167]" />
@@ -2592,9 +2981,14 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                             {/* Drawer Footer Actions */}
                             {cart.length > 0 && (
                                 <div className="p-4 sm:p-5 border-t border-[#e2e2e2] bg-white space-y-2.5">
+                                    {tenant?.storeClosed && (
+                                        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold text-center">
+                                            Store is currently closed and not accepting checkout.
+                                        </div>
+                                    )}
                                     <button
                                         type="button"
-                                        disabled={isSubmitting}
+                                        disabled={isSubmitting || Boolean(tenant?.storeClosed)}
                                         onClick={() => handleSubmitOrder(false)}
                                         className="w-full bg-[#06C167] hover:bg-[#05a357] text-white py-3.5 px-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 disabled:opacity-50 cursor-pointer"
                                     >
@@ -2612,7 +3006,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
                                     <button
                                         type="button"
-                                        disabled={isSubmitting}
+                                        disabled={isSubmitting || Boolean(tenant?.storeClosed)}
                                         onClick={() => handleSubmitOrder(true)}
                                         className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white py-3 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-98 disabled:opacity-50 cursor-pointer"
                                     >

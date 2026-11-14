@@ -103,8 +103,40 @@ function normaliseTenant(row, settings, registry, slug) {
     socials: settings?.socials || base.socials || {},
     hours: settings?.opening_hours || base.hours || [],
     features: settings?.features || base.features || [],
+    cuisines: settings?.cuisines || row?.cuisine || base.cuisine || '',
+    storeClosed: settings?.store_closed === true,
+    nextOpeningAt: settings?.next_opening_at || null,
+    seo: {
+      title: settings?.seo_title || '',
+      description: settings?.seo_description || '',
+      keywords: settings?.seo_keywords || '',
+      ogTitle: settings?.og_title || '',
+      ogDescription: settings?.og_description || '',
+      ogImageUrl: settings?.og_image_url || '',
+    },
+    analytics: {
+      googleAnalyticsId: settings?.google_analytics_id || '',
+      metaPixelId: settings?.meta_pixel_id || '',
+    },
+    confirmationCta: {
+      text: settings?.confirmation_cta_text || '',
+      url: settings?.confirmation_cta_url || '',
+    },
+    branches: [],
+    combos: [],
     menu: base.menu || [],
   };
+}
+
+export function resolveEffectivePrice(row) {
+  const basePrice = Number(row.price) || 0;
+  if (!row.is_special_price_active || row.special_price == null) return basePrice;
+  const now = Date.now();
+  const from = row.special_from ? new Date(row.special_from).getTime() : null;
+  const to = row.special_to ? new Date(row.special_to).getTime() : null;
+  if (from && now < from) return basePrice;
+  if (to && now > to) return basePrice;
+  return Number(row.special_price) || basePrice;
 }
 
 /**
@@ -123,6 +155,8 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
   const registry = getRegistryTenant(resolvedSlug);
   let restaurant = null;
   let settings = null;
+  let branches = [];
+  let combos = [];
   // A restaurant's menu comes only from its own database rows. New tenants start
   // empty until they publish items — never inherit the static showcase menu.
   let menu = [];
@@ -145,28 +179,40 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
         .limit(1);
       settings = settingRows?.[0] || null;
 
-      // Prefer the live menu. Fall back to the static registry when the tenant
-      // has not published menu items yet.
+      // Prefer the live menu. Select '*' so pre- and post-migration schemas work seamlessly.
       const { data: menuRows, error: menuError } = await supabase
         .from('pos_menu')
-        .select('id, name, category, subcategory, price, description, image_url, is_available, is_featured, display_order')
+        .select('*')
         .eq('restaurant_id', data.id)
         .eq('is_available', true)
         .neq('show_on_microsite', false)
         .order('display_order', { ascending: true });
 
       if (!menuError && menuRows?.length) {
-        menu = menuRows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          category: row.category || 'Menu',
-          subcategory: row.subcategory || '',
-          price: Number(row.price) || 0,
-          description: row.description || '',
-          image_url: row.image_url || null,
-          is_available: row.is_available !== false,
-          is_featured: row.is_featured === true,
-        }));
+        menu = menuRows.map((row) => {
+          const regularPrice = Number(row.price) || 0;
+          const activePrice = resolveEffectivePrice(row);
+          return {
+            id: row.id,
+            name: row.name,
+            category: row.category || 'Menu',
+            subcategory: row.subcategory || '',
+            price: activePrice,
+            regularPrice,
+            hasSpecialPrice: activePrice < regularPrice,
+            description: row.description || '',
+            image_url: row.image_url || null,
+            is_available: row.is_available !== false,
+            is_featured: row.is_featured === true,
+            is_upsell: row.is_upsell === true,
+            is_alcoholic: row.is_alcoholic === true,
+            exclude_from_tax: row.exclude_from_tax === true,
+            branch_id: row.branch_id || null,
+            menu_group_id: row.menu_group_id || null,
+            variations: Array.isArray(row.variations) ? row.variations : [],
+            additions: Array.isArray(row.additions) ? row.additions : [],
+          };
+        });
       }
 
       // Customisation groups linked to each item (menu_item_ids).
@@ -180,6 +226,22 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
           modifierGroups: modifierRows.filter((g) => (g.menu_item_ids || []).includes(item.id)),
         }));
       }
+
+      // Active branches & combos (safe no-op if Wave 1 migration not yet applied)
+      const [branchRes, comboRes] = await Promise.all([
+        supabase.from('branches').select('*').eq('restaurant_id', data.id).eq('status', 'active').order('is_default', { ascending: false }),
+        supabase.from('menu_combos').select('*').eq('restaurant_id', data.id).eq('is_available', true).eq('show_on_microsite', true),
+      ]);
+      if (!branchRes.error && Array.isArray(branchRes.data)) branches = branchRes.data;
+      if (!comboRes.error && Array.isArray(comboRes.data)) {
+        const now = Date.now();
+        combos = comboRes.data.filter((c) => {
+          if (!c.time_limit_enabled) return true;
+          const startOk = !c.starts_at || now >= new Date(c.starts_at).getTime();
+          const endOk = !c.expires_at || now <= new Date(c.expires_at).getTime();
+          return startOk && endOk;
+        });
+      }
     }
   } catch (err) {
     console.warn('[tenantConfig] Falling back to registry for', resolvedSlug, err?.message || err);
@@ -187,6 +249,8 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
 
   const tenant = normaliseTenant(restaurant, settings, registry, resolvedSlug);
   tenant.menu = menu;
+  tenant.branches = branches;
+  tenant.combos = combos;
   tenant.source = restaurant ? 'database' : 'registry';
   writeCache(resolvedSlug, tenant);
   return tenant;
