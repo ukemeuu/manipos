@@ -1,26 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { supabase, setTenantContext } from './lib/supabase';
-import { PosTerminal } from './components/PosTerminal';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
 import { RetailLandingPage } from './components/RetailLandingPage';
-import { RetailPosTerminal } from './components/RetailPosTerminal';
-import { AdminDashboard } from './components/AdminDashboard';
-import { MenuMicrosite } from './components/MenuMicrosite';
-import { UberEatsMicrosite } from './components/UberEatsMicrosite';
-import { FeedbackForm } from './components/FeedbackForm';
-import { RestaurantLinkHub } from './components/RestaurantLinkHub';
-import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { AuthenticatedHome } from './components/AuthenticatedHome';
-import { KitchenDisplay } from './components/KitchenDisplay';
-import { FloorPlanView } from './components/FloorPlanView';
-import { InventoryView } from './components/InventoryView';
-import { RestaurantDirectory } from './components/RestaurantDirectory';
 import { StatusPage, LegalPage } from './components/PublicPages';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
-import { MenuBuilder } from './components/MenuBuilder';
-import { HrAndStaffPortalView } from './components/orda/HrAndStaffPortalView';
-import { PojOperationsView } from './components/orda/PojOperationsView';
+import { IncomingOrderAlarmOverlay } from './components/IncomingOrderAlarmOverlay';
 import {
   getTenantInfo,
   getPosLoginUrl,
@@ -28,6 +14,29 @@ import {
 } from './lib/tenant';
 import { loadTenant, getActiveTenantSlug, getMicrositeUrl } from './lib/tenantConfig';
 import { can } from './lib/permissions';
+
+const PosTerminal = lazy(() => import('./components/PosTerminal').then(m => ({ default: m.PosTerminal })));
+const RetailPosTerminal = lazy(() => import('./components/RetailPosTerminal').then(m => ({ default: m.RetailPosTerminal })));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const MenuMicrosite = lazy(() => import('./components/MenuMicrosite').then(m => ({ default: m.MenuMicrosite })));
+const UberEatsMicrosite = lazy(() => import('./components/UberEatsMicrosite').then(m => ({ default: m.UberEatsMicrosite })));
+const FeedbackForm = lazy(() => import('./components/FeedbackForm').then(m => ({ default: m.FeedbackForm })));
+const RestaurantLinkHub = lazy(() => import('./components/RestaurantLinkHub').then(m => ({ default: m.RestaurantLinkHub })));
+const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
+const KitchenDisplay = lazy(() => import('./components/KitchenDisplay').then(m => ({ default: m.KitchenDisplay })));
+const FloorPlanView = lazy(() => import('./components/FloorPlanView').then(m => ({ default: m.FloorPlanView })));
+const InventoryView = lazy(() => import('./components/InventoryView').then(m => ({ default: m.InventoryView })));
+const RestaurantDirectory = lazy(() => import('./components/RestaurantDirectory').then(m => ({ default: m.RestaurantDirectory })));
+const MenuBuilder = lazy(() => import('./components/MenuBuilder').then(m => ({ default: m.MenuBuilder })));
+const HrAndStaffPortalView = lazy(() => import('./components/orda/HrAndStaffPortalView').then(m => ({ default: m.HrAndStaffPortalView })));
+const PojOperationsView = lazy(() => import('./components/orda/PojOperationsView').then(m => ({ default: m.PojOperationsView })));
+
+const RouteFallback = () => (
+  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-400">
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-400" />
+    <span className="text-xs font-bold uppercase tracking-widest">Loading workspace…</span>
+  </div>
+);
 
 const PAGE_ROUTES = {
   superadmin: 'superadmin',
@@ -90,6 +99,7 @@ function resolveRoute() {
   if (info.isRetailMarketingDomain || mode === 'retail' || path === '/retail' || hash === '#/retail') return 'retail-home';
   if (info.isPosDomain || path === '/terminal' || hash === '#/terminal' || hash === '#/pos') return 'terminal';
   if (info.isGuestMicrosite || path === '/menu' || hash === '#/menu') return 'microsite';
+  if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) return 'terminal';
   return 'home';
 }
 
@@ -165,6 +175,7 @@ function App() {
   const [tenantLoading, setTenantLoading] = useState(true);
   const [currentRoute, setCurrentRoute] = useState(() => resolveRoute());
   const [storeStatus, setStoreStatus] = useState('approved');
+  const [trialExpired, setTrialExpired] = useState(false);
   const [businessType, setBusinessType] = useState('restaurant');
   const [mustChangePassword, setMustChangePassword] = useState(false);
 
@@ -219,7 +230,7 @@ function App() {
           return;
         }
 
-        let query = supabase.from('restaurants').select('id, name, slug, status, is_active, business_type');
+        let query = supabase.from('restaurants').select('id, name, slug, status, is_active, business_type, trial_ends_at, subscription_status, plan');
         if (storeId) {
           query = query.eq('id', storeId);
         } else {
@@ -237,14 +248,21 @@ function App() {
           return;
         }
 
-        const activeStatus = (data.is_active === false) ? 'suspended' : (data.status || 'pending');
+        const activeStatus = (data.is_active === false) ? 'suspended' : (data.status || 'approved');
         setStoreStatus(activeStatus);
         if (data.business_type) {
           setBusinessType(data.business_type);
         }
 
-        // SERVER-SIDE APPROVAL GUARD: Revoke session immediately if store is not approved or is inactive
-        if (activeStatus !== 'approved') {
+        const expired =
+          activeStatus === 'trial' &&
+          data.subscription_status !== 'active' &&
+          data.trial_ends_at &&
+          new Date(data.trial_ends_at).getTime() < Date.now();
+        setTrialExpired(Boolean(expired));
+
+        // SERVER-SIDE APPROVAL GUARD: Allow active/approved/trial stores; block suspended/rejected
+        if (!['approved', 'trial', 'active'].includes(activeStatus)) {
           console.warn(`[Security Guard] Revoking access for tenant ${data.slug}. Status: ${activeStatus}`);
           if (session) {
             localStorage.removeItem('pin_staff_user');
@@ -450,6 +468,7 @@ function App() {
     window.location.replace(loginUrl);
   };
 
+  const renderContent = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -784,7 +803,7 @@ function App() {
 
     // Operational Live POS Register
     if (currentRoute === 'terminal') {
-      if (storeStatus === 'pending') {
+      if (storeStatus === 'pending' || trialExpired) {
         const storeName = staffUser.restaurantName || 'Your Store';
         return (
           <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center font-sans">
@@ -794,11 +813,13 @@ function App() {
               </div>
               <div className="space-y-2">
                 <span className="px-3 py-1 bg-amber-400/10 text-amber-400 text-xs font-bold rounded-full uppercase tracking-wider inline-block">
-                  Super Admin Approval Required
+                  {trialExpired ? '14-Day Free Trial Ended' : 'Account Approval Required'}
                 </span>
                 <h2 className="text-2xl font-black text-white">{storeName} POS Locked</h2>
                 <p className="text-slate-400 text-xs leading-relaxed">
-                  Your store registration is complete! As a multi-tenant SaaS safety policy, POS operational access requires approval by a ManiPOS Super Admin.
+                  {trialExpired
+                    ? 'Your 14-day free trial has ended. Activate a paid subscription in Billing & Subscriptions to continue ringing POS & microsite orders.'
+                    : 'Your store registration is complete! POS operational access requires account verification.'}
                 </p>
               </div>
 
@@ -910,6 +931,32 @@ function App() {
       onSwitchToRetail={navigateToRetailHome}
       onBrowseRestaurants={() => goTo('restaurants', '/?page=restaurants')}
     />
+  );
+  };
+
+  const activeStaff = session?.staffUser || (() => {
+    try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch { return {}; }
+  })();
+  const alarmRestaurantId =
+    session &&
+    !tenantInfo.isGuestMicrosite &&
+    currentRoute !== 'microsite' &&
+    currentRoute !== 'feedback' &&
+    currentRoute !== 'links'
+      ? (activeStaff?.restaurantId || activeStaff?.restaurant_id || tenant?.id || null)
+      : null;
+
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      {alarmRestaurantId && (
+        <IncomingOrderAlarmOverlay
+          restaurantId={alarmRestaurantId}
+          staffName={activeStaff?.name || 'Staff'}
+          staffRole={activeStaff?.role || 'cashier'}
+        />
+      )}
+      {renderContent()}
+    </Suspense>
   );
 }
 

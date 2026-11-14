@@ -42,8 +42,8 @@ const json = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json', ...CORS },
   });
 
-const host = () =>
-  Deno.env.get('DARAJA_ENVIRONMENT') === 'production' ? HOST_PRODUCTION : HOST_SANDBOX;
+const hostFor = (env?: string | null) =>
+  (env || Deno.env.get('DARAJA_ENVIRONMENT')) === 'production' ? HOST_PRODUCTION : HOST_SANDBOX;
 
 const restHeaders = {
   apikey: SERVICE_KEY,
@@ -66,6 +66,52 @@ async function rest(path: string, options: RequestInit = {}) {
   return { ok: res.ok, status: res.status, body };
 }
 
+interface DarajaCreds {
+  consumerKey: string;
+  consumerSecret: string;
+  shortcode: string;
+  passkey: string;
+  transactionType: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline';
+  environment: string;
+  accountReference: string | null;
+}
+
+async function resolveTenantDarajaCredentials(restaurantId?: string | null): Promise<DarajaCreds> {
+  if (restaurantId) {
+    const res = await rest(
+      `restaurant_payment_credentials?restaurant_id=eq.${encodeURIComponent(restaurantId)}&is_active=eq.true&limit=1`
+    );
+    const row = res.ok && Array.isArray(res.body) ? res.body[0] as Record<string, unknown> : null;
+    if (row && row.shortcode && row.consumer_key && row.consumer_secret && row.passkey) {
+      return {
+        consumerKey: String(row.consumer_key),
+        consumerSecret: String(row.consumer_secret),
+        shortcode: String(row.shortcode),
+        passkey: String(row.passkey),
+        transactionType:
+          row.transaction_type === 'CustomerBuyGoodsOnline'
+            ? 'CustomerBuyGoodsOnline'
+            : 'CustomerPayBillOnline',
+        environment: String(row.environment || 'production'),
+        accountReference: row.account_reference ? String(row.account_reference) : null,
+      };
+    }
+  }
+
+  return {
+    consumerKey: Deno.env.get('DARAJA_CONSUMER_KEY') || '',
+    consumerSecret: Deno.env.get('DARAJA_CONSUMER_SECRET') || '',
+    shortcode: Deno.env.get('DARAJA_SHORTCODE') || '',
+    passkey: Deno.env.get('DARAJA_PASSKEY') || '',
+    transactionType:
+      Deno.env.get('DARAJA_TRANSACTION_TYPE') === 'CustomerBuyGoodsOnline'
+        ? 'CustomerBuyGoodsOnline'
+        : 'CustomerPayBillOnline',
+    environment: Deno.env.get('DARAJA_ENVIRONMENT') || 'sandbox',
+    accountReference: null,
+  };
+}
+
 function darajaTimestamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -84,13 +130,13 @@ export function normalizePhone(raw: string): string {
   return digits;
 }
 
-async function darajaToken(): Promise<string> {
-  const key = Deno.env.get('DARAJA_CONSUMER_KEY');
-  const secret = Deno.env.get('DARAJA_CONSUMER_SECRET');
-  if (!key || !secret) throw new Error('Daraja credentials are not configured');
+async function darajaToken(creds: DarajaCreds): Promise<string> {
+  if (!creds.consumerKey || !creds.consumerSecret) {
+    throw new Error('Daraja consumer key/secret are not configured');
+  }
 
-  const res = await fetch(`${host()}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${btoa(`${key}:${secret}`)}` },
+  const res = await fetch(`${hostFor(creds.environment)}/oauth/v1/generate?grant_type=client_credentials`, {
+    headers: { Authorization: `Basic ${btoa(`${creds.consumerKey}:${creds.consumerSecret}`)}` },
   });
   const body = await res.json().catch(() => ({}));
   if (!body.access_token) {
@@ -142,34 +188,33 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: 'A valid Kenyan phone number is required' }, 400);
   }
 
-  const shortcode = Deno.env.get('DARAJA_SHORTCODE');
-  const passkey = Deno.env.get('DARAJA_PASSKEY');
-  if (!shortcode || !passkey) {
-    return json({ ok: false, error: 'Daraja shortcode/passkey are not configured' }, 500);
+  const creds = await resolveTenantDarajaCredentials(order.restaurant_id);
+  if (!creds.shortcode || !creds.passkey) {
+    return json({ ok: false, error: 'Daraja shortcode/passkey are not configured for this store' }, 500);
   }
 
   const timestamp = darajaTimestamp();
-  const password = btoa(`${shortcode}${passkey}${timestamp}`);
+  const password = btoa(`${creds.shortcode}${creds.passkey}${timestamp}`);
   const callbackUrl = CALLBACK_SECRET
     ? `${SUPABASE_URL}/functions/v1/mpesa-callback?token=${encodeURIComponent(CALLBACK_SECRET)}`
     : `${SUPABASE_URL}/functions/v1/mpesa-callback`;
 
   try {
-    const token = await darajaToken();
-    const res = await fetch(`${host()}/mpesa/stkpush/v1/processrequest`, {
+    const token = await darajaToken(creds);
+    const res = await fetch(`${hostFor(creds.environment)}/mpesa/stkpush/v1/processrequest`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        BusinessShortCode: shortcode,
+        BusinessShortCode: creds.shortcode,
         Password: password,
         Timestamp: timestamp,
-        TransactionType: 'CustomerPayBillOnline',
+        TransactionType: creds.transactionType,
         Amount: String(amount),
         PartyA: phone,
-        PartyB: shortcode,
+        PartyB: creds.shortcode,
         PhoneNumber: phone,
         CallBackURL: callbackUrl,
-        AccountReference: String(order.ticket_number || orderId).slice(0, 12),
+        AccountReference: String(creds.accountReference || order.ticket_number || orderId).slice(0, 12),
         TransactionDesc: `Order ${order.ticket_number || orderId}`,
       }),
     });

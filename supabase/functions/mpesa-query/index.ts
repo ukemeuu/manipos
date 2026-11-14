@@ -41,8 +41,8 @@ const json = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json', ...CORS },
   });
 
-const host = () =>
-  Deno.env.get('DARAJA_ENVIRONMENT') === 'production' ? HOST_PRODUCTION : HOST_SANDBOX;
+const hostFor = (env?: string | null) =>
+  (env || Deno.env.get('DARAJA_ENVIRONMENT')) === 'production' ? HOST_PRODUCTION : HOST_SANDBOX;
 
 const restHeaders = {
   apikey: SERVICE_KEY,
@@ -74,13 +74,47 @@ function darajaTimestamp(): string {
   );
 }
 
-async function darajaToken(): Promise<string> {
-  const key = Deno.env.get('DARAJA_CONSUMER_KEY');
-  const secret = Deno.env.get('DARAJA_CONSUMER_SECRET');
-  if (!key || !secret) throw new Error('Daraja credentials are not configured');
+interface DarajaCreds {
+  consumerKey: string;
+  consumerSecret: string;
+  shortcode: string;
+  passkey: string;
+  environment: string;
+}
 
-  const res = await fetch(`${host()}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${btoa(`${key}:${secret}`)}` },
+async function resolveTenantDarajaCredentials(restaurantId?: string | null): Promise<DarajaCreds> {
+  if (restaurantId) {
+    const res = await rest(
+      `restaurant_payment_credentials?restaurant_id=eq.${encodeURIComponent(restaurantId)}&is_active=eq.true&limit=1`
+    );
+    const row = res.ok && Array.isArray(res.body) ? res.body[0] as Record<string, unknown> : null;
+    if (row && row.shortcode && row.consumer_key && row.consumer_secret && row.passkey) {
+      return {
+        consumerKey: String(row.consumer_key),
+        consumerSecret: String(row.consumer_secret),
+        shortcode: String(row.shortcode),
+        passkey: String(row.passkey),
+        environment: String(row.environment || 'production'),
+      };
+    }
+  }
+
+  return {
+    consumerKey: Deno.env.get('DARAJA_CONSUMER_KEY') || '',
+    consumerSecret: Deno.env.get('DARAJA_CONSUMER_SECRET') || '',
+    shortcode: Deno.env.get('DARAJA_SHORTCODE') || '',
+    passkey: Deno.env.get('DARAJA_PASSKEY') || '',
+    environment: Deno.env.get('DARAJA_ENVIRONMENT') || 'sandbox',
+  };
+}
+
+async function darajaToken(creds: DarajaCreds): Promise<string> {
+  if (!creds.consumerKey || !creds.consumerSecret) {
+    throw new Error('Daraja credentials are not configured');
+  }
+
+  const res = await fetch(`${hostFor(creds.environment)}/oauth/v1/generate?grant_type=client_credentials`, {
+    headers: { Authorization: `Basic ${btoa(`${creds.consumerKey}:${creds.consumerSecret}`)}` },
   });
   const body = await res.json().catch(() => ({}));
   if (!body.access_token) throw new Error(body.error_description || 'Daraja auth failed');
@@ -122,22 +156,21 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: 'No STK push has been started for this order' }, 409);
   }
 
-  const shortcode = Deno.env.get('DARAJA_SHORTCODE');
-  const passkey = Deno.env.get('DARAJA_PASSKEY');
-  if (!shortcode || !passkey) {
+  const creds = await resolveTenantDarajaCredentials(order.restaurant_id);
+  if (!creds.shortcode || !creds.passkey) {
     return json({ ok: false, error: 'Daraja shortcode/passkey are not configured' }, 500);
   }
 
   const timestamp = darajaTimestamp();
-  const password = btoa(`${shortcode}${passkey}${timestamp}`);
+  const password = btoa(`${creds.shortcode}${creds.passkey}${timestamp}`);
 
   try {
-    const token = await darajaToken();
-    const res = await fetch(`${host()}/mpesa/stkpushquery/v1/query`, {
+    const token = await darajaToken(creds);
+    const res = await fetch(`${hostFor(creds.environment)}/mpesa/stkpushquery/v1/query`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        BusinessShortCode: shortcode,
+        BusinessShortCode: creds.shortcode,
         Password: password,
         Timestamp: timestamp,
         CheckoutRequestID: order.mpesa_checkout_request_id,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, setTenantContext } from '../lib/supabase';
+import { initiateStkPush } from '../lib/mpesa';
 import { connectQZ, disconnectQZ, isQZConnected, onQZStatusChange, listPrinters, printOrFallback } from '../lib/qzPrint';
 import { Search, ShoppingBag, Trash2, Plus, Minus, CreditCard, Receipt, Loader2, ArrowLeft, ArrowRight, Printer, AlertTriangle, X, Calendar, KeyRound, Download, ChevronRight, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -582,6 +583,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const [showForceSelectionModal, setShowForceSelectionModal] = useState(false); // 'Dine-in', 'Takeaway', 'Delivery'
     const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH', 'MPESA', 'CARD', etc.
     const [paymentStatus, setPaymentStatus] = useState('Paid'); // 'Paid', 'Pending'
+    const [mpesaStkPhone, setMpesaStkPhone] = useState('');
+    const [sendMpesaStkOnCheckout, setSendMpesaStkOnCheckout] = useState(false);
     const [discountType, setDiscountType] = useState('none'); // 'none', 'percentage', 'flat'
     const [discountValue, setDiscountValue] = useState('');
     const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -1444,51 +1447,62 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 headerPayload.restaurant_id = restaurantId;
                             }
 
+                            // Prefer atomic single-transaction RPC (prevents orphan headers if items fail)
                             let serverOrder = null;
-                            const { data: insertedOrder, error: headerError } = await supabase
-                                .from('pos_orders')
-                                .insert([headerPayload])
-                                .select()
-                                .single();
+                            const { data: atomicRes, error: atomicErr } = await supabase.rpc('create_pos_order_atomic', {
+                                p_header: headerPayload,
+                                p_items: order.items || []
+                            });
 
-                            if (headerError) {
-                                // 23505 = idempotency_key already inserted on a previous attempt
-                                if (headerError.code === '23505' && headerPayload.idempotency_key) {
-                                    const { data: existingOrder, error: fetchErr } = await supabase
-                                        .from('pos_orders')
-                                        .select('*')
-                                        .eq('idempotency_key', headerPayload.idempotency_key)
-                                        .maybeSingle();
-                                    if (fetchErr || !existingOrder) throw headerError;
-                                    serverOrder = existingOrder;
-                                } else {
-                                    throw headerError;
-                                }
+                            if (!atomicErr && atomicRes?.success && atomicRes.order_id) {
+                                serverOrder = { id: atomicRes.order_id, ticket_number: atomicRes.ticket_number };
                             } else {
-                                serverOrder = insertedOrder;
-                            }
+                                // Fallback when atomic RPC hasn't been deployed yet
+                                const { data: insertedOrder, error: headerError } = await supabase
+                                    .from('pos_orders')
+                                    .insert([headerPayload])
+                                    .select()
+                                    .single();
 
-                            // Only insert line items if none exist yet for this serverOrder
-                            const { data: existingItems } = await supabase
-                                .from('pos_order_items')
-                                .select('id')
-                                .eq('order_id', serverOrder.id)
-                                .limit(1);
+                                if (headerError) {
+                                    // 23505 = idempotency_key already inserted on a previous attempt
+                                    if (headerError.code === '23505' && headerPayload.idempotency_key) {
+                                        const { data: existingOrder, error: fetchErr } = await supabase
+                                            .from('pos_orders')
+                                            .select('*')
+                                            .eq('idempotency_key', headerPayload.idempotency_key)
+                                            .maybeSingle();
+                                        if (fetchErr || !existingOrder) throw headerError;
+                                        serverOrder = existingOrder;
+                                    } else {
+                                        throw headerError;
+                                    }
+                                } else {
+                                    serverOrder = insertedOrder;
+                                }
 
-                            if (!existingItems || existingItems.length === 0) {
-                                const itemsPayload = (order.items || []).map(item => ({
-                                    order_id: serverOrder.id,
-                                    item_name: item.item_name,
-                                    quantity: item.quantity,
-                                    price: item.price,
-                                    instructions: item.instructions || ''
-                                }));
+                                // Only insert line items if none exist yet for this serverOrder
+                                const { data: existingItems } = await supabase
+                                    .from('pos_order_items')
+                                    .select('id')
+                                    .eq('order_id', serverOrder.id)
+                                    .limit(1);
 
-                                if (itemsPayload.length > 0) {
-                                    const { error: itemsError } = await supabase
-                                        .from('pos_order_items')
-                                        .insert(itemsPayload);
-                                    if (itemsError) throw itemsError;
+                                if (!existingItems || existingItems.length === 0) {
+                                    const itemsPayload = (order.items || []).map(item => ({
+                                        order_id: serverOrder.id,
+                                        item_name: item.item_name,
+                                        quantity: item.quantity,
+                                        price: item.price,
+                                        instructions: item.instructions || ''
+                                    }));
+
+                                    if (itemsPayload.length > 0) {
+                                        const { error: itemsError } = await supabase
+                                            .from('pos_order_items')
+                                            .insert(itemsPayload);
+                                        if (itemsError) throw itemsError;
+                                    }
                                 }
                             }
 
@@ -3367,10 +3381,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     };
 
     const getDynamicModifierGroups = () => {
-        if (!modifiers || modifiers.length === 0) {
+        if (!modifierGroups || modifierGroups.length === 0) {
             return MODIFIER_GROUPS;
         }
-        const grouped = {};
         const icons = {
             'Swallow Choice': '🫓',
             'Protein Add-on': '🥩',
@@ -3380,21 +3393,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             'Packaging': '📦'
         };
 
-        modifiers.forEach(mod => {
-            if (!mod.is_available) return;
-            const grp = mod.group_name;
-            if (!grouped[grp]) {
-                grouped[grp] = {
-                    group: grp,
-                    icon: icons[grp] || '⚙️',
-                    options: []
-                };
-            }
-            const priceLabel = mod.price_adjustment > 0 ? ` (+${Math.round(mod.price_adjustment)})` : '';
-            grouped[grp].options.push(`${mod.name}${priceLabel}`);
-        });
-
-        return Object.values(grouped);
+        return modifierGroups.map(group => ({
+            group: group.name,
+            icon: icons[group.name] || '⚙️',
+            options: (group.options || [])
+                .filter(opt => opt?.is_available !== false)
+                .map(opt => {
+                    const adj = Number(opt?.price_adjustment || opt?.price || 0);
+                    return `${opt.name}${adj > 0 ? ` (+${Math.round(adj)})` : ''}`;
+                })
+        }));
     };
 
     // Filter menu
@@ -3750,6 +3758,19 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
                 if (itemsError) throw itemsError;
 
+                // Optional M-Pesa Daraja STK Push straight from POS register
+                if (sendMpesaStkOnCheckout && mpesaStkPhone.trim()) {
+                    try {
+                        await initiateStkPush({
+                            orderId: orderData.id,
+                            phone: mpesaStkPhone.trim(),
+                            ticketNumber: orderData.ticket_number
+                        });
+                    } catch (stkErr) {
+                        alert(`Order #${obfuscateTicket(orderData.ticket_number)} saved, but M-Pesa STK Push failed: ${stkErr.message}`);
+                    }
+                }
+
                 // Auto-deduct linked raw ingredients from store inventory
                 try {
                     const { data: recipes } = await supabase.from('pos_item_recipes').select('*').eq('restaurant_id', restaurantId);
@@ -3792,6 +3813,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             setSplitCash('');
             setSplitMpesa('');
             setSplitCard('');
+            setMpesaStkPhone('');
+            setSendMpesaStkOnCheckout(false);
             setEditingOrderId(null);
             setCustomOrderDate('');
             scheduleLockAfterOrder(); // auto-lock 60s after order completes
@@ -7693,7 +7716,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                                     </div>
                                                                 )}
                                                                 <div className="max-h-28 overflow-y-auto space-y-1 bg-white p-2 rounded-xl border border-gray-200 custom-scrollbar">
-                                                                    {menuItems.slice(0, 30).map(item => (
+                                                                    {menu.slice(0, 30).map(item => (
                                                                         <div
                                                                             key={item.id || item.name}
                                                                             onClick={() => toggleItem(item.name)}
@@ -8520,28 +8543,56 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                         onChange={(e) => setPaymentMethod(e.target.value)}
                                                         className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
                                                     >
-                                                        <option value="CASH">CASH</option>
-                                                        <option value="CARD">CARD</option>
-                                                        <option value="I&M - PAYBILL No">I&M - PAYBILL No</option>
-                                                        {['ubereats', 'uber eats', 'glovo', 'bolt food', 'ando'].includes(String(orderChannel || '').toLowerCase()) && (
-                                                            <option value="Paid to APP">Paid to APP</option>
-                                                        )}
-                                                        <option value="ANDO">ANDO</option>
-                                                        <option value="Split">Split Payment</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Payment Status</label>
-                                                    <select
-                                                        value={paymentStatus}
-                                                        onChange={(e) => setPaymentStatus(e.target.value)}
-                                                        className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
-                                                    >
-                                                        <option value="Paid">Paid</option>
-                                                        <option value="Pending">Pay Later (Pending)</option>
-                                                    </select>
-                                                </div>
-                                            </div>
+                                                         <option value="CASH">CASH</option>
+                                                         <option value="CARD">CARD</option>
+                                                         <option value="I&M - PAYBILL No">I&M - PAYBILL No</option>
+                                                         <option value="M-Pesa">M-Pesa STK Push</option>
+                                                         {['ubereats', 'uber eats', 'glovo', 'bolt food', 'ando'].includes(String(orderChannel || '').toLowerCase()) && (
+                                                             <option value="Paid to APP">Paid to APP</option>
+                                                         )}
+                                                         <option value="ANDO">ANDO</option>
+                                                         <option value="Split">Split Payment</option>
+                                                     </select>
+                                                 </div>
+                                                 <div>
+                                                     <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Payment Status</label>
+                                                     <select
+                                                         value={paymentStatus}
+                                                         onChange={(e) => setPaymentStatus(e.target.value)}
+                                                         className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-primary"
+                                                     >
+                                                         <option value="Paid">Paid</option>
+                                                         <option value="Pending">Pay Later (Pending)</option>
+                                                     </select>
+                                                 </div>
+                                             </div>
+
+                                             {(paymentMethod === 'M-Pesa' || paymentMethod === 'I&M - PAYBILL No') && (
+                                                 <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2 space-y-1.5">
+                                                     <label className="flex items-center gap-2 text-[10px] font-black text-emerald-900 cursor-pointer">
+                                                         <input
+                                                             type="checkbox"
+                                                             checked={sendMpesaStkOnCheckout}
+                                                             onChange={(e) => {
+                                                                 const checked = e.target.checked;
+                                                                 setSendMpesaStkOnCheckout(checked);
+                                                                 if (checked) setPaymentStatus('Pending');
+                                                             }}
+                                                             className="rounded border-emerald-300 text-emerald-600"
+                                                         />
+                                                         <span>Send M-Pesa STK Prompt to Customer Phone</span>
+                                                     </label>
+                                                     {sendMpesaStkOnCheckout && (
+                                                         <input
+                                                             type="tel"
+                                                             placeholder="e.g. 0712345678 or 2547..."
+                                                             value={mpesaStkPhone}
+                                                             onChange={(e) => setMpesaStkPhone(e.target.value)}
+                                                             className="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1 text-[11px] font-mono outline-none focus:border-emerald-600"
+                                                         />
+                                                     )}
+                                                 </div>
+                                             )}
 
                                             {/* Discount Picker */}
                                             <div className="grid grid-cols-3 gap-2 items-end">

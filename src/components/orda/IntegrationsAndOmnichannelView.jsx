@@ -40,19 +40,43 @@ export function IntegrationsAndOmnichannelView({
   const [tevin, setTevin] = useState({ is_enabled: false, device_ip: '', port: '8080', serial: '', kra_pin: '', sender_id: '', tax_class: 'A', tax_rate: '16' });
   const [leta, setLeta] = useState({ is_enabled: false, api_key: '', depot_code: '' });
   const [little, setLittle] = useState({ is_enabled: false, api_key: '', corporate_id: '', callback_secret: '' });
-  const [mpesaPaybill, setMpesaPaybill] = useState({ is_enabled: true, account_number: settings.mpesa_account || '992422', paybill_number: settings.mpesa_paybill || '542542' });
+  const [mpesaPaybill, setMpesaPaybill] = useState({
+    is_enabled: true,
+    account_number: settings.mpesa_account || '',
+    paybill_number: settings.mpesa_paybill || '',
+    transaction_type: 'CustomerPayBillOnline',
+    environment: 'production',
+    consumer_key: '',
+    consumer_secret: '',
+    passkey: '',
+    has_secrets: false,
+  });
   const [paystackConn, setPaystackConn] = useState({ is_enabled: false, subaccount_code: '', public_key: '' });
   const [customPay, setCustomPay] = useState({ is_enabled: false, label: '', instructions: '' });
 
   const loadAll = async () => {
     if (!restaurantId) return;
     try {
-      const [intRes, omniRes, evtRes, keyRes] = await Promise.all([
+      const [intRes, omniRes, evtRes, keyRes, darajaRes] = await Promise.all([
         supabase.from('tenant_integrations').select('*').eq('restaurant_id', restaurantId),
         supabase.from('omnichannel_configs').select('*').eq('restaurant_id', restaurantId),
         supabase.from('omnichannel_events').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false }).limit(50),
         supabase.from('merchant_api_keys').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false }),
+        supabase.rpc('get_tenant_daraja_status', { p_restaurant_id: restaurantId }),
       ]);
+
+      if (darajaRes?.data?.configured) {
+        const d = darajaRes.data;
+        setMpesaPaybill((p) => ({
+          ...p,
+          is_enabled: d.is_active !== false,
+          paybill_number: d.shortcode || p.paybill_number,
+          account_number: d.account_reference || p.account_number,
+          transaction_type: d.transaction_type || 'CustomerPayBillOnline',
+          environment: d.environment || 'production',
+          has_secrets: Boolean(d.has_consumer_key && d.has_consumer_secret && d.has_passkey),
+        }));
+      }
 
       if (!intRes.error && Array.isArray(intRes.data)) {
         const map = {};
@@ -304,15 +328,70 @@ export function IntegrationsAndOmnichannelView({
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">PAYMENTS & LIVE DARAJA</h3>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
-              <div className="bg-white border border-emerald-200 rounded-2xl p-5 space-y-3 shadow-sm">
+              <div className="bg-white border border-emerald-200 rounded-2xl p-5 space-y-2.5 shadow-sm">
                 <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-black text-slate-900">MPESA Paybill / Daraja STK</h4>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px]">Live Active</span>
+                  <h4 className="text-sm font-black text-slate-900">M-Pesa Paybill / Till (Daraja STK)</h4>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${mpesaPaybill.has_secrets ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {mpesaPaybill.has_secrets ? 'Dedicated Tenant Keys' : 'Platform / Pending'}
+                  </span>
                 </div>
-                <input placeholder="Paybill Shortcode (542542)" value={mpesaPaybill.paybill_number} onChange={(e) => setMpesaPaybill((p) => ({ ...p, paybill_number: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <input placeholder="Account Number (992422)" value={mpesaPaybill.account_number} onChange={(e) => setMpesaPaybill((p) => ({ ...p, account_number: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <button type="button" disabled={saving} onClick={() => saveIntegration('mpesa_paybill', 'PAYMENTS', true, mpesaPaybill)} className="w-full py-2 rounded-xl bg-emerald-700 text-white font-black">
-                  Save MPESA Paybill
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={mpesaPaybill.transaction_type} onChange={(e) => setMpesaPaybill((p) => ({ ...p, transaction_type: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 font-bold">
+                    <option value="CustomerPayBillOnline">Paybill STK</option>
+                    <option value="CustomerBuyGoodsOnline">Buy Goods Till</option>
+                  </select>
+                  <select value={mpesaPaybill.environment} onChange={(e) => setMpesaPaybill((p) => ({ ...p, environment: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 font-bold">
+                    <option value="production">Production</option>
+                    <option value="sandbox">Sandbox</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input placeholder="Paybill / Store No." value={mpesaPaybill.paybill_number} onChange={(e) => setMpesaPaybill((p) => ({ ...p, paybill_number: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+                  <input placeholder="Account Ref (opt.)" value={mpesaPaybill.account_number} onChange={(e) => setMpesaPaybill((p) => ({ ...p, account_number: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+                </div>
+                <input type="password" placeholder={mpesaPaybill.has_secrets ? 'Daraja Consumer Key (saved - leave blank to keep)' : 'Daraja Consumer Key'} value={mpesaPaybill.consumer_key} onChange={(e) => setMpesaPaybill((p) => ({ ...p, consumer_key: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+                <input type="password" placeholder={mpesaPaybill.has_secrets ? 'Daraja Consumer Secret (saved)' : 'Daraja Consumer Secret'} value={mpesaPaybill.consumer_secret} onChange={(e) => setMpesaPaybill((p) => ({ ...p, consumer_secret: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+                <input type="password" placeholder={mpesaPaybill.has_secrets ? 'Lipa Na M-Pesa Passkey (saved)' : 'Lipa Na M-Pesa Passkey'} value={mpesaPaybill.passkey} onChange={(e) => setMpesaPaybill((p) => ({ ...p, passkey: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await saveIntegration('mpesa_paybill', 'PAYMENTS', true, {
+                        paybill_number: mpesaPaybill.paybill_number,
+                        account_number: mpesaPaybill.account_number,
+                        transaction_type: mpesaPaybill.transaction_type,
+                      });
+                      const staff = (() => { try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch { return {}; } })();
+                      if (staff?.id && mpesaPaybill.paybill_number && (mpesaPaybill.consumer_key || mpesaPaybill.has_secrets)) {
+                        const { data: credRes, error: credErr } = await supabase.rpc('upsert_tenant_daraja_credentials', {
+                          p_restaurant_id: restaurantId,
+                          p_actor_id: staff.id,
+                          p_shortcode: mpesaPaybill.paybill_number,
+                          p_consumer_key: mpesaPaybill.consumer_key || '',
+                          p_consumer_secret: mpesaPaybill.consumer_secret || '',
+                          p_passkey: mpesaPaybill.passkey || '',
+                          p_transaction_type: mpesaPaybill.transaction_type,
+                          p_environment: mpesaPaybill.environment,
+                          p_account_reference: mpesaPaybill.account_number || '',
+                          p_is_active: true,
+                        });
+                        if (credErr) throw credErr;
+                        if (credRes && credRes.success === false) throw new Error(credRes.error);
+                        setMpesaPaybill((p) => ({ ...p, consumer_key: '', consumer_secret: '', passkey: '', has_secrets: true }));
+                      }
+                      await loadAll();
+                      setNotice('Per-tenant M-Pesa Daraja configuration saved securely.');
+                    } catch (err) {
+                      alert('Daraja save failed: ' + (err.message || err));
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  className="w-full py-2 rounded-xl bg-emerald-700 text-white font-black"
+                >
+                  Save MPESA & Daraja Keys
                 </button>
               </div>
 

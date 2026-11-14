@@ -163,11 +163,12 @@ export function WalletBillingView({
         .single();
       if (error) throw error;
 
+      const invNum = `INV-${Date.now().toString().slice(-6)}`;
       await supabase.from('subscription_invoices').insert([
         {
           restaurant_id: restaurantId,
           subscription_id: subRow?.id || null,
-          invoice_number: `INV-${Date.now().toString().slice(-6)}`,
+          invoice_number: invNum,
           plan_id: plan.id,
           amount_kes: amt,
           status: 'paid',
@@ -175,7 +176,13 @@ export function WalletBillingView({
           paid_at: new Date().toISOString(),
         },
       ]);
-      setNotice(`Subscribed to ${plan.name} (${billingCycle}).`);
+      await supabase.rpc('activate_tenant_subscription', {
+        p_restaurant_id: restaurantId,
+        p_plan: plan.id,
+        p_billing_cycle: billingCycle,
+        p_payment_ref: invNum,
+      });
+      setNotice(`Subscribed to ${plan.name} (${billingCycle}). Active immediately.`);
       await loadWalletData();
     } catch (err) {
       alert('Plan change note: ' + (err.message || err));

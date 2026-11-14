@@ -61,6 +61,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const checkoutRequestID: string = callback.CheckoutRequestID;
+  const merchantRequestID: string = String(callback.MerchantRequestID || '');
   const resultCode: number = Number(callback.ResultCode);
   const resultDesc: string = callback.ResultDesc || '';
 
@@ -74,13 +75,17 @@ Deno.serve(async (req: Request) => {
   }
 
   const tx = await rest(
-    `mpesa_transactions?select=id,order_id,status,amount&checkout_request_id=eq.${encodeURIComponent(checkoutRequestID)}`
+    `mpesa_transactions?select=id,order_id,status,amount,merchant_request_id&checkout_request_id=eq.${encodeURIComponent(checkoutRequestID)}`
   );
 
   const row = Array.isArray(tx.body) ? tx.body[0] : null;
 
   if (row?.order_id) {
     if (row.status === 'completed') {
+      return new Response(ACCEPTED, { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (row.merchant_request_id && merchantRequestID && row.merchant_request_id !== merchantRequestID) {
+      console.warn(`[mpesa-callback] merchant_request_id mismatch for ${checkoutRequestID}`);
       return new Response(ACCEPTED, { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -91,7 +96,7 @@ Deno.serve(async (req: Request) => {
     const expectedAmount = Math.round(Number(orderRow?.total_amount ?? row.amount ?? 0));
 
     const paid = resultCode === 0;
-    const amountMatches = !paid || amount <= 0 || expectedAmount <= 0 || amount + 1 >= expectedAmount;
+    const amountMatches = !paid || expectedAmount <= 0 || (amount > 0 && amount + 1 >= expectedAmount);
 
     if (paid && !amountMatches) {
       console.warn(

@@ -1089,7 +1089,7 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                       <ArrowRight size={13} className="shrink-0" />
                     </a>
                     <p className="text-slate-500 leading-relaxed pt-1 border-t border-slate-800">
-                      Next: sign in, add your menu items, connect your M-Pesa Paybill, and invite staff. Accounts are reviewed within 24 hours for card payments; POS and online ordering work immediately.
+                      Your 14-day free trial is active immediately. Next: sign in, add your menu items, connect your M-Pesa Paybill/Till, and ring orders live from POS or the ManiPOS Android app.
                     </p>
                   </div>
 
@@ -1202,9 +1202,9 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                         onChange={(e) => setOnboardData(prev => ({ ...prev, plan: e.target.value }))}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
                       >
-                        <option value="starter">Starter — KSh 2,500/mo</option>
-                        <option value="growth">Growth — KSh 5,500/mo</option>
-                        <option value="pro">Pro — KSh 12,500/mo</option>
+                        <option value="starter">Starter — KES 3,500/mo</option>
+                        <option value="growth">Growth — KES 7,500/mo</option>
+                        <option value="enterprise">Enterprise — KES 15,000/mo</option>
                       </select>
                     </div>
                     <div>

@@ -13,6 +13,7 @@ export default defineConfig({
           "vendor-motion": ["framer-motion"],
           "vendor-icons": ["lucide-react"],
           "vendor-supabase": ["@supabase/supabase-js"],
+          "vendor-charts": ["recharts"],
           "vendor-pdf": ["jspdf", "jspdf-autotable", "html2canvas"]
         }
       }
