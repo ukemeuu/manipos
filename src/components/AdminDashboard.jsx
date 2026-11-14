@@ -68,6 +68,8 @@ import { LiveOrdersView, computeOrderBucketCounts } from './orda/LiveOrdersView'
 import { OrdaCatalogView } from './orda/OrdaCatalogView';
 import { WebPosView } from './orda/WebPosView';
 import { LocationsManagerView, CloseStoreModal } from './orda/LocationsManagerView';
+import { OrdaReportsView } from './orda/OrdaReportsView';
+import { OrderAndPaymentSettingsView } from './orda/OrderAndPaymentSettingsView';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
@@ -95,6 +97,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   });
   const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'orders' : 'onboarding');
   const [activeModule, setActiveModule] = useState(() => setupCompleted ? 'orders' : 'dashboard');
+  const [reportSubTab, setReportSubTab] = useState('overview');
   const [orderBucket, setOrderBucket] = useState('active');
   const [branches, setBranches] = useState([]);
   const [activeBranchId, setActiveBranchId] = useState('all');
@@ -656,14 +659,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           seo_description: settings.seo_description || null,
           google_analytics_id: settings.google_analytics_id || null,
           meta_pixel_id: settings.meta_pixel_id || null,
-          confirmation_cta_label: settings.confirmation_cta_label || null,
+          confirmation_cta_text: settings.confirmation_cta_text || settings.confirmation_cta_label || null,
           confirmation_cta_url: settings.confirmation_cta_url || null,
           cuisines: Array.isArray(settings.cuisines)
-            ? settings.cuisines
-            : String(settings.cuisines_input || '')
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
+            ? settings.cuisines.join(', ')
+            : (settings.cuisines || settings.cuisines_input || null),
         };
         try {
           await supabase.from('restaurant_settings').update(wave1Patch).eq('restaurant_id', currentRestId);
@@ -891,7 +891,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
           {[
             { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
-            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'analytics', visible: canDo(TAB_PERMISSION.analytics) },
+            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
             { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'offers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
             { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) },
             { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
@@ -1022,15 +1022,44 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           {activeModule === 'dashboard' && (
             <>
               {canDo(TAB_PERMISSION.analytics) && (
-                <button
-                  type="button"
-                  onClick={() => selectModule('dashboard', 'analytics')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
-                    activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <TrendingUp size={15} /> Analytics & Overview
-                </button>
+                <>
+                  {[
+                    { id: 'overview', label: 'Executive Dashboard', icon: BarChart3 },
+                    { id: 'transactions', label: 'Transactions', icon: Receipt },
+                    { id: 'sales', label: 'Sales & Margins', icon: TrendingUp },
+                    { id: 'taxes', label: 'Tax & Charges', icon: Percent },
+                    { id: 'eod', label: 'End of Day (6am–6am)', icon: ClipboardList },
+                    { id: 'promotions', label: 'Discounts & Loyalty', icon: Tag },
+                    { id: 'devices', label: 'POS Devices & Audit', icon: CreditCard },
+                  ].map((r) => {
+                    const RIcon = r.icon;
+                    const active = activeTab === 'reports' && reportSubTab === r.id;
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setReportSubTab(r.id);
+                          selectModule('dashboard', 'reports');
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                          active ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <RIcon size={14} /> {r.label}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => selectModule('dashboard', 'analytics')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <TrendingUp size={14} /> Legacy Sales Charts
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1041,10 +1070,6 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               >
                 <ShieldCheck size={15} /> Store Setup Checklist
               </button>
-              <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500">
-                <p className="font-black text-slate-700">Wave 2 Coming Next</p>
-                <p className="mt-0.5">Sales, Taxes, Cash Management & 6am–6am PDF EOD Reports.</p>
-              </div>
             </>
           )}
 
@@ -1094,15 +1119,35 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           {activeModule === 'settings' && (
             <>
               {canDo(TAB_PERMISSION.settings) && (
-                <button
-                  type="button"
-                  onClick={() => selectModule('settings', 'settings')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
-                    activeTab === 'settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Settings size={15} /> Store Settings & SEO
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'settings')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Settings size={15} /> Store Settings & SEO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'order-settings')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'order-settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Truck size={15} /> Order Methods & Void
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'payment-settings')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'payment-settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <CreditCard size={15} /> Payment & Charges
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1315,6 +1360,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               activeBranch={activeBranchObj}
               staffName={pinStaffName}
               initialOrder={settleTargetOrder}
+              tendersConfig={settings.payment_tenders_config}
               onBackToOrders={() => {
                 setShowWebPos(false);
                 setSettleTargetOrder(null);
@@ -1328,8 +1374,10 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               orders={orders}
               restaurantId={activeRestaurantId}
               restaurantName={profileName || restaurantName}
-              activeBranch={activeBranchId}
+              activeBranch={activeBranchObj}
               statusFilter={orderBucket}
+              voidCompletedAllowed={settings.void_completed_allowed !== false}
+              voidWindowHours={settings.void_window_hours ?? 168}
               onRefresh={fetchDashboardData}
               onCreateOrder={() => {
                 setSettleTargetOrder(null);
@@ -1339,6 +1387,25 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 setSettleTargetOrder(order);
                 setShowWebPos(true);
               }}
+            />
+          ) : activeTab === 'reports' ? (
+            <OrdaReportsView
+              reportKey={reportSubTab}
+              onSelectReport={setReportSubTab}
+              orders={orders}
+              menuItems={menuItems}
+              discounts={discounts}
+              branches={branches}
+              activeBranch={activeBranchId}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+            />
+          ) : activeTab === 'order-settings' || activeTab === 'payment-settings' ? (
+            <OrderAndPaymentSettingsView
+              mode={activeTab}
+              restaurantId={activeRestaurantId}
+              settings={settings}
+              onSettingsUpdated={fetchDashboardData}
             />
           ) : activeTab === 'locations' ? (
             <LocationsManagerView
@@ -2118,8 +2185,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                         <input
                           type="text"
                           placeholder="e.g. Follow Us on Instagram"
-                          value={settings.confirmation_cta_label || ''}
-                          onChange={(e) => setSettings({ ...settings, confirmation_cta_label: e.target.value })}
+                          value={settings.confirmation_cta_text || settings.confirmation_cta_label || ''}
+                          onChange={(e) => setSettings({ ...settings, confirmation_cta_text: e.target.value, confirmation_cta_label: e.target.value })}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
                         />
                       </div>

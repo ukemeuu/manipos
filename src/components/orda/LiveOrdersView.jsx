@@ -142,6 +142,8 @@ export function LiveOrdersView({
   restaurantName,
   activeBranch,
   statusFilter = 'active',
+  voidCompletedAllowed = true,
+  voidWindowHours = 168,
   onRefresh,
   onCreateOrder,
   onResumeOpenOrder,
@@ -153,6 +155,13 @@ export function LiveOrdersView({
   const [updatingId, setUpdatingId] = useState(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  // Orda Void Order modal state (per-line Return to Stock vs Mark as Wastage)
+  const [voidTarget, setVoidTarget] = useState(null);
+  const [voidReason, setVoidReason] = useState('Customer Cancelled');
+  const [voidCustomReason, setVoidCustomReason] = useState('');
+  const [voidLineDisposition, setVoidLineDisposition] = useState({});
+  const [voidSubmitting, setVoidSubmitting] = useState(false);
 
   const filteredOrders = useMemo(() => {
     let list = orders;
@@ -227,6 +236,83 @@ export function LiveOrdersView({
       alert('Failed to update order status: ' + (err.message || err));
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const canVoidOrder = (order) => {
+    const b = classifyOrderBucket(order);
+    if (b === 'voided' || b === 'cancelled' || b === 'declined') return false;
+    if (b === 'completed') {
+      if (!voidCompletedAllowed) return false;
+      const hours = Number(voidWindowHours || 168);
+      if (hours > 0) {
+        const refDate = new Date(order.completed_at || order.created_at || Date.now()).getTime();
+        if (Date.now() - refDate > hours * 3600 * 1000) return false;
+      }
+    }
+    return true;
+  };
+
+  const openVoidModal = (order) => {
+    const lines = renderLines(order);
+    const initialMap = {};
+    lines.forEach((line, idx) => {
+      initialMap[line.id || idx] = 'return_to_stock';
+    });
+    setVoidLineDisposition(initialMap);
+    setVoidReason('Customer Cancelled');
+    setVoidCustomReason('');
+    setVoidTarget(order);
+  };
+
+  const confirmVoidOrder = async () => {
+    if (!voidTarget?.id || !restaurantId) return;
+    const finalReason = voidReason === 'Other' ? (voidCustomReason.trim() || 'Voided by staff') : voidReason;
+    const lines = renderLines(voidTarget);
+    const dispositionDetails = lines.map((line, idx) => ({
+      item_name: line.item_name || line.name || 'Item',
+      quantity: Number(line.quantity || 1),
+      disposition: voidLineDisposition[line.id || idx] || 'return_to_stock',
+    }));
+
+    setVoidSubmitting(true);
+    try {
+      const fullPatch = {
+        status: 'Voided',
+        void_reason: finalReason,
+        void_disposition: dispositionDetails,
+      };
+      let res = await supabase
+        .from('pos_orders')
+        .update(fullPatch)
+        .eq('id', voidTarget.id)
+        .eq('restaurant_id', restaurantId);
+
+      // Fail-safe fallback when Wave 2 migration columns have not been applied yet
+      if (res.error) {
+        const msg = String(res.error.message || '').toLowerCase();
+        if (msg.includes('void_disposition') || msg.includes('void_reason')) {
+          const fallbackPatch = {
+            status: 'Voided',
+            notes: [voidTarget.notes, `[VOID: ${finalReason}]`].filter(Boolean).join(' | '),
+          };
+          res = await supabase
+            .from('pos_orders')
+            .update(fallbackPatch)
+            .eq('id', voidTarget.id)
+            .eq('restaurant_id', restaurantId);
+        }
+      }
+      if (res.error) throw res.error;
+      if (selectedOrder?.id === voidTarget.id) {
+        setSelectedOrder((prev) => (prev ? { ...prev, ...fullPatch } : null));
+      }
+      setVoidTarget(null);
+      await onRefresh?.();
+    } catch (err) {
+      alert('Failed to void order: ' + (err.message || err));
+    } finally {
+      setVoidSubmitting(false);
     }
   };
 
@@ -503,7 +589,7 @@ export function LiveOrdersView({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => updateOrderStatus(order, 'Voided')}
+                      onClick={() => openVoidModal(order)}
                       className="flex-1 py-3 px-4 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       Void Tab
@@ -560,6 +646,15 @@ export function LiveOrdersView({
               <Printer size={14} /> Print Receipt
             </button>
             <div className="flex items-center gap-2">
+              {canVoidOrder(selectedOrder) && (
+                <button
+                  type="button"
+                  onClick={() => openVoidModal(selectedOrder)}
+                  className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer"
+                >
+                  Void Order
+                </button>
+              )}
               {classifyOrderBucket(selectedOrder) !== 'completed' && classifyOrderBucket(selectedOrder) !== 'voided' && (
                 <button
                   type="button"
@@ -676,14 +771,181 @@ export function LiveOrdersView({
                   <span className="font-mono">KES {Number(selectedOrder.delivery_fee).toLocaleString()}</span>
                 </div>
               )}
+              {Array.isArray(selectedOrder.charges_breakdown) && selectedOrder.charges_breakdown.length > 0 ? (
+                selectedOrder.charges_breakdown.map((chg, idx) => (
+                  <div key={chg.id || idx} className="flex justify-between text-slate-600">
+                    <span>{chg.title || chg.name}{chg.is_inclusive ? ' (Incl.)' : ''}</span>
+                    <span className="font-mono">KES {Number(chg.amount || 0).toLocaleString()}</span>
+                  </div>
+                ))
+              ) : (
+                <>
+                  {Number(selectedOrder.tax_amount || 0) > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Tax / VAT</span>
+                      <span className="font-mono">KES {Number(selectedOrder.tax_amount).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {Number(selectedOrder.charges_amount || 0) > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Service & Additional Charges</span>
+                      <span className="font-mono">KES {Number(selectedOrder.charges_amount).toLocaleString()}</span>
+                    </div>
+                  )}
+                </>
+              )}
               <div className="flex justify-between font-black text-sm text-slate-900 pt-2 border-t border-slate-200">
                 <span>Grand Total</span>
                 <span className="font-mono text-emerald-700">KES {Number(selectedOrder.total_amount || 0).toLocaleString()}</span>
               </div>
+              {selectedOrder.void_reason && (
+                <div className="mt-2 pt-2 border-t border-rose-200 text-rose-700 font-bold text-[11px]">
+                  Void Reason: {selectedOrder.void_reason}
+                </div>
+              )}
             </div>
           </div>
         )}
       </SlideOverDrawer>
+
+      {/* Void Order Reason & Inventory Disposition Modal */}
+      {voidTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Void Order #{voidTarget.ticket_number || String(voidTarget.id).slice(0, 8)}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Choose void reason and specify whether each item returns to inventory stock or is logged as wastage.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVoidTarget(null)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Void Reason</label>
+              <select
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+              >
+                <option value="Customer Cancelled">Customer Cancelled</option>
+                <option value="Wrong Order Entered">Wrong Order Entered</option>
+                <option value="Kitchen Out of Stock">Kitchen Out of Stock</option>
+                <option value="Payment Failed / Reversed">Payment Failed / Reversed</option>
+                <option value="Duplicate Order">Duplicate Order</option>
+                <option value="Test / Training Order">Test / Training Order</option>
+                <option value="Other">Other (Specify)</option>
+              </select>
+              {voidReason === 'Other' && (
+                <input
+                  type="text"
+                  value={voidCustomReason}
+                  onChange={(e) => setVoidCustomReason(e.target.value)}
+                  placeholder="Enter exact void reason..."
+                  className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                />
+              )}
+            </div>
+
+            {renderLines(voidTarget).length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase text-slate-500">Per-Item Stock Disposition</span>
+                  <div className="flex items-center gap-2 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const m = {};
+                        renderLines(voidTarget).forEach((l, i) => { m[l.id || i] = 'return_to_stock'; });
+                        setVoidLineDisposition(m);
+                      }}
+                      className="text-emerald-700 hover:underline"
+                    >
+                      All Return to Stock
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const m = {};
+                        renderLines(voidTarget).forEach((l, i) => { m[l.id || i] = 'wastage'; });
+                        setVoidLineDisposition(m);
+                      }}
+                      className="text-rose-700 hover:underline"
+                    >
+                      All Wastage
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                  {renderLines(voidTarget).map((line, i) => {
+                    const key = line.id || i;
+                    const mode = voidLineDisposition[key] || 'return_to_stock';
+                    return (
+                      <div key={key} className="p-2.5 flex items-center justify-between gap-2 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 truncate">{line.quantity || 1}x {line.item_name || line.name || 'Item'}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setVoidLineDisposition((prev) => ({ ...prev, [key]: 'return_to_stock' }))}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
+                              mode === 'return_to_stock'
+                                ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                                : 'bg-white border-slate-200 text-slate-500'
+                            }`}
+                          >
+                            Return to Stock
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVoidLineDisposition((prev) => ({ ...prev, [key]: 'wastage' }))}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
+                              mode === 'wastage'
+                                ? 'bg-rose-50 border-rose-600 text-rose-800'
+                                : 'bg-white border-slate-200 text-slate-500'
+                            }`}
+                          >
+                            Mark as Wastage
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setVoidTarget(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={voidSubmitting}
+                onClick={confirmVoidOrder}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black disabled:opacity-50"
+              >
+                {voidSubmitting ? 'Voiding...' : 'Confirm Void Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

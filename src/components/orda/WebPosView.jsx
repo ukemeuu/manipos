@@ -7,6 +7,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { resolveEffectivePrice } from '../../lib/tenantConfig';
 import { initiateStkPush } from '../../lib/mpesa';
+import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 
 const SALES_CHANNELS = [
   'Web POS',
@@ -49,7 +50,16 @@ function makeUuid() {
 
 async function safeInsertOrder(payload) {
   let attempt = { ...payload };
-  const optionalCols = ['idempotency_key', 'sales_channel', 'branch_id', 'delivery_fee', 'delivery_provider'];
+  const optionalCols = [
+    'idempotency_key',
+    'sales_channel',
+    'branch_id',
+    'delivery_fee',
+    'delivery_provider',
+    'tax_amount',
+    'charges_amount',
+    'charges_breakdown',
+  ];
   for (let i = 0; i <= optionalCols.length; i += 1) {
     const res = await supabase
       .from('pos_orders')
@@ -74,6 +84,7 @@ export function WebPosView({
   activeBranch = null,
   staffName = 'Web POS Staff',
   initialOrder = null,
+  tendersConfig = null,
   onBackToOrders,
   onOrderPlaced,
 }) {
@@ -83,6 +94,7 @@ export function WebPosView({
   const [modifierGroups, setModifierGroups] = useState([]);
   const [combos, setCombos] = useState([]);
   const [guests, setGuests] = useState([]);
+  const [activeCharges, setActiveCharges] = useState([]);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
@@ -140,7 +152,7 @@ export function WebPosView({
       }
       setLoading(true);
       try {
-        const [catRes, menuRes, modRes, comboRes, guestRes] = await Promise.all([
+        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList] = await Promise.all([
           supabase
             .from('pos_categories')
             .select('*')
@@ -159,13 +171,14 @@ export function WebPosView({
             .from('menu_combos')
             .select('*')
             .eq('restaurant_id', restaurantId)
-            .eq('is_active', true),
+            .eq('is_available', true),
           supabase
             .from('guests')
             .select('id, first_name, last_name, phone, delivery_address')
             .eq('restaurant_id', restaurantId)
             .order('created_at', { ascending: false })
             .limit(80),
+          fetchActiveOrderCharges(restaurantId),
         ]);
 
         if (!active) return;
@@ -174,6 +187,7 @@ export function WebPosView({
         if (!modRes.error) setModifierGroups(modRes.data || []);
         if (!comboRes.error) setCombos(comboRes.data || []);
         if (!guestRes.error) setGuests(guestRes.data || []);
+        setActiveCharges(Array.isArray(chargesList) ? chargesList : []);
       } catch (err) {
         console.warn('WebPOS load error:', err);
       } finally {
@@ -286,6 +300,7 @@ export function WebPosView({
             unitPrice: effective,
             quantity: 1,
             summary: '',
+            excludeFromTax: Boolean(item.exclude_from_tax),
           },
         ];
       });
@@ -396,6 +411,7 @@ export function WebPosView({
         unitPrice: modalUnitPrice,
         quantity: itemQty,
         summary: parts.join(' | '),
+        excludeFromTax: Boolean(item.exclude_from_tax),
       },
     ]);
     setCustomizingItem(null);
@@ -403,8 +419,9 @@ export function WebPosView({
 
   const addComboToCart = (combo) => {
     const comboPrice = Number(combo.price || 0);
-    const itemsSummary = Array.isArray(combo.free_items) && combo.free_items.length > 0
-      ? `Combo (${combo.free_items.length} items)`
+    const itemsArr = Array.isArray(combo.items) ? combo.items : Array.isArray(combo.free_items) ? combo.free_items : [];
+    const itemsSummary = itemsArr.length > 0
+      ? `Combo (${itemsArr.length} items)`
       : 'Combo Deal';
     setCart((prev) => [
       ...prev,
@@ -433,8 +450,47 @@ export function WebPosView({
     return Math.min(subtotal, val);
   }, [appliedDiscount, subtotal]);
 
+  const taxableSubtotal = useMemo(
+    () =>
+      cart.reduce(
+        (s, item) => s + (item.excludeFromTax ? 0 : Number(item.unitPrice || 0) * Number(item.quantity || 1)),
+        0
+      ),
+    [cart]
+  );
+
   const appliedDeliveryFee = diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0;
-  const grandTotal = Math.max(0, subtotal - discountAmount + appliedDeliveryFee);
+
+  const availableTenders = useMemo(() => {
+    if (!Array.isArray(tendersConfig) || tendersConfig.length === 0) return PAYMENT_TENDERS;
+    const enabledSet = new Set(
+      tendersConfig
+        .filter((t) => t.pos_enabled !== false)
+        .map((t) => String(t.id || t.label || '').toLowerCase().trim())
+    );
+    const filtered = PAYMENT_TENDERS.filter(
+      (t) => enabledSet.has(t.id.toLowerCase()) || enabledSet.has(t.label.toLowerCase())
+    );
+    return filtered.length > 0 ? filtered : PAYMENT_TENDERS;
+  }, [tendersConfig]);
+
+  const chargesComputation = useMemo(
+    () =>
+      computeOrderCharges({
+        subtotal,
+        taxableSubtotal,
+        discountAmount,
+        diningOption: diningMode,
+        paymentMethod: paymentTender,
+        charges: activeCharges,
+      }),
+    [subtotal, taxableSubtotal, discountAmount, diningMode, paymentTender, activeCharges]
+  );
+
+  const grandTotal = Math.max(
+    0,
+    subtotal - discountAmount + appliedDeliveryFee + chargesComputation.totalChargesAndTax
+  );
 
   const handleApplyPromo = async () => {
     setPromoError('');
@@ -524,6 +580,9 @@ export function WebPosView({
         sales_channel: salesChannel,
         branch_id: activeBranch?.id || null,
         delivery_fee: appliedDeliveryFee,
+        tax_amount: chargesComputation.taxTotal,
+        charges_amount: chargesComputation.otherChargesTotal,
+        charges_breakdown: chargesComputation.lines,
         mpesa_receipt: paymentReference.trim() || null,
         notes: noteParts.join(' | ') || null,
         guest_id: selectedGuest?.id || null,
@@ -532,6 +591,16 @@ export function WebPosView({
 
       const { data: orderData, error: orderErr } = await safeInsertOrder(payload);
       if (orderErr) throw orderErr;
+
+      if (chargesComputation.lines.length > 0 && orderData?.id) {
+        recordOrderChargeLines({
+          restaurantId,
+          orderId: orderData.id,
+          lines: chargesComputation.lines,
+          grandTotal,
+          source: salesChannel || 'Web POS',
+        });
+      }
 
       const itemsPayload = cart.map((item) => ({
         order_id: orderData.id,
@@ -1012,7 +1081,7 @@ export function WebPosView({
               <div>
                 <h3 className="text-sm font-black text-slate-900 mb-2">2. Select Payment Tender</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {PAYMENT_TENDERS.map((tender) => {
+                  {availableTenders.map((tender) => {
                     const Icon = tender.icon;
                     const active = paymentTender === tender.id;
                     return (
@@ -1188,6 +1257,15 @@ export function WebPosView({
                   <span className="font-bold">KES {appliedDeliveryFee.toLocaleString()}</span>
                 </div>
               )}
+              {chargesComputation.lines.map((chg, idx) => (
+                <div key={chg.charge_id || idx} className="flex justify-between text-slate-600">
+                  <span>
+                    {chg.title}
+                    {chg.is_percentage_charge ? ` (${chg.charge_percent}%)` : ''}
+                  </span>
+                  <span className="font-bold">KES {Number(chg.amount || 0).toLocaleString()}</span>
+                </div>
+              ))}
               <div className="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-200">
                 <span>Total</span>
                 <span>KES {grandTotal.toLocaleString()}</span>

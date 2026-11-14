@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Search, ShoppingBag, X, Plus, Minus, Star, Clock, 
-    MapPin, ChevronRight, Check, AlertCircle, Sparkles, 
+import {
+    Search, ShoppingBag, X, Plus, Minus, Star, Clock,
+    MapPin, ChevronRight, Check, AlertCircle, Sparkles,
     Share2, Info, Heart, ArrowLeft, Motorbike, UtensilsCrossed,
     SlidersHorizontal, Tag, Phone, User, Calendar, LogOut,
     CheckCircle, Loader2, Copy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { initiateStkPush } from '../lib/mpesa';
+import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../lib/orderCharges';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -34,6 +35,7 @@ function normaliseTenantMenu(tenant) {
             branchId: item.branch_id || null,
             isUpsell: item.is_upsell === true,
             isAlcoholic: item.is_alcoholic === true,
+            excludeFromTax: item.exclude_from_tax === true,
             variations,
             additions,
             hasCustomizations: (item.modifierGroups || []).length > 0 || variations.length > 0 || additions.length > 0,
@@ -65,12 +67,14 @@ function normaliseTenantMenu(tenant) {
     if (Array.isArray(tenant?.combos) && tenant.combos.length > 0) {
         categories.unshift({
             name: 'Combos & Deals',
-            items: tenant.combos.map((c) => ({
+            items: tenant.combos.map((c) => {
+                const comboItems = Array.isArray(c.items) ? c.items : Array.isArray(c.free_items) ? c.free_items : [];
+                return {
                 id: `combo-${c.id}`,
                 title: c.name,
                 description:
-                    Array.isArray(c.free_items) && c.free_items.length > 0
-                        ? `Combo bundle (${c.free_items.length} included items)`
+                    comboItems.length > 0
+                        ? `Combo bundle (${comboItems.length} included items)`
                         : 'Special combo bundle',
                 price: Number(c.price) || 0,
                 originalPrice: Number(c.price) || 0,
@@ -87,7 +91,8 @@ function normaliseTenantMenu(tenant) {
                 isSoldOut: false,
                 isPopular: true,
                 rating: null,
-            })),
+            };
+            }),
         });
     }
 
@@ -185,8 +190,8 @@ export function OrderRatingWidget({ order, tenant, onRated }) {
                         overallRating: rating,
                         comments: comment.trim()
                     })
-                }).catch(() => {});
-            } catch (_) {}
+                }).catch(() => { });
+            } catch (_) { }
 
             if (typeof window !== 'undefined') {
                 localStorage.setItem(`manipos_rated_${tenant?.slug || 'online'}_${ticket}`, 'true');
@@ -240,11 +245,10 @@ export function OrderRatingWidget({ order, tenant, onRated }) {
                     >
                         <Star
                             size={28}
-                            className={`transition-colors ${
-                                star <= (hoverRating || rating)
+                            className={`transition-colors ${star <= (hoverRating || rating)
                                     ? 'fill-amber-400 text-amber-400 drop-shadow-sm'
                                     : 'text-gray-300'
-                            }`}
+                                }`}
                         />
                     </button>
                 ))}
@@ -401,7 +405,7 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
 
     return (
         <div className="min-h-screen bg-gray-950/80 backdrop-blur-md text-gray-900 flex items-center justify-center p-4 z-50 fixed inset-0 overflow-y-auto">
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="max-w-md w-full bg-white border border-gray-200 rounded-[2.5rem] p-6 sm:p-8 text-center shadow-2xl relative overflow-hidden my-auto"
@@ -621,14 +625,14 @@ const MicrositeOrderSuccessModal = ({ orderSuccess, setOrderSuccess, whatsappSet
                         {/* Integrated Order Rating & Experience Feedback */}
                         <OrderRatingWidget order={orderSuccess} tenant={tenant} />
 
-                        {tenant?.confirmationCta?.label && tenant?.confirmationCta?.url && (
+                        {(tenant?.confirmationCta?.text || tenant?.confirmationCta?.label) && tenant?.confirmationCta?.url && (
                             <a
                                 href={tenant.confirmationCta.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="w-full py-3.5 bg-[#06C167] hover:bg-[#05a357] text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
                             >
-                                {tenant.confirmationCta.label}
+                                {tenant.confirmationCta.text || tenant.confirmationCta.label}
                             </a>
                         )}
 
@@ -777,7 +781,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 const parsed = JSON.parse(saved);
                 return `${parsed.first_name || ''} ${parsed.last_name || ''}`.trim();
             }
-        } catch {}
+        } catch { }
         return '';
     });
     const [customerPhone, setCustomerPhone] = useState(() => {
@@ -787,7 +791,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 const parsed = JSON.parse(saved);
                 return parsed.phone || '';
             }
-        } catch {}
+        } catch { }
         return '';
     });
     const [deliveryAddress, setDeliveryAddress] = useState(() => {
@@ -797,7 +801,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 const parsed = JSON.parse(saved);
                 return parsed.delivery_address || '';
             }
-        } catch {}
+        } catch { }
         return '';
     });
     const [orderNote, setOrderNote] = useState('');
@@ -898,7 +902,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                     }
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
 
         return null;
     };
@@ -1046,7 +1050,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                 provider: 'Maps'
                             }));
                         }
-                    } catch (e) {}
+                    } catch (e) { }
                 }
 
                 setAddressSuggestions(suggestions);
@@ -1108,6 +1112,16 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         return () => { cancelled = true; };
     }, [tenant?.id, tenant?.paybill, tenant?.account, tenant?.deliveryFee]);
 
+    const [activeCharges, setActiveCharges] = useState([]);
+    useEffect(() => {
+        let cancelled = false;
+        if (!tenant?.id) return;
+        fetchActiveOrderCharges(tenant.id).then((list) => {
+            if (!cancelled) setActiveCharges(Array.isArray(list) ? list : []);
+        });
+        return () => { cancelled = true; };
+    }, [tenant?.id]);
+
     // Modal Customization State (when an item modal is open)
     const [modalQuantity, setModalQuantity] = useState(1);
     const [modalSelections, setModalSelections] = useState({}); // { [modId]: selectedOptionId or array of optionIds }
@@ -1121,7 +1135,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     useEffect(() => {
         try {
             localStorage.setItem(cartKey, JSON.stringify(cart));
-        } catch {}
+        } catch { }
     }, [cart]);
 
     // Handle URL discount parameter (e.g. ?discount=JANE10)
@@ -1200,7 +1214,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         try {
             const input = loginInput.trim().toLowerCase();
             const isEmail = input.includes('@');
-            
+
             let query = supabase
                 .from('guests')
                 .select('id, first_name, last_name, phone, email, delivery_address')
@@ -1210,10 +1224,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             } else {
                 query = query.eq('phone', input);
             }
-            
+
             const { data: existingGuests, error: fetchErr } = await query;
             if (fetchErr) throw fetchErr;
-            
+
             if (existingGuests && existingGuests.length > 0) {
                 const guest = existingGuests[0];
                 setGuestUser(guest);
@@ -1246,7 +1260,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                         setGuestLoading(false);
                         return;
                     }
-                    
+
                     const newGuestPayload = {
                         restaurant_id: tenant.id,
                         first_name: regFirstName.trim(),
@@ -1255,15 +1269,15 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                         email: regEmail.trim() ? regEmail.trim().toLowerCase() : null,
                         delivery_address: regAddress.trim() || null
                     };
-                    
+
                     const { data: newGuest, error: insertErr } = await supabase
                         .from('guests')
                         .insert([newGuestPayload])
                         .select()
                         .single();
-                        
+
                     if (insertErr) throw insertErr;
-                    
+
                     setGuestUser(newGuest);
                     setCustomerName(`${newGuest.first_name || ''} ${newGuest.last_name || ''}`.trim());
                     if (newGuest.phone) setCustomerPhone(newGuest.phone);
@@ -1436,6 +1450,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         return cart.reduce((sum, item) => sum + (item.totalPrice * item.quantity), 0);
     }, [cart]);
 
+    const taxableSubtotal = useMemo(() => {
+        return cart.reduce((sum, item) => sum + (item.excludeFromTax ? 0 : item.totalPrice * item.quantity), 0);
+    }, [cart]);
+
     const discountAmount = useMemo(() => {
         if (!appliedDiscount) return 0;
         if (appliedDiscount.type === 'percentage') {
@@ -1453,7 +1471,17 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     const deliveryFee = (diningMode === 'pickup' || diningMode === 'dine_in')
         ? 0
         : (isFreeDelivery ? 0 : calculatedDeliveryFee);
-    const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
+    const chargesComputation = useMemo(() => {
+        return computeOrderCharges({
+            subtotal,
+            taxableSubtotal,
+            discountAmount,
+            diningOption: diningMode === 'delivery' ? 'Delivery' : diningMode === 'dine_in' ? 'Dine In' : 'Pickup',
+            paymentMethod: 'Paid to App',
+            charges: activeCharges,
+        });
+    }, [subtotal, taxableSubtotal, discountAmount, diningMode, activeCharges]);
+    const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee + chargesComputation.totalChargesAndTax);
     const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     // Open Item Customization Modal
@@ -1608,7 +1636,8 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             image_url: selectedItem.image_url,
             quantity: modalQuantity,
             modifiers: chosenModifierLabels,
-            specialInstructions: modalSpecialInstructions.trim()
+            specialInstructions: modalSpecialInstructions.trim(),
+            excludeFromTax: selectedItem.excludeFromTax === true,
         };
 
         setCart(prev => {
@@ -1697,15 +1726,19 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 order_channel: 'Online',
                 sales_channel: 'Microsite',
                 ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
+                tax_amount: chargesComputation.taxTotal,
+                charges_amount: chargesComputation.otherChargesTotal,
+                charges_breakdown: chargesComputation.lines,
                 notes: finalNotes,
                 guest_id: guestUser ? guestUser.id : null
             };
 
-            // 1. Insert order header (with graceful fallback for optional Wave 1 columns)
+            // 1. Insert order header (with graceful fallback for optional Wave 1/Wave 2 columns)
             let orderInsertAttempt = { ...orderPayload };
             let orderData = null;
             let orderError = null;
-            for (const optCol of ['sales_channel', 'branch_id', null]) {
+            const optionalOrderCols = ['sales_channel', 'branch_id', 'tax_amount', 'charges_amount', 'charges_breakdown'];
+            for (let i = 0; i <= optionalOrderCols.length; i += 1) {
                 const res = await supabase
                     .from('pos_orders')
                     .insert([orderInsertAttempt])
@@ -1714,10 +1747,11 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 orderData = res.data;
                 orderError = res.error;
                 if (!orderError) break;
-                const msg = String(orderError.message || '');
-                if (optCol && msg.toLowerCase().includes(optCol)) {
+                const msg = String(orderError.message || '').toLowerCase();
+                const missing = optionalOrderCols.find((col) => col in orderInsertAttempt && msg.includes(col));
+                if (missing) {
                     const next = { ...orderInsertAttempt };
-                    delete next[optCol];
+                    delete next[missing];
                     orderInsertAttempt = next;
                 } else {
                     break;
@@ -1725,6 +1759,16 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             }
 
             if (orderError) throw orderError;
+
+            if (chargesComputation.lines.length > 0 && orderData?.id && tenant?.id) {
+                recordOrderChargeLines({
+                    restaurantId: tenant.id,
+                    orderId: orderData.id,
+                    lines: chargesComputation.lines,
+                    grandTotal: finalTotal,
+                    source: 'Microsite',
+                });
+            }
 
             // 2. Insert order items
             const itemPayloads = cart.map(item => ({
@@ -1919,11 +1963,11 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             {/* ========================================================= */}
             <header className="sticky top-0 z-40 bg-white border-b border-[#e2e2e2] transition-shadow duration-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-                    
+
                     {/* Left: Brand / Logo */}
                     <div className="flex items-center gap-6">
                         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                            <img 
+                            <img
                                 src={store.logo || '/manipos_logo.png'}
                                 alt={store.name}
                                 className="w-9 h-9 object-contain rounded-xl shadow-sm bg-white"
@@ -1951,7 +1995,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                             </select>
                         )}
                         <div className="flex items-center gap-2 text-xs text-[#545454] bg-[#f3f3f3] hover:bg-[#eaeaea] px-4 py-2 rounded-full cursor-pointer transition-colors"
-                             onClick={() => setStoreInfoOpen(true)}>
+                            onClick={() => setStoreInfoOpen(true)}>
                             <MapPin size={14} className="text-black" />
                             <span className="font-medium text-black">{store.address || 'Nairobi'}</span>
                             {store.delivery_fee && (<><span>•</span><span className="text-[#06C167] font-semibold">{store.delivery_fee}</span></>)}
@@ -2030,7 +2074,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             {/* ========================================================= */}
             <div className="bg-white border-b border-[#e2e2e2]">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                    
+
                     {/* Hero Image */}
                     <div className="relative w-full h-44 sm:h-64 md:h-72 rounded-2xl sm:rounded-3xl overflow-hidden bg-black shadow-inner">
                         <img
@@ -2039,7 +2083,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                             className="w-full h-full object-cover opacity-90 transition-transform duration-700 hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                        
+
                         {/* Overlay Logo Badge */}
                         <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 flex items-end gap-3">
                             <img
@@ -2071,9 +2115,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-[#545454]">
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             {/* Rating */}
-                            <div 
-                                onClick={() => setRatingOrder({ 
-                                    ticket_number: 'DIRECT', 
+                            <div
+                                onClick={() => setRatingOrder({
+                                    ticket_number: 'DIRECT',
                                     dining_option: diningMode === 'delivery' ? 'Delivery' : (diningMode === 'pickup' ? 'Pickup' : 'Dine In'),
                                     customer_name: guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : 'Guest',
                                     customer_contact: guestUser?.phone || 'N/A'
@@ -2108,7 +2152,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             {/* ========================================================= */}
             <div className={`sticky top-16 z-30 bg-white border-b border-[#e2e2e2] transition-shadow duration-200 ${isScrolled ? 'shadow-md' : ''}`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div 
+                    <div
                         ref={categoryPillsRef}
                         className="flex items-center gap-2 overflow-x-auto no-scrollbar py-3 scroll-smooth"
                     >
@@ -2120,11 +2164,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                     key={cat.name}
                                     id={pillId}
                                     onClick={() => scrollToCategory(cat.name)}
-                                    className={`shrink-0 px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all duration-150 ${
-                                        isActive
+                                    className={`shrink-0 px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all duration-150 ${isActive
                                             ? 'bg-black text-white shadow-sm'
                                             : 'bg-[#f3f3f3] hover:bg-[#e8e8e8] text-[#111111]'
-                                    }`}
+                                        }`}
                                 >
                                     {cat.name}
                                 </button>
@@ -2160,8 +2203,8 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                     </div>
                 ) : (
                     filteredCategories.map(category => (
-                        <section 
-                            key={category.name} 
+                        <section
+                            key={category.name}
                             id={`section-${category.name.replace(/[^a-zA-Z0-9]/g, '-')}`}
                             className="space-y-4"
                         >
@@ -2324,11 +2367,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                         key={v.name}
                                                         type="button"
                                                         onClick={() => setModalVariation(v)}
-                                                        className={`p-3 rounded-xl border text-left transition-all ${
-                                                            active
+                                                        className={`p-3 rounded-xl border text-left transition-all ${active
                                                                 ? 'bg-white border-black shadow-sm font-bold'
                                                                 : 'bg-white/60 border-[#e2e2e2] hover:border-[#a3a3a3]'
-                                                        }`}
+                                                            }`}
                                                     >
                                                         <div className="text-xs text-black">{v.name}</div>
                                                         <div className="text-[11px] font-extrabold text-[#047857]">
@@ -2383,13 +2425,12 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                 return (
                                                                     <div
                                                                         key={opt.id}
-                                                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                                                                            opt.isAvailable === false
+                                                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${opt.isAvailable === false
                                                                                 ? 'opacity-50 bg-[#f3f3f3] border-transparent'
                                                                                 : optQty > 0
                                                                                     ? 'bg-white border-black shadow-sm font-semibold'
                                                                                     : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
-                                                                        }`}
+                                                                            }`}
                                                                     >
                                                                         <div>
                                                                             <p className="text-xs text-black font-semibold">{opt.name}</p>
@@ -2437,13 +2478,12 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                             return (
                                                                 <label
                                                                     key={opt.id}
-                                                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                                                                        opt.isAvailable === false
+                                                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${opt.isAvailable === false
                                                                             ? 'opacity-50 cursor-not-allowed bg-[#f3f3f3] border-transparent'
                                                                             : isSelected
                                                                                 ? 'bg-white border-black shadow-sm font-semibold'
                                                                                 : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     <div className="flex items-center gap-3">
                                                                         <input
@@ -2508,9 +2548,8 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                 return (
                                                     <label
                                                         key={add.name}
-                                                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                                                            checked ? 'bg-white border-black shadow-sm font-semibold' : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
-                                                        }`}
+                                                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${checked ? 'bg-white border-black shadow-sm font-semibold' : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
+                                                            }`}
                                                     >
                                                         <span className="text-xs text-black">{add.name}</span>
                                                         <div className="flex items-center gap-2.5">
@@ -2795,11 +2834,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                             <button
                                                 type="button"
                                                 onClick={() => setDiningMode('delivery')}
-                                                className={`flex-1 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${
-                                                    diningMode === 'delivery' 
-                                                        ? 'bg-black text-white shadow-sm font-black' 
+                                                className={`flex-1 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${diningMode === 'delivery'
+                                                        ? 'bg-black text-white shadow-sm font-black'
                                                         : 'text-[#545454] hover:text-black'
-                                                }`}
+                                                    }`}
                                             >
                                                 <Motorbike size={14} />
                                                 <span>Delivery</span>
@@ -2807,11 +2845,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                             <button
                                                 type="button"
                                                 onClick={() => setDiningMode('pickup')}
-                                                className={`flex-1 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${
-                                                    diningMode === 'pickup' 
-                                                        ? 'bg-black text-white shadow-sm font-black' 
+                                                className={`flex-1 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${diningMode === 'pickup'
+                                                        ? 'bg-black text-white shadow-sm font-black'
                                                         : 'text-[#545454] hover:text-black'
-                                                }`}
+                                                    }`}
                                             >
                                                 <ShoppingBag size={14} />
                                                 <span>Pickup</span>
@@ -2819,11 +2856,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                             <button
                                                 type="button"
                                                 onClick={() => setDiningMode('dine_in')}
-                                                className={`flex-1 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${
-                                                    diningMode === 'dine_in' 
-                                                        ? 'bg-black text-white shadow-sm font-black' 
+                                                className={`flex-1 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${diningMode === 'dine_in'
+                                                        ? 'bg-black text-white shadow-sm font-black'
                                                         : 'text-[#545454] hover:text-black'
-                                                }`}
+                                                    }`}
                                             >
                                                 <UtensilsCrossed size={14} />
                                                 <span>Dine In</span>
@@ -2880,11 +2916,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                     key={idx}
                                                                     type="button"
                                                                     onClick={() => setDeliveryAddress(addr)}
-                                                                    className={`shrink-0 text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
-                                                                        deliveryAddress.trim() === addr.trim()
+                                                                    className={`shrink-0 text-[11px] px-2.5 py-1 rounded-full border transition-colors ${deliveryAddress.trim() === addr.trim()
                                                                             ? 'bg-black text-white border-black'
                                                                             : 'bg-white text-black border-[#d4d4d4] hover:border-black'
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     📍 {addr.length > 25 ? addr.substring(0, 25) + '...' : addr}
                                                                 </button>
@@ -2969,6 +3004,12 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                             : (geocodingError || 'Enter your address to calculate the delivery fee.')}
                                                 </div>
                                             )}
+                                            {chargesComputation.lines.map((chg, idx) => (
+                                                <div key={chg.charge_id || idx} className="flex justify-between text-[#545454]">
+                                                    <span>{chg.title}{chg.is_percentage_charge ? ` (${chg.charge_percent}%)` : ''}</span>
+                                                    <span className="font-bold text-black">KES {Number(chg.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                </div>
+                                            ))}
                                             <div className="border-t border-[#e2e2e2] pt-2 flex justify-between font-black text-sm text-black">
                                                 <span>Total Payable</span>
                                                 <span>KES {finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -3058,7 +3099,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                             </button>
                             <h3 className="text-xl font-black text-black mb-1">{store.name}</h3>
                             <p className="text-xs text-[#545454] mb-4">{store.subtitle}</p>
-                            
+
                             <div className="space-y-3 text-xs">
                                 <div className="flex items-start gap-3 p-3 bg-[#f9f9f9] rounded-xl">
                                     <MapPin size={16} className="text-black mt-0.5 shrink-0" />
