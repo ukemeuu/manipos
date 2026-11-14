@@ -328,7 +328,8 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                 <a href="#integrations" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Integrations</a>
                 <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">FAQ</a>
                 <button onClick={() => { setMobileMenuOpen(false); onBrowseRestaurants?.(); }} className="text-left text-amber-400 font-bold">Order food →</button>
-                <button onClick={() => { setMobileMenuOpen(false); setShowOnboardModal(true); }} className="text-left text-white font-bold">Create restaurant →</button>
+                <button onClick={() => { setMobileMenuOpen(false); setShowSignInModal(true); }} className="text-left text-white font-bold">Sign In (Staff / Admin / CRM) →</button>
+                <button onClick={() => { setMobileMenuOpen(false); setShowOnboardModal(true); }} className="text-left text-white/80 font-bold">Create restaurant →</button>
               </div>
             </motion.div>
           )}
@@ -1283,11 +1284,11 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
 
               <div className="space-y-2">
                 <span className="px-3 py-1 bg-amber-400/10 text-amber-400 border border-amber-400/20 text-xs font-bold rounded-full uppercase tracking-wider inline-block">
-                  Existing Restaurant Sign In
+                  Unified Workspace Sign In
                 </span>
                 <h3 className="text-2xl font-black text-white tracking-tight">Sign In to ManiPOS</h3>
                 <p className="text-slate-400 text-xs leading-relaxed">
-                  Enter your email address and password to access your restaurant workspace.
+                  For Admin, Staff, Cashiers, Kitchen, CRM, HR & Accounting — sign in here on manipos.com.
                 </p>
               </div>
 
@@ -1359,6 +1360,21 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                     </>
                   )}
                 </button>
+
+                <div className="flex items-center justify-between pt-2 text-[11px]">
+                  <a
+                    href="/?page=login"
+                    className="text-amber-400 hover:text-amber-300 font-bold"
+                  >
+                    Forgot password / Reset OTP →
+                  </a>
+                  <a
+                    href="/?page=login"
+                    className="text-slate-400 hover:text-white font-semibold"
+                  >
+                    Staff PIN Login →
+                  </a>
+                </div>
               </form>
             </motion.div>
           </div>

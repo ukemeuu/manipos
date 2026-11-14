@@ -346,6 +346,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
 
         if (selectedTags.length > 0 && guestId) {
             const tagsToInsert = selectedTags.map(tag => ({
+                ...(restaurantId ? { restaurant_id: restaurantId } : {}),
                 guest_id: guestId,
                 tag_name: tag.name,
                 color: tag.color

@@ -29,7 +29,32 @@ export async function authenticateStaffLogin(email, password) {
             if (!error && data?.session) {
                 const appMeta = data.user?.app_metadata || {};
                 const userMeta = data.user?.user_metadata || {};
-                const staffId = userMeta.staff_id || data.user.id;
+                let staffId = userMeta.staff_id || data.user.id;
+                let resolvedRole = appMeta.role || userMeta.role || null;
+                let resolvedName = appMeta.name || userMeta.name || userMeta.full_name || null;
+                let resolvedTenantId = appMeta.tenant_id || null;
+                let resolvedTenantName = appMeta.tenant_name || '';
+                let resolvedTenantSlug = appMeta.tenant_slug || '';
+
+                // Resolve tenant & role from staff_access if JWT app_metadata is absent (e.g., POJ Management Auth accounts)
+                if (!resolvedTenantId || !resolvedRole) {
+                    try {
+                        const { data: staffRow } = await supabase
+                            .from('staff_access')
+                            .select('id, name, role, restaurant_id, restaurants(id, name, slug)')
+                            .ilike('email', cleanEmail)
+                            .limit(1)
+                            .maybeSingle();
+                        if (staffRow) {
+                            staffId = staffRow.id || staffId;
+                            resolvedRole = resolvedRole || staffRow.role;
+                            resolvedName = resolvedName || staffRow.name;
+                            resolvedTenantId = resolvedTenantId || staffRow.restaurant_id;
+                            resolvedTenantName = resolvedTenantName || staffRow.restaurants?.name || '';
+                            resolvedTenantSlug = resolvedTenantSlug || staffRow.restaurants?.slug || '';
+                        }
+                    } catch (_) {}
+                }
 
                 // Resolve the authoritative permission list (role defaults or a
                 // per-user override) from the staff record.
@@ -42,18 +67,19 @@ export async function authenticateStaffLogin(email, password) {
                 } catch (_) {
                     // Fall through to the role defaults below.
                 }
-                if (!permissions.length) permissions = roleDefaults(appMeta.role || 'cashier');
+                const finalRole = resolvedRole || 'staff';
+                if (!permissions.length) permissions = roleDefaults(finalRole);
 
                 const staffUser = {
                     // Prefer the staff_access id so the RPCs can resolve the actor.
                     id: staffId,
                     authUid: data.user.id,
-                    name: appMeta.name || userMeta.name || cleanEmail.split('@')[0] || 'Staff',
+                    name: resolvedName || cleanEmail.split('@')[0] || 'Staff',
                     email: data.user.email || cleanEmail,
-                    role: appMeta.role || 'cashier',
-                    restaurantId: appMeta.tenant_id || null,
-                    restaurantName: appMeta.tenant_name || '',
-                    tenantSlug: appMeta.tenant_slug || '',
+                    role: finalRole,
+                    restaurantId: resolvedTenantId || null,
+                    restaurantName: resolvedTenantName || '',
+                    tenantSlug: resolvedTenantSlug || '',
                     mustChangePassword: userMeta.must_change_password === true,
                     permissions,
                 };

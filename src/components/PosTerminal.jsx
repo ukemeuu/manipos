@@ -2326,50 +2326,82 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         }
     };
 
-    const fetchOpenOrders = async () => {
-        try {
-            // Fetch both:
-            // 1. Orders awaiting payment OR awaiting payment verification. Microsite
-            //    orders start as 'Pending'; as soon as the customer submits their
-            //    M-Pesa code the microsite marks them 'pending_verification'. Both
-            //    states need staff attention, so both must show up here — otherwise
-            //    an order vanishes from the accept list the moment the customer pays.
-            // 2. Dine-in orders for named tables that are 'Paid' — table is still occupied and 
-            //    may need more items added (e.g., customer orders extra items after first print)
-            const { data: pendingData, error: err1 } = await supabase
-                .from('pos_orders')
-                .select('*, items:pos_order_items(*)')
-                .eq('restaurant_id', restaurantId)
-                .in('payment_status', ['Pending', 'pending_verification'])
-                .neq('status', 'Cancelled')
-                .neq('status', 'Returned')
-                .order('created_at', { ascending: false });
+    const knownMicrositeIdsRef = React.useRef(null);
 
-            if (err1) throw err1;
+    const isPendingMicrositeOrder = (o) => {
+        if (!o) return false;
+        const st = String(o.status || '').toLowerCase().trim();
+        const isWaitingApproval = st === 'pending' || st === 'new' || st === 'verifying';
+        if (!isWaitingApproval) return false;
+        const cashier = String(o.cashier_name || '').toLowerCase().trim();
+        const ch = String(o.sales_channel || o.order_channel || o.channel || '').toLowerCase().trim();
+        return (
+            cashier === 'self-service microsite' ||
+            ch.includes('microsite') ||
+            ch === 'online' ||
+            ch === 'whatsapp' ||
+            ch === 'glovo' ||
+            ch === 'bolt' ||
+            ch === 'uber eats'
+        );
+    };
+
+    const fetchOpenOrders = async () => {
+        if (!restaurantId) return;
+        try {
+            // Fetch:
+            // 1. Orders awaiting payment OR awaiting payment verification.
+            // 2. All orders still in Pending / New / Verifying approval status — including
+            //    M-Pesa STK Push orders where payment_status already flipped to 'Paid'!
+            //    Otherwise STK-paid Delivery/Takeaway microsite orders vanish from the
+            //    staff Accept / Decline queue immediately upon payment.
+            // 3. Dine-in orders for named tables that are 'Paid'.
+            const [pendingRes, awaitingApprovalRes, paidTableRes] = await Promise.all([
+                supabase
+                    .from('pos_orders')
+                    .select('*, items:pos_order_items(*)')
+                    .eq('restaurant_id', restaurantId)
+                    .in('payment_status', ['Pending', 'pending_verification'])
+                    .neq('status', 'Cancelled')
+                    .neq('status', 'Returned')
+                    .neq('status', 'Declined')
+                    .neq('status', 'Voided')
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('pos_orders')
+                    .select('*, items:pos_order_items(*)')
+                    .eq('restaurant_id', restaurantId)
+                    .in('status', ['Pending', 'pending', 'New', 'new', 'Verifying', 'verifying'])
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('pos_orders')
+                    .select('*, items:pos_order_items(*)')
+                    .eq('restaurant_id', restaurantId)
+                    .eq('payment_status', 'Paid')
+                    .in('dining_option', ['Dine Inn', 'Dine-in', 'Dine In'])
+                    .neq('status', 'Cancelled')
+                    .neq('status', 'Returned')
+                    .neq('status', 'Declined')
+                    .neq('status', 'Voided')
+                    .order('created_at', { ascending: false }),
+            ]);
+
+            if (pendingRes.error) throw pendingRes.error;
+            const pendingData = pendingRes.data || [];
+            const awaitingApprovalData = awaitingApprovalRes.data || [];
+            const paidTableData = paidTableRes.data || [];
 
             const tableNames = ['table 1','table 2','table 3','table 4','table 5','table 6',
                                 'table 7','table 8','table 9','table 10','table 11','table 12'];
 
-            const { data: paidTableData, error: err2 } = await supabase
-                .from('pos_orders')
-                .select('*, items:pos_order_items(*)')
-                .eq('restaurant_id', restaurantId)
-                .eq('payment_status', 'Paid')
-                .in('dining_option', ['Dine Inn', 'Dine-in'])
-                .neq('status', 'Cancelled')
-                .neq('status', 'Returned')
-                .order('created_at', { ascending: false });
-
-            if (err2) throw err2;
-
             // Only include paid dine-in orders whose customer_name matches a table slot
-            const paidTableOrders = (paidTableData || []).filter(o =>
+            const paidTableOrders = paidTableData.filter(o =>
                 tableNames.includes((o.customer_name || '').toLowerCase())
             );
 
-            // Merge, deduplicate by id, pending first
-            const merged = [...(pendingData || [])];
-            paidTableOrders.forEach(o => {
+            // Merge, deduplicate by id, pending & awaiting-approval first
+            const merged = [...pendingData];
+            [...awaitingApprovalData, ...paidTableOrders].forEach(o => {
                 if (!merged.find(m => m.id === o.id)) merged.push(o);
             });
 
@@ -2385,11 +2417,25 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
             let finalMerged = [...offlineOpenOrders, ...merged];
             
-            // Waiter order visibility isolation
+            // Waiter order visibility isolation — always preserve incoming microsite orders so counter staff can accept/decline them
             if (staffRole === 'waiter') {
                 finalMerged = finalMerged.filter(
-                    o => (o.cashier_name || '').toLowerCase() === (staffName || '').toLowerCase()
+                    o => isPendingMicrositeOrder(o) || (o.cashier_name || '').toLowerCase() === (staffName || '').toLowerCase()
                 );
+            }
+
+            // Detect newly arrived microsite orders from polling fallback
+            const currentMicroIds = finalMerged.filter(isPendingMicrositeOrder).map((o) => o.id).filter(Boolean);
+            if (knownMicrositeIdsRef.current === null) {
+                knownMicrositeIdsRef.current = new Set(currentMicroIds);
+            } else {
+                const hasNew = currentMicroIds.some((id) => !knownMicrositeIdsRef.current.has(id));
+                currentMicroIds.forEach((id) => knownMicrositeIdsRef.current.add(id));
+                if (hasNew && localStorage.getItem('pos_alert_enabled') !== 'false') {
+                    const savedSound = localStorage.getItem('pos_alert_sound') || 'chime';
+                    const savedVol = parseFloat(localStorage.getItem('pos_alert_volume') || '0.8');
+                    playAlertSound(savedSound, savedVol);
+                }
             }
 
             setOpenOrders(finalMerged);
@@ -2541,7 +2587,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
         // Poll open orders so microsite orders appear even when the Realtime
         // socket cannot send the x-tenant-id header (RLS would otherwise block it).
-        const openOrdersPoll = setInterval(() => { fetchOpenOrders(); }, 15000);
+        const openOrdersPoll = setInterval(() => { fetchOpenOrders(); }, 8000);
 
         // Supabase Realtime channel subscription to listen for new orders
         const ordersChannel = supabase
@@ -2583,7 +2629,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             clearInterval(openOrdersPoll);
             supabase.removeChannel(ordersChannel);
         };
-    }, []);
+    }, [restaurantId]);
 
     useEffect(() => {
         if (activeView === 'history') {
@@ -4163,9 +4209,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 Microsite orders are created as Pending and must be accepted by staff before
                 the kitchen makes them. Without this, they were only shown on the Tables tab. */}
             {(() => {
-                const pendingMicrosite = openOrders.filter(
-                    o => o.cashier_name === 'Self-Service Microsite' && o.status === 'Pending'
-                );
+                const pendingMicrosite = openOrders.filter(isPendingMicrositeOrder);
                 if (pendingMicrosite.length === 0) return null;
                 return (
                     <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 sm:px-6 shrink-0 relative z-10">
@@ -4184,7 +4228,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                         </span>
                                         <span className="text-[11px] font-bold text-gray-800">{order.customer_name}</span>
                                         <span className="text-[10px] text-gray-500">({order.dining_option})</span>
-                                        <span className="font-mono text-[11px] font-black text-gray-900">KES {order.total_amount.toLocaleString()}</span>
+                                        <span className="font-mono text-[11px] font-black text-gray-900">KES {Number(order.total_amount || 0).toLocaleString()}</span>
+                                        {(order.payment_status || '').toLowerCase() === 'paid' && (
+                                            <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                M-Pesa Paid
+                                            </span>
+                                        )}
                                         {(order.payment_status || '').toLowerCase() === 'pending_verification' && (
                                             <span
                                                 title="The customer submitted an M-Pesa code. Verify it against your paybill before accepting."
@@ -4649,9 +4698,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                         <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-3xl border border-gray-100 shadow-sm p-6 gap-6">
                             {/* Incoming Microsite Orders Widget */}
                             {(() => {
-                                const pendingMicrosite = openOrders.filter(
-                                    o => o.cashier_name === 'Self-Service Microsite' && o.status === 'Pending'
-                                );
+                                const pendingMicrosite = openOrders.filter(isPendingMicrositeOrder);
                                 if (pendingMicrosite.length === 0) return null;
                                 return (
                                     <div className="bg-amber-50/65 border border-amber-200/80 p-5 rounded-3xl space-y-3 shrink-0 animate-pulse-slow">

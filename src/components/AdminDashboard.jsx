@@ -62,7 +62,10 @@ import {
   RefreshCw,
   ExternalLink,
   Plug,
-  KeyRound
+  KeyRound,
+  QrCode,
+  Calendar,
+  Thermometer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
@@ -81,6 +84,10 @@ import { WalletBillingView } from './orda/WalletBillingView';
 import { IntegrationsAndOmnichannelView } from './orda/IntegrationsAndOmnichannelView';
 import { TeamRolesAndAccountView } from './orda/TeamRolesAndAccountView';
 import { TableManagementView } from './orda/TableManagementView';
+import { HrAndStaffPortalView } from './orda/HrAndStaffPortalView';
+import { PojOperationsView } from './orda/PojOperationsView';
+import { GuestCRMView } from './GuestCRMView';
+import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
@@ -106,8 +113,24 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       return false;
     }
   });
-  const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'orders' : 'onboarding');
-  const [activeModule, setActiveModule] = useState(() => setupCompleted ? 'orders' : 'dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const requested = new URLSearchParams(window.location.search).get('tab');
+      if (requested) return requested;
+    } catch (_) {}
+    return setupCompleted ? 'orders' : 'onboarding';
+  });
+  const [activeModule, setActiveModule] = useState(() => {
+    try {
+      const requested = new URLSearchParams(window.location.search).get('tab');
+      if (requested === 'guest-crm' || requested === 'retention-crm' || requested === 'customers') return 'customers';
+      if (requested === 'hr-admin' || requested === 'qr-vault') return 'settings';
+      if (requested === 'staff-portal') return 'account';
+      if (requested === 'fpa-expenses') return 'dashboard';
+      if (requested === 'inv-receiving' || requested === 'inv-requisitions' || requested === 'inv-waste') return 'inventory';
+    } catch (_) {}
+    return setupCompleted ? 'orders' : 'dashboard';
+  });
   const [reportSubTab, setReportSubTab] = useState('overview');
   const [invSection, setInvSection] = useState('items');
   const [orderBucket, setOrderBucket] = useState('active');
@@ -169,24 +192,28 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     fetchDashboardData();
     const restId = getActiveRestaurantId();
     if (!restId) return undefined;
+    const refreshOrdersOnly = () => {
+      supabase
+        .from('pos_orders')
+        .select('*, items:pos_order_items(*)')
+        .eq('restaurant_id', restId)
+        .order('created_at', { ascending: false })
+        .then(({ data }) => {
+          if (data) setOrders(data);
+        });
+    };
+    // Poll every 8s as fallback because Supabase Realtime websockets cannot carry the custom x-tenant-id header under RLS
+    const pollTimer = setInterval(refreshOrdersOnly, 8000);
     const channel = supabase
       .channel(`admin-orders-${restId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'pos_orders', filter: `restaurant_id=eq.${restId}` },
-        () => {
-          supabase
-            .from('pos_orders')
-            .select('*, items:pos_order_items(*)')
-            .eq('restaurant_id', restId)
-            .order('created_at', { ascending: false })
-            .then(({ data }) => {
-              if (data) setOrders(data);
-            });
-        }
+        refreshOrdersOnly
       )
       .subscribe();
     return () => {
+      clearInterval(pollTimer);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -1064,6 +1091,15 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   })}
                   <button
                     type="button"
+                    onClick={() => selectModule('dashboard', 'fpa-expenses')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === 'fpa-expenses' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Receipt size={14} /> Accountant &amp; FP&amp;A
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => selectModule('dashboard', 'analytics')}
                     className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
                       activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
@@ -1095,6 +1131,24 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                 }`}
               >
                 <Users size={14} /> Customer List
+              </button>
+              <button
+                type="button"
+                onClick={() => selectModule('customers', 'guest-crm')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                  activeTab === 'guest-crm' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <UserCheck size={14} /> Guest CRM &amp; Tags
+              </button>
+              <button
+                type="button"
+                onClick={() => selectModule('customers', 'customer-retention')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                  activeTab === 'customer-retention' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <TrendingUp size={14} /> Customer Retention &amp; VIP
               </button>
               <button
                 type="button"
@@ -1276,7 +1330,25 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       activeTab === 'staff' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    <Users size={15} /> Staff PINs & Access
+                    <Users size={15} /> Staff PINs &amp; Access
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'hr-admin')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'hr-admin' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Calendar size={15} /> HR Approvals &amp; People
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'qr-vault')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'qr-vault' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <QrCode size={15} /> QR Code Vault
                   </button>
                 </>
               )}
@@ -1356,6 +1428,25 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   </button>
                 );
               })}
+              {[
+                { id: 'receiving', label: 'Receiving & Temp Logs', icon: Thermometer },
+                { id: 'store-ops', label: 'Stock Requisitions', icon: ClipboardList },
+                { id: 'waste', label: 'Kitchen Waste Log', icon: Trash2 },
+              ].map((op) => {
+                const OpIcon = op.icon;
+                return (
+                  <button
+                    key={op.id}
+                    type="button"
+                    onClick={() => selectModule('inventory', op.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === op.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <OpIcon size={14} /> {op.label}
+                  </button>
+                );
+              })}
               <div className="pt-3 mt-2 border-t border-slate-100 space-y-1">
                 <button
                   type="button"
@@ -1415,7 +1506,16 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   activeTab === 'account' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <ShieldCheck size={15} /> Security & Support PIN
+                <ShieldCheck size={15} /> Security &amp; Support PIN
+              </button>
+              <button
+                type="button"
+                onClick={() => selectModule('account', 'staff-portal')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                  activeTab === 'staff-portal' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Calendar size={15} /> My Staff Portal
               </button>
               <button
                 type="button"
@@ -1682,6 +1782,38 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               settings={settings}
               onOpenCloseStore={() => setCloseStoreOpen(true)}
               onStaffUpdated={fetchDashboardData}
+            />
+          ) : activeTab === 'guest-crm' ? (
+            <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
+              <GuestCRMView initialTab="directory" />
+            </div>
+          ) : activeTab === 'customer-retention' ? (
+            <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
+              <CustomerRetentionDashboard restaurantId={activeRestaurantId} />
+            </div>
+          ) : activeTab === 'hr-admin' || activeTab === 'staff-portal' ? (
+            <HrAndStaffPortalView
+              mode={activeTab === 'hr-admin' ? 'hr-admin' : 'self-service'}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              staffUser={{
+                name: pinStaffName,
+                role: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').role || 'admin',
+                email: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').email || '',
+              }}
+              staffList={staffList}
+            />
+          ) : activeTab === 'fpa-expenses' || activeTab === 'receiving' || activeTab === 'waste' || activeTab === 'store-ops' || activeTab === 'qr-vault' ? (
+            <PojOperationsView
+              mode={activeTab === 'fpa-expenses' ? 'accountant' : activeTab}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              tenantSlug={tenantSlug}
+              orders={scopedOrders}
+              staffUser={{
+                name: pinStaffName,
+                role: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').role || 'admin',
+              }}
             />
           ) : null}
 

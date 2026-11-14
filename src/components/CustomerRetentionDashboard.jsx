@@ -44,14 +44,29 @@ export function CustomerRetentionDashboard() {
     const fetchCustomerData = async () => {
         setLoading(true);
         try {
+            let activeRestId = null;
+            try {
+                const p = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+                activeRestId = p.restaurantId || p.restaurant_id || null;
+            } catch (_) {}
+
             // Fetch all orders in parallel chunks to bypass the Supabase/PostgREST 1000-row limit
-            const fetchOrderChunk = (start, end) => 
-                supabase
+            const fetchOrderChunk = (start, end) => {
+                let q = supabase
                     .from('pos_orders')
                     .select('id, ticket_number, customer_name, guest_id, created_at, total_amount, status, dining_option, order_channel, brand, notes')
                     .neq('payment_status', 'Voided')
                     .order('created_at', { ascending: false })
                     .range(start, end);
+                if (activeRestId) q = q.eq('restaurant_id', activeRestId);
+                return q;
+            };
+
+            let guestsQuery = supabase
+                .from('guests')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (activeRestId) guestsQuery = guestsQuery.eq('restaurant_id', activeRestId);
 
             const [c1, c2, c3, c4, c5, guestsRes] = await Promise.all([
                 fetchOrderChunk(0, 999),
@@ -59,10 +74,7 @@ export function CustomerRetentionDashboard() {
                 fetchOrderChunk(2000, 2999),
                 fetchOrderChunk(3000, 3999),
                 fetchOrderChunk(4000, 4999),
-                supabase
-                    .from('guests')
-                    .select('*')
-                    .order('created_at', { ascending: false })
+                guestsQuery
             ]);
 
             const allOrders = [

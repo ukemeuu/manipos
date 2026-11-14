@@ -217,6 +217,9 @@ export function LiveOrdersView({
     setUpdatingId(order.id);
     try {
       const patch = { status: nextStatus, ...extraPatch };
+      if (nextStatus === 'Preparing' && !order.accepted_at) {
+        patch.accepted_at = new Date().toISOString();
+      }
       if (nextStatus === 'Preparing' && !order.kitchen_started_at) {
         patch.kitchen_started_at = new Date().toISOString();
       }

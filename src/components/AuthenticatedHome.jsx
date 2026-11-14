@@ -148,19 +148,31 @@ export function AuthenticatedHome({
 
           </div>
 
-          {/* Operations Modules */}
+          {/* Operations & POJ CRM / HR / Accounting Modules */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
             {[
               { page: 'menu-builder', label: 'Menu Builder', desc: 'Categories, items, images and microsite visibility.', Icon: ClipboardList, tone: 'text-violet-400 border-violet-500/30 hover:border-violet-400/60', bg: 'bg-violet-500/10' },
               { page: 'kds', label: 'Kitchen Display', desc: 'Live tickets, prep timers and station filters.', Icon: ChefHat, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
               { page: 'floor', label: 'Floor & Reservations', desc: 'Tables, seating zones and guest bookings.', Icon: Armchair, tone: 'text-sky-400 border-sky-500/30 hover:border-sky-400/60', bg: 'bg-sky-500/10' },
               { page: 'inventory', label: 'Inventory & Recipes', desc: 'Stock levels, reorder alerts and recipe links.', Icon: Package, tone: 'text-emerald-400 border-emerald-500/30 hover:border-emerald-400/60', bg: 'bg-emerald-500/10' },
+              { url: '/?page=dashboard&tab=guest-crm', page: 'crm', label: 'Guest CRM & Retention', desc: 'Guest directory, VIP tags, visits, retention & feedback.', Icon: UserCheck, tone: 'text-teal-400 border-teal-500/30 hover:border-teal-400/60', bg: 'bg-teal-500/10' },
+              { url: '/?page=dashboard&tab=hr-admin', page: 'hr', label: 'Staff HR & Approvals', desc: 'Leave, overtime, advances, loans, warnings & checklists.', Icon: UserCheck, tone: 'text-indigo-400 border-indigo-500/30 hover:border-indigo-400/60', bg: 'bg-indigo-500/10' },
+              { url: '/?page=dashboard&tab=fpa-expenses', page: 'accountant', label: 'Accountant & Expenses', desc: 'Gross sales P&L, operating expenses & department budgets.', Icon: Building2, tone: 'text-rose-400 border-rose-500/30 hover:border-rose-400/60', bg: 'bg-rose-500/10' },
+              { url: '/?page=dashboard&tab=staff-portal', page: 'staff-portal', label: 'My Staff Portal', desc: 'Submit leave, overtime, salary advance & daily checklists.', Icon: Sparkles, tone: 'text-lime-400 border-lime-500/30 hover:border-lime-400/60', bg: 'bg-lime-500/10' },
             ].map((mod) => (
               <motion.button
                 key={mod.page}
                 whileHover={{ scale: 1.02, y: -3 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => onOpenModule ? onOpenModule(mod.page) : (window.location.href = `/?page=${mod.page}`)}
+                onClick={() => {
+                  if (mod.url) {
+                    window.location.href = mod.url;
+                  } else if (onOpenModule) {
+                    onOpenModule(mod.page);
+                  } else {
+                    window.location.href = `/?page=${mod.page}`;
+                  }
+                }}
                 className={`bg-slate-900/80 border ${mod.tone} p-5 rounded-2xl text-left transition-all cursor-pointer group`}
               >
                 <div className={`w-10 h-10 rounded-xl ${mod.bg} ${mod.tone.split(' ')[0]} flex items-center justify-center mb-4`}>

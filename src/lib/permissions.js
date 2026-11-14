@@ -50,6 +50,19 @@ export function roleDefaults(role) {
       return ['view_dashboard', 'view_orders'];
     case 'waiter':
       return ['view_dashboard', 'view_orders'];
+    case 'accountant':
+      return ['view_analytics', 'view_orders'];
+    case 'stock_controller':
+    case 'store_clerk':
+    case 'issuer':
+    case 'receiver':
+      return ['manage_inventory', 'manage_suppliers'];
+    case 'chef':
+      return ['manage_inventory'];
+    case 'expense_clerk':
+    case 'staff':
+    case 'kds':
+      return [];
     default:
       return [];
   }

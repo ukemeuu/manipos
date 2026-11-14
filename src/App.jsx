@@ -19,6 +19,8 @@ import { RestaurantDirectory } from './components/RestaurantDirectory';
 import { StatusPage, LegalPage } from './components/PublicPages';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { MenuBuilder } from './components/MenuBuilder';
+import { HrAndStaffPortalView } from './components/orda/HrAndStaffPortalView';
+import { PojOperationsView } from './components/orda/PojOperationsView';
 import {
   getTenantInfo,
   getPosLoginUrl,
@@ -54,6 +56,16 @@ const PAGE_ROUTES = {
   terms: 'terms',
   'menu-builder': 'menu-builder',
   'menu-build': 'menu-builder',
+  login: 'terminal',
+  portal: 'terminal',
+  'staff-portal': 'staff-portal',
+  hr: 'staff-portal',
+  accountant: 'accountant',
+  expenses: 'expenses',
+  receiving: 'receiving',
+  waste: 'waste',
+  'store-ops': 'store-ops',
+  'qr-vault': 'qr-vault',
 };
 
 function resolveRoute() {
@@ -82,6 +94,18 @@ function resolveRoute() {
 }
 
 const OPERATIONAL_ROUTES = new Set(['kds', 'floor', 'inventory']);
+const POJ_PORTAL_ROUTES = new Set(['staff-portal', 'accountant', 'expenses', 'receiving', 'waste', 'store-ops', 'qr-vault']);
+const ROLE_HOME_ROUTE = {
+  kds: 'kds',
+  staff: 'staff-portal',
+  accountant: 'accountant',
+  expense_clerk: 'expenses',
+  chef: 'waste',
+  receiver: 'receiving',
+  stock_controller: 'store-ops',
+  store_clerk: 'store-ops',
+  issuer: 'store-ops',
+};
 
 function App() {
   const [session, setSession] = useState(() => {
@@ -148,9 +172,14 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     const slug = getActiveTenantSlug() || tenantInfo.tenantSlug || session?.staffUser?.tenantSlug || null;
+    let staffTid = null;
+    try {
+      const p = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+      staffTid = p.restaurantId || p.restaurant_id || null;
+    } catch (_) {}
     if (!slug) {
       setTenant(null);
-      setTenantContext(null);
+      setTenantContext(staffTid);
       setTenantLoading(false);
       return undefined;
     }
@@ -158,7 +187,7 @@ function App() {
     loadTenant(slug).then((resolved) => {
       if (!cancelled) {
         setTenant(resolved);
-        setTenantContext(resolved?.id || null);
+        setTenantContext(resolved?.id || staffTid || null);
         setTenantLoading(false);
       }
     });
@@ -294,8 +323,14 @@ function App() {
           if (pending?.access_token && pending?.refresh_token) {
             const { data } = await supabase.auth.setSession(pending);
             if (data?.session) {
+              const pinFallback = (() => {
+                try {
+                  const p = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+                  return p.restaurantId || p.restaurant_id || null;
+                } catch (_) { return null; }
+              })();
               setSession(prev => ({ ...prev, ...data.session }));
-              setTenantContext(data.session.user?.app_metadata?.tenant_id || null);
+              setTenantContext(data.session.user?.app_metadata?.tenant_id || pinFallback);
               setLoading(false);
               return;
             }
@@ -306,8 +341,14 @@ function App() {
       try {
         const { data: { session: activeSession } } = await supabase.auth.getSession();
         if (activeSession) {
+          const pinFallback = (() => {
+            try {
+              const p = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+              return p.restaurantId || p.restaurant_id || null;
+            } catch (_) { return null; }
+          })();
           setSession(prev => ({ ...prev, ...activeSession }));
-          setTenantContext(activeSession.user?.app_metadata?.tenant_id || null);
+          setTenantContext(activeSession.user?.app_metadata?.tenant_id || pinFallback);
         }
       } catch (_) {}
       setLoading(false);
@@ -318,8 +359,14 @@ function App() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
       if (activeSession) {
+        const pinFallback = (() => {
+          try {
+            const p = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            return p.restaurantId || p.restaurant_id || null;
+          } catch (_) { return null; }
+        })();
         setSession(prev => ({ ...prev, ...activeSession }));
-        setTenantContext(activeSession.user?.app_metadata?.tenant_id || null);
+        setTenantContext(activeSession.user?.app_metadata?.tenant_id || pinFallback);
       }
     });
 
@@ -390,6 +437,12 @@ function App() {
     // stay out of the browser history. Pushing '/' used to land on the
     // marketing page while still on the tenant subdomain, and the browser Back
     // button then bounced back into the session.
+    const host = window.location.hostname;
+    if (host === 'manipos.com' || host === 'www.manipos.com') {
+      window.location.replace('/?page=login');
+      return;
+    }
+
     const slug = tenantInfo?.tenantSlug;
     const loginUrl = slug
       ? `https://${slug}.pos.manipos.com/`
@@ -559,8 +612,73 @@ function App() {
       );
     }
 
-    // RBAC Security Check: Cashier attempting dashboard / app selector is redirected to terminal
-    if (!isAdmin && (currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding')) {
+    // RBAC Security Check: Route specialized POJ & POS roles cleanly
+    const roleHome = ROLE_HOME_ROUTE[staffUser.role];
+    const resolvedRestId = staffUser.restaurantId || staffUser.restaurant_id || tenant?.id || null;
+    const resolvedRestName = tenant?.name || staffUser.restaurantName || 'ManiPOS Store';
+    const resolvedSlug = tenantInfo.tenantSlug || staffUser.tenantSlug || '';
+
+    if (POJ_PORTAL_ROUTES.has(currentRoute) && (isAdmin || roleHome === currentRoute || currentRoute === 'staff-portal')) {
+      if (currentRoute === 'staff-portal') {
+        return (
+          <HrAndStaffPortalView
+            mode="self-service"
+            restaurantId={resolvedRestId}
+            restaurantName={resolvedRestName}
+            staffUser={staffUser}
+            onSignOut={handleGlobalSignOut}
+            onOpenPos={isAdmin ? () => goTo('app', '/?page=app') : (can('view_pos', staffUser) ? () => setCurrentRoute('terminal') : null)}
+          />
+        );
+      }
+      return (
+        <PojOperationsView
+          mode={currentRoute}
+          standalone
+          restaurantId={resolvedRestId}
+          restaurantName={resolvedRestName}
+          tenantSlug={resolvedSlug}
+          staffUser={staffUser}
+          onSignOut={isAdmin ? () => goTo('app', '/?page=app') : handleGlobalSignOut}
+        />
+      );
+    }
+
+    if (!isAdmin && (currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding' || currentRoute === 'home' || roleHome)) {
+      if (roleHome === 'kds') {
+        return (
+          <KitchenDisplay
+            tenant={tenant}
+            staffName={staffUser.name}
+            onBack={handleGlobalSignOut}
+          />
+        );
+      }
+      if (roleHome === 'staff-portal' || currentRoute === 'staff-portal') {
+        return (
+          <HrAndStaffPortalView
+            mode="self-service"
+            restaurantId={resolvedRestId}
+            restaurantName={resolvedRestName}
+            staffUser={staffUser}
+            onSignOut={handleGlobalSignOut}
+            onOpenPos={can('view_pos', staffUser) ? () => setCurrentRoute('terminal') : null}
+          />
+        );
+      }
+      if (roleHome && POJ_PORTAL_ROUTES.has(roleHome)) {
+        return (
+          <PojOperationsView
+            mode={roleHome}
+            standalone
+            restaurantId={resolvedRestId}
+            restaurantName={resolvedRestName}
+            tenantSlug={resolvedSlug}
+            staffUser={staffUser}
+            onSignOut={handleGlobalSignOut}
+          />
+        );
+      }
       return (
         <div className="min-h-screen bg-slate-50 relative">
           <PosTerminal
@@ -730,8 +848,8 @@ function App() {
     }
   }
 
-  // ROUTE 2: Standalone POS Terminal Login (pos.manipos.com or <tenant>.pos.manipos.com)
-  if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding' || OPERATIONAL_ROUTES.has(currentRoute)) {
+  // ROUTE 2: Unified Workspace / Staff Terminal Login (manipos.com/?page=login, pos.manipos.com, <tenant>.pos.manipos.com)
+  if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding' || OPERATIONAL_ROUTES.has(currentRoute) || POJ_PORTAL_ROUTES.has(currentRoute)) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative font-sans">
         <button
@@ -745,16 +863,18 @@ function App() {
         <div className="w-full max-w-md bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
           <div className="text-center mb-6">
             <div className="inline-block bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs px-3 py-1 rounded-full uppercase tracking-widest mb-3">
-              {tenantInfo.tenantSlug ? `${tenantInfo.tenantSlug}.pos.manipos.com` : 'pos.manipos.com'}
+              {tenantInfo.tenantSlug ? `${tenantInfo.tenantSlug}.pos.manipos.com` : window.location.hostname}
             </div>
             <h2 className="text-2xl font-black text-white tracking-tight">Mani<span className="text-orange-500">POS</span></h2>
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mt-1">Staff Terminal Login</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mt-1">Staff, Admin, CRM &amp; Operations Login</p>
           </div>
           <PinLogin 
             tenantSlug={tenantInfo.tenantSlug}
             onLoginSuccess={async (userSession, userTenantSlug) => {
               const staffRole = userSession?.staffUser?.role;
-              const targetRoute = (staffRole === 'admin' || staffRole === 'manager') ? 'app' : 'terminal';
+              const targetRoute = can('view_dashboard', userSession?.staffUser)
+                ? 'app'
+                : (ROLE_HOME_ROUTE[staffRole] || 'terminal');
               const staffWithSlug = {
                 ...(userSession?.staffUser || {}),
                 tenantSlug: userSession?.staffUser?.tenantSlug || userTenantSlug || '',

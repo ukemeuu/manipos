@@ -7,7 +7,7 @@ import {
     SlidersHorizontal, Tag, Phone, User, Calendar, LogOut,
     CheckCircle, Loader2, Copy
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTenantContext } from '../lib/supabase';
 import { initiateStkPush } from '../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../lib/orderCharges';
 import {
@@ -1766,9 +1766,27 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
             const diningOptionValue = diningMode === 'delivery' ? 'Delivery' : (diningMode === 'dine_in' ? 'Dine In' : 'Takeaway');
 
+            let resolvedRestaurantId = tenant?.id || null;
+            if (!resolvedRestaurantId && tenant?.slug) {
+                try {
+                    const { data: rRow } = await supabase
+                        .from('restaurants')
+                        .select('id')
+                        .eq('slug', tenant.slug)
+                        .maybeSingle();
+                    if (rRow?.id) resolvedRestaurantId = rRow.id;
+                } catch (_) {}
+            }
+            if (resolvedRestaurantId) {
+                setTenantContext(resolvedRestaurantId);
+            }
+
             const orderPayload = {
                 customer_name: customerName.trim() || (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : 'Online Guest'),
+                customer_phone: customerPhone.trim() || null,
                 dining_option: diningOptionValue,
+                delivery_address: diningMode === 'delivery' ? deliveryAddress.trim() : null,
+                table_number: diningMode === 'dine_in' && tableNumber.trim() ? tableNumber.trim() : null,
                 payment_method: 'Paid to App',
                 payment_status: 'Pending',
                 status: 'Pending',
@@ -1776,7 +1794,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 discount: discountAmount,
                 cashier_name: 'Self-Service Microsite',
                 brand: (tenant?.name || 'ManiPOS').toUpperCase(),
-                ...(tenant?.id ? { restaurant_id: tenant.id } : {}),
+                ...(resolvedRestaurantId ? { restaurant_id: resolvedRestaurantId } : {}),
                 order_channel: 'Online',
                 sales_channel: 'Microsite',
                 ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
@@ -1791,7 +1809,11 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             let orderInsertAttempt = { ...orderPayload };
             let orderData = null;
             let orderError = null;
-            const optionalOrderCols = ['sales_channel', 'branch_id', 'tax_amount', 'charges_amount', 'charges_breakdown'];
+            const optionalOrderCols = [
+                'sales_channel', 'branch_id', 'tax_amount', 'charges_amount',
+                'charges_breakdown', 'order_channel', 'customer_phone',
+                'delivery_address', 'table_number',
+            ];
             for (let i = 0; i <= optionalOrderCols.length; i += 1) {
                 const res = await supabase
                     .from('pos_orders')
@@ -1814,9 +1836,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
             if (orderError) throw orderError;
 
-            if (chargesComputation.lines.length > 0 && orderData?.id && tenant?.id) {
+            if (chargesComputation.lines.length > 0 && orderData?.id && resolvedRestaurantId) {
                 recordOrderChargeLines({
-                    restaurantId: tenant.id,
+                    restaurantId: resolvedRestaurantId,
                     orderId: orderData.id,
                     lines: chargesComputation.lines,
                     grandTotal: finalTotal,
@@ -1854,9 +1876,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
             if (itemsError) throw itemsError;
 
-            if (guestUser?.id && orderData?.id && tenant?.id) {
+            if (guestUser?.id && orderData?.id && resolvedRestaurantId) {
                 awardLoyaltyPointsForOrder({
-                    restaurantId: tenant.id,
+                    restaurantId: resolvedRestaurantId,
                     guestId: guestUser.id,
                     orderId: orderData.id,
                     orderTotal: finalTotal,

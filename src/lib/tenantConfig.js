@@ -152,7 +152,10 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
   if (!resolvedSlug) return null;
   if (!force) {
     const cached = readCache(resolvedSlug);
-    if (cached) return cached;
+    if (cached) {
+      if (cached.id) setTenantContext(cached.id);
+      return cached;
+    }
   }
 
   const registry = getRegistryTenant(resolvedSlug);
