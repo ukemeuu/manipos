@@ -73,6 +73,7 @@ import { OrderAndPaymentSettingsView } from './orda/OrderAndPaymentSettingsView'
 import { CustomersCrmView } from './orda/CustomersCrmView';
 import { PromotionsVouchersLoyaltyView } from './orda/PromotionsVouchersLoyaltyView';
 import { DeliveryAreasView } from './orda/DeliveryAreasView';
+import { OrdaInventoryErpView } from './orda/OrdaInventoryErpView';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
@@ -101,6 +102,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   const [activeTab, setActiveTab] = useState(() => setupCompleted ? 'orders' : 'onboarding');
   const [activeModule, setActiveModule] = useState(() => setupCompleted ? 'orders' : 'dashboard');
   const [reportSubTab, setReportSubTab] = useState('overview');
+  const [invSection, setInvSection] = useState('items');
   const [orderBucket, setOrderBucket] = useState('active');
   const [branches, setBranches] = useState([]);
   const [activeBranchId, setActiveBranchId] = useState('all');
@@ -1262,27 +1264,57 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
           {activeModule === 'inventory' && (
             <>
-              <button
-                type="button"
-                onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
-              >
-                <Package size={15} /> Inventory & Recipes →
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
-              >
-                <ChefHat size={15} /> Kitchen Display →
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
-              >
-                <Armchair size={15} /> Floor & Reservations →
-              </button>
+              {[
+                { id: 'reports', label: '7 Inventory Reports', icon: BarChart3 },
+                { id: 'items', label: 'Ingredients & Sub-Recipes', icon: Boxes },
+                { id: 'stores', label: 'Stores, Batches & Ledger', icon: Package },
+                { id: 'recipes', label: 'Menu & Modifier Recipes', icon: ChefHat },
+                { id: 'count', label: 'Physical Stock Count', icon: ClipboardList },
+                { id: 'transfers', label: 'Transfers & Pull Requests', icon: Truck },
+                { id: 'purchase-orders', label: 'Purchase Orders & Suppliers', icon: ShoppingBag },
+                { id: 'inv-settings', label: 'Stores & Auto-86 Settings', icon: Settings },
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === 'inventory' && invSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setInvSection(item.id);
+                      selectModule('inventory', 'inventory');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      active ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon size={14} /> {item.label}
+                  </button>
+                );
+              })}
+              <div className="pt-3 mt-2 border-t border-slate-100 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  <Package size={14} /> Quick Stock Hub →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  <ChefHat size={14} /> Kitchen Display →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  <Armchair size={14} /> Floor & Reservations →
+                </button>
+              </div>
             </>
           )}
 
@@ -1494,7 +1526,19 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               tenantSlug={tenantSlug}
               onBranchesUpdated={fetchDashboardData}
             />
-          ) : activeTab === 'wallet' || activeTab === 'inventory' || activeTab === 'account' ? (
+          ) : activeTab === 'inventory' ? (
+            <OrdaInventoryErpView
+              mode={invSection}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              menuItems={menuItems}
+              orders={orders}
+              branches={branches}
+              suppliers={suppliers}
+              staffName={pinStaffName}
+              onRefreshDashboard={fetchDashboardData}
+            />
+          ) : activeTab === 'wallet' || activeTab === 'account' ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-3xl space-y-4">
               <h2 className="text-lg font-black text-slate-900 capitalize">{activeTab} Hub</h2>
               <p className="text-sm text-slate-600">

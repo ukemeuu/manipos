@@ -5,6 +5,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
+import {
+  processOrderInventoryDepletion,
+  processVoidOrderInventoryDisposition,
+} from '../../lib/inventoryErpEngine';
 
 const CHANNEL_OPTIONS = [
   'All Channels',
@@ -228,6 +232,13 @@ export function LiveOrdersView({
         .eq('id', order.id)
         .eq('restaurant_id', restaurantId);
       if (error) throw error;
+      if (nextStatus === 'Completed') {
+        processOrderInventoryDepletion({
+          restaurantId,
+          order,
+          staffName: order.cashier_name || 'Staff',
+        });
+      }
       if (selectedOrder?.id === order.id) {
         setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : null));
       }
@@ -304,6 +315,13 @@ export function LiveOrdersView({
         }
       }
       if (res.error) throw res.error;
+      processVoidOrderInventoryDisposition({
+        restaurantId,
+        order: voidTarget,
+        dispositionDetails,
+        voidReason: finalReason,
+        staffName: 'Staff',
+      });
       if (selectedOrder?.id === voidTarget.id) {
         setSelectedOrder((prev) => (prev ? { ...prev, ...fullPatch } : null));
       }
