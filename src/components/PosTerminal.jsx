@@ -357,6 +357,14 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         return () => { cancelled = true; };
     }, [activeTenantSlug]);
 
+    const [menu, setMenu] = useState([]);
+    const [loadingMenu, setLoadingMenu] = useState(true);
+    const [activeBrand, setActiveBrand] = useState('All');
+    const [activeCategory, setActiveCategory] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [cart, setCart] = useState([]);
+    const [cartOpen, setCartOpen] = useState(false);
+
     const isPojTenant = activeTenantSlug === 'potofjollof' || (tenantProfile?.slug === 'potofjollof');
 
     // Dynamically derive brand options for the active tenant.
@@ -459,14 +467,6 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             b === targetUpper || b.includes(targetUpper) || targetUpper.includes(b)
         );
     };
-
-    const [menu, setMenu] = useState([]);
-    const [loadingMenu, setLoadingMenu] = useState(true);
-    const [activeBrand, setActiveBrand] = useState('All');
-    const [activeCategory, setActiveCategory] = useState('All');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [cart, setCart] = useState([]);
-    const [cartOpen, setCartOpen] = useState(false);
 
     // Screen lock
     const [isLocked, setIsLocked] = useState(false);

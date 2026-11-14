@@ -86,6 +86,46 @@ const OPERATIONAL_ROUTES = new Set(['kds', 'floor', 'inventory']);
 function App() {
   const [session, setSession] = useState(() => {
     try {
+      // 1. Check URL hash/query for session transferred from pos.manipos.com login
+      if (typeof window !== 'undefined') {
+        const hash = window.location.hash || '';
+        const params = new URLSearchParams(window.location.search);
+        let sessionParam = params.get('session');
+        if (!sessionParam && hash.includes('session=')) {
+          const match = hash.match(/session=([^&]+)/);
+          if (match) sessionParam = decodeURIComponent(match[1]);
+        }
+        if (sessionParam) {
+          try {
+            const parsed = JSON.parse(decodeURIComponent(escape(atob(sessionParam))));
+            if (parsed && (parsed.staffUser || parsed.id || parsed.role)) {
+              const staffUser = parsed.staffUser || parsed;
+              localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+              if (staffUser.restaurantId || staffUser.restaurant_id) {
+                setTenantContext(staffUser.restaurantId || staffUser.restaurant_id);
+              }
+              if (parsed.supabaseSession?.access_token && parsed.supabaseSession?.refresh_token) {
+                sessionStorage.setItem('manipos_pending_supa_session', JSON.stringify(parsed.supabaseSession));
+              }
+              const url = new URL(window.location.href);
+              url.searchParams.delete('session');
+              if (url.hash && url.hash.includes('session=')) {
+                const newHash = url.hash
+                  .replace(/^#/, '')
+                  .split('&')
+                  .filter((part) => !part.startsWith('session='))
+                  .join('&');
+                url.hash = newHash ? `#${newHash}` : '';
+              }
+              window.history.replaceState(null, '', (url.pathname + url.search + url.hash) || '/');
+              return { staffUser };
+            }
+          } catch (e) {
+            console.warn('Failed to parse transferred session:', e);
+          }
+        }
+      }
+
       const stored = localStorage.getItem('pin_staff_user');
       return stored ? { staffUser: JSON.parse(stored) } : null;
     } catch (e) {
@@ -192,22 +232,89 @@ function App() {
     fetchStoreStatus();
   }, [tenantInfo.tenantSlug, currentRoute, session]);
 
+  // Redirect generic pos.manipos.com sessions to the tenant's own <slug>.pos.manipos.com domain
+  const redirectToTenantPosIfGenericHost = async (staffUser, explicitRoute = null) => {
+    if (typeof window === 'undefined' || !staffUser) return false;
+    if (window.location.hostname !== 'pos.manipos.com') return false;
+
+    let slug = staffUser.tenantSlug;
+    if (!slug && (staffUser.restaurantId || staffUser.restaurant_id)) {
+      try {
+        const { data } = await supabase
+          .from('restaurants')
+          .select('slug')
+          .eq('id', staffUser.restaurantId || staffUser.restaurant_id)
+          .maybeSingle();
+        if (data?.slug) slug = data.slug;
+      } catch (_) {}
+    }
+
+    if (!slug || slug === 'pos') return false;
+
+    const updatedStaffUser = { ...staffUser, tenantSlug: slug };
+    const transferPayload = { staffUser: updatedStaffUser };
+
+    try {
+      const { data: { session: supaSess } } = await supabase.auth.getSession();
+      if (supaSess?.access_token && supaSess?.refresh_token) {
+        transferPayload.supabaseSession = {
+          access_token: supaSess.access_token,
+          refresh_token: supaSess.refresh_token,
+        };
+      }
+    } catch (_) {}
+
+    const encodedSession = btoa(unescape(encodeURIComponent(JSON.stringify(transferPayload))));
+    const search = explicitRoute
+      ? `?page=${encodeURIComponent(explicitRoute)}`
+      : (window.location.search || '');
+    const targetPath = window.location.pathname && window.location.pathname !== '/' ? window.location.pathname : '/';
+    window.location.replace(`https://${slug}.pos.manipos.com${targetPath}${search}#session=${encodeURIComponent(encodedSession)}`);
+    return true;
+  };
+
+  useEffect(() => {
+    if (session?.staffUser) {
+      redirectToTenantPosIfGenericHost(session.staffUser);
+    }
+  }, [session?.staffUser]);
+
   useEffect(() => {
     // Safety timer: guarantee loading spinner dismisses within 500ms
     const timer = setTimeout(() => {
       setLoading(false);
     }, 500);
 
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
-      if (activeSession) {
-        setSession(prev => ({ ...prev, ...activeSession }));
-        setTenantContext(activeSession.user?.app_metadata?.tenant_id || null);
-      }
+    // Restore transferred Supabase Auth session if arriving from pos.manipos.com redirect
+    const restoreOrGetSession = async () => {
+      try {
+        const pendingRaw = sessionStorage.getItem('manipos_pending_supa_session');
+        if (pendingRaw) {
+          sessionStorage.removeItem('manipos_pending_supa_session');
+          const pending = JSON.parse(pendingRaw);
+          if (pending?.access_token && pending?.refresh_token) {
+            const { data } = await supabase.auth.setSession(pending);
+            if (data?.session) {
+              setSession(prev => ({ ...prev, ...data.session }));
+              setTenantContext(data.session.user?.app_metadata?.tenant_id || null);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const { data: { session: activeSession } } = await supabase.auth.getSession();
+        if (activeSession) {
+          setSession(prev => ({ ...prev, ...activeSession }));
+          setTenantContext(activeSession.user?.app_metadata?.tenant_id || null);
+        }
+      } catch (_) {}
       setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    };
+
+    restoreOrGetSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
@@ -646,19 +753,19 @@ function App() {
           </div>
           <PinLogin 
             tenantSlug={tenantInfo.tenantSlug}
-            onLoginSuccess={(userSession, userTenantSlug) => {
-              setSession(userSession);
+            onLoginSuccess={async (userSession, userTenantSlug) => {
               const staffRole = userSession?.staffUser?.role;
-              if (staffRole === 'admin' || staffRole === 'manager') {
-                setCurrentRoute('app');
-              } else {
-                setCurrentRoute('terminal');
-              }
-              // Stay on the current origin. The staff session is kept in
-              // localStorage, which is origin-scoped, so redirecting to
-              // <tenant>.pos.manipos.com after signing in at pos.manipos.com
-              // would drop it and land the staff member back on the login page.
-              // The terminal scopes data by the session's restaurantId instead.
+              const targetRoute = (staffRole === 'admin' || staffRole === 'manager') ? 'app' : 'terminal';
+              const staffWithSlug = {
+                ...(userSession?.staffUser || {}),
+                tenantSlug: userSession?.staffUser?.tenantSlug || userTenantSlug || '',
+              };
+
+              const redirected = await redirectToTenantPosIfGenericHost(staffWithSlug, targetRoute);
+              if (redirected) return;
+
+              setSession(userSession);
+              setCurrentRoute(targetRoute);
             }} 
           />
         </div>
