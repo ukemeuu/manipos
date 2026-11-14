@@ -112,6 +112,17 @@ create table if not exists public.shifts (
   source_poj_id text,
   created_at timestamptz not null default timezone('utc', now())
 );
+alter table public.shifts add column if not exists restaurant_id uuid references public.restaurants(id) on delete cascade;
+alter table public.shifts add column if not exists staff_id uuid;
+alter table public.shifts add column if not exists staff_name text;
+alter table public.shifts add column if not exists staff_email text;
+alter table public.shifts add column if not exists shift_date date;
+alter table public.shifts add column if not exists shift_type text default 'FOH';
+alter table public.shifts add column if not exists department text default 'FOH';
+alter table public.shifts add column if not exists start_time text default '09:00';
+alter table public.shifts add column if not exists end_time text default '18:00';
+alter table public.shifts add column if not exists notes text;
+alter table public.shifts add column if not exists source_poj_id text;
 
 -- 4. Delivery Fees Logistics ledger (Inbound Supplies + Outbound Glovo/Riders)
 create table if not exists public.delivery_fees (
@@ -130,6 +141,18 @@ create table if not exists public.delivery_fees (
   source_poj_id text,
   created_at timestamptz not null default timezone('utc', now())
 );
+alter table public.delivery_fees add column if not exists restaurant_id uuid references public.restaurants(id) on delete cascade;
+alter table public.delivery_fees add column if not exists fee_date date default current_date;
+alter table public.delivery_fees add column if not exists logistics_type text default 'Inbound Supplies';
+alter table public.delivery_fees add column if not exists provider text;
+alter table public.delivery_fees add column if not exists cost_amount numeric(12,2) default 0;
+alter table public.delivery_fees add column if not exists customer_charged numeric(12,2) default 0;
+alter table public.delivery_fees add column if not exists order_ref text;
+alter table public.delivery_fees add column if not exists po_ref text;
+alter table public.delivery_fees add column if not exists supplier_name text;
+alter table public.delivery_fees add column if not exists payment_status text default 'Paid';
+alter table public.delivery_fees add column if not exists notes text;
+alter table public.delivery_fees add column if not exists source_poj_id text;
 
 -- 5. Restaurant POJ Link Registry (tracks two-way connection & sync state)
 create table if not exists public.restaurant_poj_links (
@@ -174,6 +197,8 @@ begin
   ]
   loop
     if to_regclass('public.' || idx_tbl) is not null then
+      execute format('alter table public.%I add column if not exists restaurant_id uuid references public.restaurants(id) on delete cascade', idx_tbl);
+      execute format('alter table public.%I add column if not exists source_poj_id text', idx_tbl);
       execute format(
         'create unique index if not exists idx_%1$s_poj_sync on public.%1$s (restaurant_id, source_poj_id) where source_poj_id is not null',
         idx_tbl
