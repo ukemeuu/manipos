@@ -1,6 +1,11 @@
-import { supabase } from './supabase';
+import { supabase, getTenantContext } from './supabase';
 
-const AUDIT_CACHE_KEY = 'pos_audit_logs_cache';
+const LEGACY_AUDIT_CACHE_KEY = 'pos_audit_logs_cache';
+
+function auditCacheKey(restaurantId = null) {
+    const tid = restaurantId || getTenantContext() || 'shared';
+    return `${LEGACY_AUDIT_CACHE_KEY}_${tid}`;
+}
 
 /**
  * Log an immutable audit event for sensitive cashier/manager actions
@@ -12,11 +17,11 @@ const AUDIT_CACHE_KEY = 'pos_audit_logs_cache';
  */
 export async function logAuditEvent({ action, details = {}, staff = {} }) {
     const timestamp = new Date().toISOString();
-    
+
     // Resolve staff info from param or localStorage session
-    let staffName = staff.name || 'Terminal Cashier';
+    let staffName = staff.name || null;
     let staffId = staff.id || null;
-    let restaurantId = staff.restaurantId || null;
+    let restaurantId = staff.restaurantId || getTenantContext() || null;
 
     if (!staffName || !restaurantId) {
         try {
@@ -25,10 +30,11 @@ export async function logAuditEvent({ action, details = {}, staff = {} }) {
                 const parsed = JSON.parse(stored);
                 staffName = staffName || parsed.name;
                 staffId = staffId || parsed.id;
-                restaurantId = restaurantId || parsed.restaurantId;
+                restaurantId = restaurantId || parsed.restaurantId || parsed.restaurant_id;
             }
         } catch (e) {}
     }
+    staffName = staffName || 'Terminal Cashier';
 
     const payload = {
         action,
@@ -58,15 +64,17 @@ export async function logAuditEvent({ action, details = {}, staff = {} }) {
 
 function cacheAuditLocally(payload) {
     try {
-        const existing = JSON.parse(localStorage.getItem(AUDIT_CACHE_KEY) || '[]');
+        const key = auditCacheKey(payload?.restaurant_id);
+        const existing = JSON.parse(localStorage.getItem(key) || '[]');
         const updated = [payload, ...existing].slice(0, 200); // Keep last 200 events
-        localStorage.setItem(AUDIT_CACHE_KEY, JSON.stringify(updated));
+        localStorage.setItem(key, JSON.stringify(updated));
     } catch (e) {}
 }
 
-export function getLocalAuditLogs() {
+export function getLocalAuditLogs(restaurantId = null) {
     try {
-        return JSON.parse(localStorage.getItem(AUDIT_CACHE_KEY) || '[]');
+        const key = auditCacheKey(restaurantId);
+        return JSON.parse(localStorage.getItem(key) || localStorage.getItem(LEGACY_AUDIT_CACHE_KEY) || '[]');
     } catch (e) {
         return [];
     }

@@ -10,6 +10,7 @@
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const CALLBACK_SECRET = Deno.env.get('MPESA_CALLBACK_SECRET') || '';
 
 const ACCEPTED = JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' });
 
@@ -39,6 +40,13 @@ Deno.serve(async (req: Request) => {
     return new Response('Method not allowed', { status: 405 });
   }
 
+  if (CALLBACK_SECRET) {
+    const token = new URL(req.url).searchParams.get('token') || '';
+    if (token !== CALLBACK_SECRET) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+  }
+
   let payload: any;
   try {
     payload = await req.json();
@@ -66,13 +74,45 @@ Deno.serve(async (req: Request) => {
   }
 
   const tx = await rest(
-    `mpesa_transactions?select=id,order_id&checkout_request_id=eq.${encodeURIComponent(checkoutRequestID)}`
+    `mpesa_transactions?select=id,order_id,status,amount&checkout_request_id=eq.${encodeURIComponent(checkoutRequestID)}`
   );
 
   const row = Array.isArray(tx.body) ? tx.body[0] : null;
 
   if (row?.order_id) {
+    if (row.status === 'completed') {
+      return new Response(ACCEPTED, { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const orderRes = await rest(
+      `pos_orders?select=id,total_amount,payment_status&id=eq.${encodeURIComponent(row.order_id)}`
+    );
+    const orderRow = Array.isArray(orderRes.body) ? orderRes.body[0] : null;
+    const expectedAmount = Math.round(Number(orderRow?.total_amount ?? row.amount ?? 0));
+
     const paid = resultCode === 0;
+    const amountMatches = !paid || amount <= 0 || expectedAmount <= 0 || amount + 1 >= expectedAmount;
+
+    if (paid && !amountMatches) {
+      console.warn(
+        `[mpesa-callback] underpaid callback for order ${row.order_id}: paid ${amount}, expected ${expectedAmount}`
+      );
+      await rest(`mpesa_transactions?id=eq.${row.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'underpaid',
+          result_code: resultCode,
+          result_desc: `Underpaid callback (${amount} < ${expectedAmount})`,
+          transaction_id: receipt || null,
+          receipt_number: receipt || null,
+          ...(amount > 0 ? { amount } : {}),
+          ...(phone ? { phone } : {}),
+          raw_callback: payload,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+      return new Response(ACCEPTED, { headers: { 'Content-Type': 'application/json' } });
+    }
 
     // A failed push does not cancel the order: the customer may retry, and the
     // kitchen may already be preparing it. Only the payment state changes.

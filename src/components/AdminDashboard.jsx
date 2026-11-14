@@ -54,6 +54,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 import { PERMISSION_GROUPS, currentPermissions, roleDefaults } from '../lib/permissions';
+import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
 // Setup progress is per restaurant. A shared flag would let a brand-new
@@ -247,6 +248,39 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         if (!supplierError) setSuppliers(fetchedSuppliers || []);
       } catch (supplierErr) {
         console.warn("Error loading suppliers:", supplierErr);
+      }
+
+      // 8. Fetch Discounts / Offers
+      setLoadingDiscounts(true);
+      try {
+        const { data: fetchedDiscounts, error: discErr } = await supabase
+          .from('pos_discounts')
+          .select('*')
+          .eq('restaurant_id', currentRestaurantId)
+          .order('created_at', { ascending: false });
+        if (!discErr) setDiscounts(fetchedDiscounts || []);
+      } catch (discLoadErr) {
+        console.warn('Discounts fetch notice:', discLoadErr);
+      } finally {
+        setLoadingDiscounts(false);
+      }
+
+      // 9. Fetch Audit Logs (DB + local offline fallback)
+      try {
+        const { data: fetchedAudit, error: auditErr } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .eq('restaurant_id', currentRestaurantId)
+          .order('created_at', { ascending: false })
+          .limit(200);
+        const localLogs = getLocalAuditLogs(currentRestaurantId);
+        if (!auditErr && Array.isArray(fetchedAudit)) {
+          setAuditLogs(fetchedAudit.length > 0 ? fetchedAudit : localLogs);
+        } else {
+          setAuditLogs(localLogs);
+        }
+      } catch (auditLoadErr) {
+        setAuditLogs(getLocalAuditLogs(currentRestaurantId));
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
@@ -591,6 +625,92 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       alert('Logo upload failed: ' + err.message);
     } finally {
       setLogoUploading(false);
+    }
+  };
+
+  const getActiveRestaurantId = () => {
+    try {
+      const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+      return pinUser.restaurantId || pinUser.restaurant_id || null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const saveDiscount = async (disc) => {
+    const currentRestaurantId = getActiveRestaurantId();
+    if (!currentRestaurantId) {
+      alert('No active restaurant session found.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload = {
+        restaurant_id: currentRestaurantId,
+        code: String(disc.code || '').trim().toUpperCase(),
+        type: disc.type || 'percentage',
+        value: Number(disc.value) || 0,
+        min_order_amount: Number(disc.min_order_amount) || 0,
+        is_active: disc.is_active !== false,
+      };
+      if (disc.id) {
+        const { data, error } = await supabase
+          .from('pos_discounts')
+          .update(payload)
+          .eq('id', disc.id)
+          .eq('restaurant_id', currentRestaurantId)
+          .select()
+          .single();
+        if (error) throw error;
+        setDiscounts(prev => prev.map(d => (d.id === disc.id ? data : d)));
+      } else {
+        const { data, error } = await supabase
+          .from('pos_discounts')
+          .insert([payload])
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) setDiscounts(prev => [data, ...prev]);
+      }
+      setEditingDiscount(null);
+    } catch (err) {
+      alert('Failed to save offer: ' + (err?.message || err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleDiscountStatus = async (disc) => {
+    const currentRestaurantId = getActiveRestaurantId();
+    if (!currentRestaurantId || !disc?.id) return;
+    const nextActive = !disc.is_active;
+    try {
+      const { error } = await supabase
+        .from('pos_discounts')
+        .update({ is_active: nextActive })
+        .eq('id', disc.id)
+        .eq('restaurant_id', currentRestaurantId);
+      if (error) throw error;
+      setDiscounts(prev => prev.map(d => (d.id === disc.id ? { ...d, is_active: nextActive } : d)));
+    } catch (err) {
+      alert('Failed to update offer status: ' + (err?.message || err));
+    }
+  };
+
+  const deleteDiscount = async (discId) => {
+    const currentRestaurantId = getActiveRestaurantId();
+    if (!currentRestaurantId || !discId) return;
+    if (!window.confirm('Delete this offer/promo code?')) return;
+    try {
+      const { error } = await supabase
+        .from('pos_discounts')
+        .delete()
+        .eq('id', discId)
+        .eq('restaurant_id', currentRestaurantId);
+      if (error) throw error;
+      setDiscounts(prev => prev.filter(d => d.id !== discId));
+    } catch (err) {
+      alert('Failed to delete offer: ' + (err?.message || err));
     }
   };
 
@@ -985,7 +1105,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                           const { error } = await supabase.from('pos_menu').insert(sampleCategories);
                           if (error) throw error;
                           alert('Sample menu items loaded successfully!');
-                          const { data: updatedMenu } = await supabase.from('pos_menu').select('*');
+                          const { data: updatedMenu } = await supabase.from('pos_menu').select('*').eq('restaurant_id', tenant);
                           if (updatedMenu) setMenuItems(updatedMenu);
                         } catch (err) {
                           alert('Notice: ' + err.message);
@@ -1441,7 +1561,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">KRA PIN</label>
                       <input
                         type="text"
-                        placeholder="e.g. P052354624Y"
+                        placeholder="e.g. P000000000A"
                         value={settings.kra_pin || ''}
                         onChange={(e) => setSettings({ ...settings, kra_pin: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
@@ -1452,7 +1572,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Website</label>
                       <input
                         type="text"
-                        placeholder="e.g. potofjollof.co.ke"
+                        placeholder="e.g. yourrestaurant.co.ke"
                         value={settings.website || ''}
                         onChange={(e) => setSettings({ ...settings, website: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
@@ -1495,7 +1615,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       <input
                         type="text"
                         required
-                        placeholder="e.g. 542542"
+                        placeholder="e.g. 522522"
                         value={settings.mpesa_paybill || ''}
                         onChange={(e) => setSettings({ ...settings, mpesa_paybill: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
@@ -1507,7 +1627,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                       <input
                         type="text"
                         required
-                        placeholder="e.g. 992422"
+                        placeholder="e.g. ACCOUNT01"
                         value={settings.mpesa_account || ''}
                         onChange={(e) => setSettings({ ...settings, mpesa_account: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
@@ -1938,7 +2058,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                           <input
                             type="text"
                             required
-                            placeholder="e.g. JOLLOF20, LUNCHBOX15, SAVE200"
+                            placeholder="e.g. WELCOME10, LUNCHBOX15, SAVE200"
                             value={cleanCode}
                             onChange={(e) => {
                               const newClean = e.target.value.toUpperCase().replace(/\[.*\]/g, "");
@@ -2689,9 +2809,16 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   e.preventDefault();
                   setSubmitting(true);
                   const formData = new FormData(e.target);
+                  const activePinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+                  const resolvedTenantSlug = activePinUser.tenantSlug || tenantSlug || getTenantInfo().tenantSlug;
+                  if (!resolvedTenantSlug) {
+                    alert('No restaurant slug found for link hub.');
+                    setSubmitting(false);
+                    return;
+                  }
                   const linkData = {
                     ...(editingLink.id ? { id: editingLink.id } : {}),
-                    tenant_id: getTenantInfo().tenantSlug || 'demostore',
+                    tenant_id: resolvedTenantSlug,
                     title: formData.get('title'),
                     subtitle: formData.get('subtitle'),
                     url: formData.get('url'),
@@ -2705,7 +2832,11 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                     const { data, error } = await supabase.from('tenant_links').upsert([linkData]).select();
                     if (!error && data) {
                       setEditingLink(null);
-                      const { data: refreshed } = await supabase.from('tenant_links').select('*').order('display_order');
+                      const { data: refreshed } = await supabase
+                        .from('tenant_links')
+                        .select('*')
+                        .eq('tenant_id', resolvedTenantSlug)
+                        .order('display_order');
                       setTenantLinks(refreshed || []);
                     }
                   } catch (err) {

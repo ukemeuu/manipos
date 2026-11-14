@@ -5,14 +5,39 @@
  * functions that hold them. See supabase/functions/mpesa-*.
  */
 
+import { supabase, getTenantContext } from './supabase';
+
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_r8PHCMuMpU_1dybpfrz7Kw_5-9qID7g';
+
 const FUNCTION_BASE = `${
   import.meta.env.VITE_SUPABASE_URL || 'https://ptaqejtyhdbhmhrhuxcj.supabase.co'
 }/functions/v1`;
 
 async function post(path, payload) {
+  let token = SUPABASE_ANON_KEY;
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) {
+      token = data.session.access_token;
+    }
+  } catch {
+    // Fallback to anon key when no Supabase Auth session is present
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${token}`,
+  };
+  const tenantId = getTenantContext();
+  if (tenantId) {
+    headers['x-tenant-id'] = tenantId;
+  }
+
   const res = await fetch(`${FUNCTION_BASE}/${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));

@@ -108,12 +108,13 @@ export function GuestCRMView({ initialTab = 'directory' }) {
     // Calculate new feedback count since last viewed
     useEffect(() => {
         if (feedbackData.length === 0) return;
+        const viewedKey = restaurantId ? `manipos_last_feedback_viewed_${restaurantId}` : 'manipos_last_feedback_viewed';
         
         if (activeTab === 'feedback') {
-            localStorage.setItem('poj_last_feedback_viewed', Date.now().toString());
+            localStorage.setItem(viewedKey, Date.now().toString());
             setNewFeedbackCount(0);
         } else {
-            const lastViewedStr = localStorage.getItem('poj_last_feedback_viewed');
+            const lastViewedStr = localStorage.getItem(viewedKey);
             const lastViewedTime = lastViewedStr ? parseInt(lastViewedStr, 10) : (Date.now() - 24 * 60 * 60 * 1000);
             
             const newEntries = feedbackData.filter(item => {
@@ -123,7 +124,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
             
             setNewFeedbackCount(newEntries.length);
         }
-    }, [feedbackData, activeTab]);
+    }, [feedbackData, activeTab, restaurantId]);
 
     const getMetricStats = useMemo(() => {
         if (feedbackData.length === 0) {
@@ -306,9 +307,9 @@ export function GuestCRMView({ initialTab = 'directory' }) {
         }
 
         if (guestId) {
-            await supabase.from('guests').update(coreData).eq('id', guestId);
+            await supabase.from('guests').update(coreData).eq('id', guestId).eq('restaurant_id', restaurantId);
             try {
-                await supabase.from('guests').update({ brand: brandVal, preferred_brand: brandVal, channel: channelVal, acquisition_channel: channelVal }).eq('id', guestId);
+                await supabase.from('guests').update({ brand: brandVal, preferred_brand: brandVal, channel: channelVal, acquisition_channel: channelVal }).eq('id', guestId).eq('restaurant_id', restaurantId);
             } catch(e) {}
             if (selectedTags.length > 0) {
                 try { await supabase.from('guest_tags').delete().eq('guest_id', guestId); } catch(e) {}
@@ -320,7 +321,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
             
             if (data?.id) {
                 try {
-                    await supabase.from('guests').update({ brand: brandVal, preferred_brand: brandVal, channel: channelVal, acquisition_channel: channelVal }).eq('id', guestId);
+                    await supabase.from('guests').update({ brand: brandVal, preferred_brand: brandVal, channel: channelVal, acquisition_channel: channelVal }).eq('id', guestId).eq('restaurant_id', restaurantId);
                 } catch(e) {}
             }
 
@@ -360,6 +361,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
     const handleLogVisit = async (visitData) => {
         // 1. Insert Visit
         await supabase.from('guest_visits').insert([{
+            restaurant_id: restaurantId,
             guest_id: selectedGuest.id,
             visit_date: visitData.date,
             spend: visitData.spend,
@@ -374,7 +376,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
         await supabase.from('guests').update({
             lifetime_spend: newSpend,
             visit_count: newCount
-        }).eq('id', selectedGuest.id);
+        }).eq('id', selectedGuest.id).eq('restaurant_id', restaurantId);
 
         setShowModal(false);
         fetchGuests();
@@ -543,7 +545,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
             )}
 
             {showModal && modalType === 'edit' && (
-                <GuestEditModal guest={selectedGuest} onClose={() => setShowModal(false)} onSave={handleSaveGuest} />
+                <GuestEditModal guest={selectedGuest} tenantSlug={sessionUser?.tenantSlug} onClose={() => setShowModal(false)} onSave={handleSaveGuest} />
             )}
 
             {showModal && modalType === 'visit' && (
@@ -553,7 +555,7 @@ export function GuestCRMView({ initialTab = 'directory' }) {
     );
 }
 
-function GuestEditModal({ guest, onClose, onSave }) {
+function GuestEditModal({ guest, tenantSlug, onClose, onSave }) {
     const [formData, setFormData] = useState({
         first_name: guest?.first_name || '',
         last_name: guest?.last_name || '',
@@ -613,7 +615,7 @@ function GuestEditModal({ guest, onClose, onSave }) {
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none font-medium text-sm"
                             >
                                 <option value="All">All Brands</option>
-                                {sessionUser?.tenantSlug === 'potofjollof' && (
+                                {tenantSlug === 'potofjollof' && (
                                     <>
                                         <option value="POT OF JOLLOF">🫕 Pot of Jollof</option>
                                         <option value="LITTLE LAGOS">🌶️ Little Lagos</option>

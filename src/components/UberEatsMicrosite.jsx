@@ -1100,7 +1100,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             const input = loginInput.trim().toLowerCase();
             const isEmail = input.includes('@');
             
-            let query = supabase.from('guests').select('*');
+            let query = supabase
+                .from('guests')
+                .select('id, first_name, last_name, phone, email, delivery_address')
+                .eq('restaurant_id', tenant.id);
             if (isEmail) {
                 query = query.eq('email', input);
             } else {
@@ -1144,6 +1147,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                     }
                     
                     const newGuestPayload = {
+                        restaurant_id: tenant.id,
                         first_name: regFirstName.trim(),
                         last_name: regLastName.trim(),
                         phone: regPhone.trim(),
@@ -1261,18 +1265,32 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         setPromoError('');
 
         try {
-            // Check Supabase influencer codes
+            // Check Supabase influencer codes scoped to this tenant
             const { data, error } = await supabase
                 .from('influencer_codes')
                 .select('id, influencer_id, commission_rate, code, discount_type, discount_value, is_active, min_order_amount')
+                .eq('restaurant_id', tenant.id)
                 .eq('code', code)
                 .eq('is_active', true)
                 .maybeSingle();
 
             if (error || !data) {
-                // Fallback test code
-                if (code === 'WELCOME10' || code === 'JOLLOF10') {
-                    setAppliedDiscount({ code, type: 'percentage', value: 10 });
+                // Also check pos_discounts scoped to this tenant
+                const { data: discData } = await supabase
+                    .from('pos_discounts')
+                    .select('id, code, type, value, min_order_amount, is_active')
+                    .eq('restaurant_id', tenant.id)
+                    .eq('is_active', true)
+                    .ilike('code', code)
+                    .maybeSingle();
+                if (discData) {
+                    setAppliedDiscount({
+                        id: discData.id,
+                        code: discData.code,
+                        type: discData.type || 'percentage',
+                        value: Number(discData.value) || 0,
+                        min_order_amount: Number(discData.min_order_amount) || 0
+                    });
                     setPromoError('');
                 } else {
                     setPromoError('Invalid or expired promo code');

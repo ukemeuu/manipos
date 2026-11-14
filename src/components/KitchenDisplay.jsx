@@ -162,11 +162,14 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
 
   useEffect(() => {
     if (!tenantId && !brand) return undefined;
+    const channelConfig = tenantId
+      ? { event: '*', schema: 'public', table: 'pos_orders', filter: `restaurant_id=eq.${tenantId}` }
+      : { event: '*', schema: 'public', table: 'pos_orders' };
     const channel = supabase
       .channel(`manipos-kds-${tenantId || brand}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'pos_orders' },
+        channelConfig,
         () => fetchOrders({ silent: true })
       )
       .subscribe();
@@ -193,10 +196,9 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
     );
 
     try {
-      const { error: updateError } = await supabase
-        .from('pos_orders')
-        .update(patch)
-        .eq('id', order.id);
+      let updQuery = supabase.from('pos_orders').update(patch).eq('id', order.id);
+      if (tenantId) updQuery = updQuery.eq('restaurant_id', tenantId);
+      const { error: updateError } = await updQuery;
       if (updateError) throw updateError;
       await supabase
         .from('pos_order_items')
@@ -205,7 +207,9 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
     } catch (err) {
       console.warn('[KDS] Falling back to status-only update:', err?.message || err);
       try {
-        await supabase.from('pos_orders').update({ status: nextStatus }).eq('id', order.id);
+        let fbQuery = supabase.from('pos_orders').update({ status: nextStatus }).eq('id', order.id);
+        if (tenantId) fbQuery = fbQuery.eq('restaurant_id', tenantId);
+        await fbQuery;
       } catch (fallbackErr) {
         setError(`Could not update ticket: ${fallbackErr.message}`);
         fetchOrders({ silent: true });
@@ -218,9 +222,9 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
   const filteredOrders = useMemo(() => {
     if (station === 'all') return orders;
     const stationTerms = {
-      kitchen: ['jollof', 'rice', 'soup', 'egusi', 'yam', 'grill', 'suya', 'chicken', 'beef', 'fish', 'goat', 'shawarma'],
-      bar: ['drink', 'juice', 'zobo', 'chapman', 'malt', 'water', 'soda', 'kunu', 'beer', 'wine'],
-      pastry: ['puff', 'pie', 'chin', 'cake', 'dessert', 'candy'],
+      kitchen: ['rice', 'soup', 'grill', 'chicken', 'beef', 'fish', 'goat', 'shawarma', 'burger', 'steak', 'platter', 'stew', 'pasta'],
+      bar: ['drink', 'juice', 'cocktail', 'water', 'soda', 'beer', 'wine', 'coffee', 'tea', 'smoothie', 'shake'],
+      pastry: ['cake', 'pie', 'pastry', 'dessert', 'bread', 'muffin', 'cookie', 'ice cream'],
     }[station] || [];
     return orders.filter((order) =>
       orderItems(order).some((item) => stationTerms.some((term) => itemName(item).toLowerCase().includes(term)))

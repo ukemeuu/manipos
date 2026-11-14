@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, Loader2, Check, Plus, Trash2, Package } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { uploadToR2 } from '../lib/r2Storage';
+import { supabase, getTenantContext } from '../lib/supabase';
 import { syncExpenseToGoogleSheet } from '../lib/googleSheetsSyncService';
 
 const logTransportFeesToLogistics = async (
@@ -448,10 +447,15 @@ export function AddExpenseModal({ onClose, onSuccess, capturedBy = null, initial
         try {
             let receipt_url = null;
 
-            // 1. Upload File if exists
+            // 1. Upload File if exists (tenant-prefixed path in Supabase Storage)
             if (file) {
-                const { url } = await uploadToR2(file, 'receipts');
-                receipt_url = url;
+                const tid = getTenantContext() || 'shared';
+                const safeName = file.name.replace(/[^a-z0-9.]/gi, '_');
+                const storagePath = `receipts/${tid}/${Date.now()}-${safeName}`;
+                const { error: uploadErr } = await supabase.storage.from('menu_images').upload(storagePath, file, { upsert: true });
+                if (uploadErr) throw uploadErr;
+                const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(storagePath);
+                receipt_url = urlData?.publicUrl || null;
             }
 
             // 2. Insert parent expense with VAT columns

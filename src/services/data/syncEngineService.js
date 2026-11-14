@@ -3,6 +3,8 @@ import { isOnline, setSyncingState } from './connectivityService';
 import { getLocalCollection, setLocalCollection } from './localStoreService';
 
 const SYNC_QUEUE_KEY = 'manipos_sync_queue';
+const MAX_SYNC_ATTEMPTS = 5;
+let isSyncProcessRunning = false;
 
 export function getSyncQueue() {
     try {
@@ -42,54 +44,60 @@ export function enqueueSyncOperation({ entity_type, operation, entity_id, payloa
 }
 
 export async function triggerSyncProcess() {
-    if (!isOnline()) return;
+    if (!isOnline() || isSyncProcessRunning) return;
 
     const queue = getSyncQueue();
-    const pending = queue.filter(q => q.status === 'PENDING' || q.status === 'FAILED');
+    const pending = queue.filter(
+        q => (q.status === 'PENDING' || q.status === 'FAILED') && (q.attempts || 0) < MAX_SYNC_ATTEMPTS
+    );
 
     if (pending.length === 0) return;
 
+    isSyncProcessRunning = true;
     setSyncingState(true);
     console.log(`[SyncEngine] Processing ${pending.length} pending sync items...`);
 
     let hasErrors = false;
     const remainingQueue = [...queue];
 
-    for (const item of pending) {
-        try {
-            item.attempts += 1;
-            item.last_attempt_at = new Date().toISOString();
+    try {
+        for (const item of pending) {
+            try {
+                item.attempts = (item.attempts || 0) + 1;
+                item.last_attempt_at = new Date().toISOString();
 
-            let res;
-            if (item.operation === 'INSERT') {
-                res = await supabase.from(item.entity_type).insert([item.payload]);
-            } else if (item.operation === 'UPDATE') {
-                res = await supabase.from(item.entity_type).update(item.payload).eq('id', item.entity_id);
-            } else if (item.operation === 'DELETE') {
-                res = await supabase.from(item.entity_type).delete().eq('id', item.entity_id);
-            }
+                let res;
+                if (item.operation === 'INSERT') {
+                    res = await supabase.from(item.entity_type).insert([item.payload]);
+                } else if (item.operation === 'UPDATE') {
+                    res = await supabase.from(item.entity_type).update(item.payload).eq('id', item.entity_id);
+                } else if (item.operation === 'DELETE') {
+                    res = await supabase.from(item.entity_type).delete().eq('id', item.entity_id);
+                }
 
-            // Postgres error code 23505 = unique constraint conflict (idempotent duplicate) -> safe success!
-            if (!res.error || res.error.code === '23505') {
-                console.log(`[SyncEngine] Successfully synced item ${item.id}`);
-                const idx = remainingQueue.findIndex(q => q.id === item.id);
-                if (idx >= 0) remainingQueue.splice(idx, 1);
-            } else {
-                console.warn(`[SyncEngine] Sync failed for item ${item.id}:`, res.error.message);
-                item.status = 'FAILED';
-                item.error = res.error.message;
+                // Postgres error code 23505 = unique constraint conflict (idempotent duplicate) -> safe success!
+                if (!res?.error || res.error.code === '23505') {
+                    console.log(`[SyncEngine] Successfully synced item ${item.id}`);
+                    const idx = remainingQueue.findIndex(q => q.id === item.id);
+                    if (idx >= 0) remainingQueue.splice(idx, 1);
+                } else {
+                    console.warn(`[SyncEngine] Sync failed for item ${item.id}:`, res.error.message);
+                    item.status = item.attempts >= MAX_SYNC_ATTEMPTS ? 'DEAD_LETTER' : 'FAILED';
+                    item.error = res.error.message;
+                    hasErrors = true;
+                }
+            } catch (err) {
+                console.error(`[SyncEngine] Exception syncing item ${item.id}:`, err);
+                item.status = item.attempts >= MAX_SYNC_ATTEMPTS ? 'DEAD_LETTER' : 'FAILED';
+                item.error = err.message;
                 hasErrors = true;
             }
-        } catch (err) {
-            console.error(`[SyncEngine] Exception syncing item ${item.id}:`, err);
-            item.status = 'FAILED';
-            item.error = err.message;
-            hasErrors = true;
         }
+    } finally {
+        setSyncQueue(remainingQueue);
+        isSyncProcessRunning = false;
+        setSyncingState(false, hasErrors);
     }
-
-    setSyncQueue(remainingQueue);
-    setSyncingState(false, hasErrors);
 }
 
 // Auto-trigger sync when coming back online

@@ -7,16 +7,24 @@
 header('Content-Type: application/json; charset=utf-8');
 
 // ─────────────────────────────────────────────────────────────
-// CONFIGURATION
+// CONFIGURATION (prefer server environment variables in production)
 // ─────────────────────────────────────────────────────────────
 // 1. Verify token: Set the same secret token in your Meta App Webhook settings
-define('VERIFY_TOKEN', 'POJ_WHATSAPP_SECRET_2026');
+define('VERIFY_TOKEN', getenv('WHATSAPP_VERIFY_TOKEN') ?: 'POJ_WHATSAPP_SECRET_2026');
 
-// 2. Phone Number ID: Available on Meta WhatsApp > API Setup screen
-define('PHONE_NUMBER_ID', 'YOUR_PHONE_NUMBER_ID');
+// 2. Meta App Secret (strongly recommended for X-Hub-Signature-256 verification)
+define('APP_SECRET', getenv('WHATSAPP_APP_SECRET') ?: '');
 
-// 3. Permanent Access Token: Generated from Meta Business System User
-define('ACCESS_TOKEN', 'YOUR_META_PERMANENT_ACCESS_TOKEN');
+// 3. Phone Number ID: Available on Meta WhatsApp > API Setup screen
+define('PHONE_NUMBER_ID', getenv('WHATSAPP_PHONE_NUMBER_ID') ?: 'YOUR_PHONE_NUMBER_ID');
+
+// 4. Permanent Access Token: Generated from Meta Business System User
+define('ACCESS_TOKEN', getenv('WHATSAPP_ACCESS_TOKEN') ?: 'YOUR_META_PERMANENT_ACCESS_TOKEN');
+
+// 5. Tenant presentation overrides (defaulting to Pot of Jollof)
+define('STORE_NAME', getenv('WHATSAPP_STORE_NAME') ?: 'Pot of Jollof');
+define('STORE_MENU_URL', getenv('WHATSAPP_STORE_MENU_URL') ?: 'https://potofjollof.manipos.com');
+define('SUPPORT_PHONE', getenv('WHATSAPP_SUPPORT_PHONE') ?: '0795384140');
 
 // ─────────────────────────────────────────────────────────────
 // 1. WEBHOOK VERIFICATION (GET request from Meta)
@@ -43,6 +51,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 // ─────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rawInput = file_get_contents('php://input');
+
+    // Verify Meta X-Hub-Signature-256 when WHATSAPP_APP_SECRET is configured
+    if (APP_SECRET !== '') {
+        $signatureHeader = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
+        $expectedSignature = 'sha256=' . hash_hmac('sha256', $rawInput, APP_SECRET);
+        if (!is_string($signatureHeader) || !hash_equals($expectedSignature, $signatureHeader)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Invalid webhook signature']);
+            exit;
+        }
+    }
+
     $data = json_decode($rawInput, true);
 
     // Immediately respond 200 OK to Meta
@@ -96,9 +116,9 @@ function handleUserSelection($recipientPhone, $input, $customerName, $phoneId) {
 
     // OPTION 1: Place New Order
     if ($input === '1' || $input === 'opt_new_order' || strpos($input, 'order') !== false || strpos($input, 'menu') !== false) {
-        $msg = "🍲 *Order from Pot of Jollof*\n\n"
+        $msg = "🍲 *Order from " . STORE_NAME . "*\n\n"
              . "You can view our live digital menu, customize your dishes, and place your order directly here:\n\n"
-             . "👉 *https://manipos.com*\n\n"
+             . "👉 *" . STORE_MENU_URL . "*\n\n"
              . "⚡ Fast delivery & takeaway available!\n\n"
              . "_(Reply with *2* if you are following up on an existing order)_";
         
@@ -110,7 +130,7 @@ function handleUserSelection($recipientPhone, $input, $customerName, $phoneId) {
     if ($input === '2' || $input === 'opt_existing_order' || strpos($input, 'status') !== false || strpos($input, 'follow up') !== false || strpos($input, 'existing') !== false) {
         $msg = "📞 *Following Up on an Existing Order*\n\n"
              . "For live updates on your preparation or rider dispatch, please call our kitchen directly:\n\n"
-             . "☎️ *0795384140*\n\n"
+             . "☎️ *" . SUPPORT_PHONE . "*\n\n"
              . "Our dispatch team is on standby to assist you!\n\n"
              . "_(Reply with *1* to place a new order)_";
 
@@ -139,10 +159,10 @@ function sendInteractiveMenu($to, $name, $phoneId) {
             'type' => 'button',
             'header' => [
                 'type' => 'text',
-                'text' => 'Pot of Jollof Kitchen 🍲'
+                'text' => STORE_NAME . ' Kitchen 🍲'
             ],
             'body' => [
-                'text' => "Hello {$name}! Welcome to Pot of Jollof.\n\nHow can we help you today? Tap an option below:"
+                'text' => "Hello {$name}! Welcome to " . STORE_NAME . ".\n\nHow can we help you today? Tap an option below:"
             ],
             'footer' => [
                 'text' => 'Or reply with 1 or 2'

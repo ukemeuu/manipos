@@ -113,7 +113,8 @@ function normaliseTenant(row, settings, registry, slug) {
  * migration is mid-flight or the device is offline.
  */
 export async function loadTenant(slug = getActiveTenantSlug(), { force = false } = {}) {
-  const resolvedSlug = (slug || 'chopnownow').toLowerCase().trim();
+  const resolvedSlug = (slug || '').toLowerCase().trim();
+  if (!resolvedSlug) return null;
   if (!force) {
     const cached = readCache(resolvedSlug);
     if (cached) return cached;

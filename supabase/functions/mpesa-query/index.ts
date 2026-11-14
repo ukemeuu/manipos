@@ -17,9 +17,23 @@ const HOST_SANDBOX = 'https://sandbox.safaricom.co.ke';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-tenant-id',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+function decodeJwtTenantId(req: Request): string | null {
+  try {
+    const auth = req.headers.get('authorization') || '';
+    const token = auth.replace(/^Bearer\s+/i, '').trim();
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(payloadJson);
+    return claims?.app_metadata?.tenant_id || null;
+  } catch {
+    return null;
+  }
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -88,11 +102,21 @@ Deno.serve(async (req: Request) => {
   if (!orderId) return json({ ok: false, error: 'orderId is required' }, 400);
 
   const found = await rest(
-    `pos_orders?select=id,ticket_number,total_amount,payment_status,mpesa_checkout_request_id&id=eq.${encodeURIComponent(orderId)}`
+    `pos_orders?select=id,restaurant_id,ticket_number,total_amount,payment_status,mpesa_checkout_request_id&id=eq.${encodeURIComponent(orderId)}`
   );
 
   const order = found.ok && Array.isArray(found.body) ? found.body[0] : null;
   if (!order) return json({ ok: false, error: 'Order not found' }, 404);
+
+  const jwtTenantId = decodeJwtTenantId(req);
+  if (jwtTenantId && order.restaurant_id && jwtTenantId !== order.restaurant_id) {
+    return json({ ok: false, error: 'Forbidden: cross-tenant order access denied' }, 403);
+  }
+  const headerTenantId = (req.headers.get('x-tenant-id') || '').trim();
+  if (headerTenantId && order.restaurant_id && headerTenantId !== order.restaurant_id) {
+    return json({ ok: false, error: 'Forbidden: tenant mismatch' }, 403);
+  }
+
   if (order.payment_status === 'Paid') return json({ ok: true, status: 'paid' });
   if (!order.mpesa_checkout_request_id) {
     return json({ ok: false, error: 'No STK push has been started for this order' }, 409);

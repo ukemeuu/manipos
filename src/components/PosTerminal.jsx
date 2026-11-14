@@ -11,6 +11,7 @@ import { MenuItemSalesAnalyzer } from './MenuItemSalesAnalyzer';
 import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { loadTenant } from '../lib/tenantConfig';
 import { can } from '../lib/permissions';
+import { logAuditEvent } from '../lib/auditLogger';
 
 // ---------------------------------------------------------------------------
 // Receipt / print branding
@@ -44,6 +45,40 @@ export function setPosTenantId(tenantId) {
 
 function posCacheKey(name) {
     return `pos_cache_${name}_${POS_TENANT_ID || 'shared'}`;
+}
+
+function readPosQueue(queueName, legacyKey) {
+    try {
+        const scopedKey = posCacheKey(queueName);
+        const scopedRaw = localStorage.getItem(scopedKey);
+        if (scopedRaw !== null) {
+            return JSON.parse(scopedRaw);
+        }
+        // One-time safe migration from legacy unscoped keys (only items matching current tenant,
+        // and ignoring RetailPosTerminal flat payloads that lack `.header`).
+        const legacyRaw = legacyKey ? localStorage.getItem(legacyKey) : null;
+        if (!legacyRaw) return [];
+        const parsed = JSON.parse(legacyRaw);
+        if (!Array.isArray(parsed)) return [];
+        const matched = parsed.filter((entry) => {
+            if (!entry || typeof entry !== 'object') return false;
+            if (queueName === 'offline_orders_queue' && !entry.header) return false;
+            const entryTid = entry.restaurant_id || entry.header?.restaurant_id || null;
+            return !POS_TENANT_ID || !entryTid || entryTid === POS_TENANT_ID;
+        });
+        if (matched.length > 0) {
+            localStorage.setItem(scopedKey, JSON.stringify(matched));
+        }
+        return matched;
+    } catch (e) {
+        return [];
+    }
+}
+
+function writePosQueue(queueName, items) {
+    try {
+        localStorage.setItem(posCacheKey(queueName), JSON.stringify(items || []));
+    } catch (e) {}
 }
 
 function escapeReceiptHtml(value) {
@@ -334,6 +369,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     }, []);
     const restaurantId = sessionUser.restaurantId || sessionUser.restaurant_id || null;
     const activeTenantSlug = tenantSlug || sessionUser.tenantSlug;
+    setPosTenantId(restaurantId);
 
     // Keep the Supabase tenant context in sync so RLS can scope every request,
     // and key the offline caches to this tenant.
@@ -516,6 +552,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const { data } = await supabase.rpc('verify_staff_pin', {
                 p_name: staffName,
                 p_pin: entered,
+                p_restaurant_id: restaurantId,
             });
             if (data?.success) {
                 setIsLocked(false);
@@ -1307,6 +1344,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     const { data, error } = await supabase
                         .from('pos_customer_addresses')
                         .select('address')
+                        .eq('restaurant_id', restaurantId)
                         .eq('customer_name', customerNameText.trim().toLowerCase())
                         .maybeSingle();
                     if (data && data.address) {
@@ -1350,7 +1388,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             
             try {
                 // 1. Sync offline shifts first
-                const offlineShifts = JSON.parse(localStorage.getItem('pos_offline_shifts_queue') || '[]');
+                const offlineShifts = readPosQueue('offline_shifts_queue', 'pos_offline_shifts_queue');
                 if (offlineShifts.length > 0) {
                     console.log(`Found ${offlineShifts.length} offline shifts to sync...`);
                     const remainingShifts = [];
@@ -1362,7 +1400,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 const { error } = await supabase
                                     .from('pos_shifts')
                                     .insert([{
-                                        restaurant_id: restaurantId,
+                                        restaurant_id: shift.restaurant_id || restaurantId,
                                         staff_name: shift.staff_name || shift.cashier_name,
                                         opening_cash: shift.opening_cash != null ? shift.opening_cash : shift.opening_float,
                                         expected_cash: shift.expected_cash,
@@ -1375,7 +1413,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                 const { error } = await supabase
                                     .from('pos_shifts')
                                     .insert([{
-                                        restaurant_id: restaurantId,
+                                        restaurant_id: shift.restaurant_id || restaurantId,
                                         staff_name: shift.staff_name || shift.cashier_name,
                                         opening_cash: shift.opening_cash != null ? shift.opening_cash : shift.opening_float,
                                         expected_cash: shift.expected_cash
@@ -1388,44 +1426,72 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                             remainingShifts.push(shift);
                         }
                     }
-                    localStorage.setItem('pos_offline_shifts_queue', JSON.stringify(remainingShifts));
+                    writePosQueue('offline_shifts_queue', remainingShifts);
                 }
 
-                // 2. Sync offline orders
-                const offlineOrders = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
+                // 2. Sync offline orders (idempotent by idempotency_key)
+                const offlineOrders = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
                 if (offlineOrders.length > 0) {
                     console.log(`Found ${offlineOrders.length} offline orders to sync...`);
                     const remainingOrders = [];
                     
                     for (const order of offlineOrders) {
+                        if (!order || !order.header) continue;
                         try {
                             // Strip temporary offline IDs and prepare payload
                             const { id, is_offline, ticket_number, ...headerPayload } = order.header;
-                            
-                            // Insert header
-                            const { data: serverOrder, error: headerError } = await supabase
+                            if (!headerPayload.restaurant_id && restaurantId) {
+                                headerPayload.restaurant_id = restaurantId;
+                            }
+
+                            let serverOrder = null;
+                            const { data: insertedOrder, error: headerError } = await supabase
                                 .from('pos_orders')
                                 .insert([headerPayload])
                                 .select()
                                 .single();
-                                
-                            if (headerError) throw headerError;
-                            
-                            // Insert items with new server order ID
-                            const itemsPayload = order.items.map(item => ({
-                                order_id: serverOrder.id,
-                                item_name: item.item_name,
-                                quantity: item.quantity,
-                                price: item.price,
-                                instructions: item.instructions || ''
-                            }));
-                            
-                            const { error: itemsError } = await supabase
+
+                            if (headerError) {
+                                // 23505 = idempotency_key already inserted on a previous attempt
+                                if (headerError.code === '23505' && headerPayload.idempotency_key) {
+                                    const { data: existingOrder, error: fetchErr } = await supabase
+                                        .from('pos_orders')
+                                        .select('*')
+                                        .eq('idempotency_key', headerPayload.idempotency_key)
+                                        .maybeSingle();
+                                    if (fetchErr || !existingOrder) throw headerError;
+                                    serverOrder = existingOrder;
+                                } else {
+                                    throw headerError;
+                                }
+                            } else {
+                                serverOrder = insertedOrder;
+                            }
+
+                            // Only insert line items if none exist yet for this serverOrder
+                            const { data: existingItems } = await supabase
                                 .from('pos_order_items')
-                                .insert(itemsPayload);
-                                
-                            if (itemsError) throw itemsError;
-                            
+                                .select('id')
+                                .eq('order_id', serverOrder.id)
+                                .limit(1);
+
+                            if (!existingItems || existingItems.length === 0) {
+                                const itemsPayload = (order.items || []).map(item => ({
+                                    order_id: serverOrder.id,
+                                    item_name: item.item_name,
+                                    quantity: item.quantity,
+                                    price: item.price,
+                                    instructions: item.instructions || ''
+                                }));
+
+                                if (itemsPayload.length > 0) {
+                                    const { error: itemsError } = await supabase
+                                        .from('pos_order_items')
+                                        .insert(itemsPayload);
+                                    if (itemsError) throw itemsError;
+                                }
+                            }
+
                             console.log(`Successfully synced offline order #${obfuscateTicket(serverOrder.ticket_number)}`);
                         } catch (err) {
                             console.error("Failed to sync offline order, keeping in queue:", err);
@@ -1433,7 +1499,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                         }
                     }
                     
-                    localStorage.setItem('pos_offline_orders_queue', JSON.stringify(remainingOrders));
+                    writePosQueue('offline_orders_queue', remainingOrders);
                     if (remainingOrders.length === 0) {
                         fetchOpenOrders();
                         fetchHistory();
@@ -1441,7 +1507,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 }
                 
                 // 3. Sync offline status updates (like voiding)
-                const offlineUpdates = JSON.parse(localStorage.getItem('pos_offline_updates_queue') || '[]');
+                const offlineUpdates = readPosQueue('offline_updates_queue', 'pos_offline_updates_queue');
                 if (offlineUpdates.length > 0) {
                     console.log(`Found ${offlineUpdates.length} offline updates to sync...`);
                     const remainingUpdates = [];
@@ -1462,7 +1528,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                         }
                     }
                     
-                    localStorage.setItem('pos_offline_updates_queue', JSON.stringify(remainingUpdates));
+                    writePosQueue('offline_updates_queue', remainingUpdates);
                 }
             } catch (syncErr) {
                 console.error("Error during offline sync process:", syncErr);
@@ -1478,7 +1544,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             clearInterval(intervalId);
             window.removeEventListener('online', syncOfflineData);
         };
-    }, [openOrders]);
+    }, [restaurantId]);
 
     const handleDetectPrinters = async () => {
         setLoadingPrinters(true);
@@ -1665,20 +1731,20 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             
             if (isOffline || String(orderId).startsWith('offline-')) {
                 // Handle offline vacate
-                const offlineOrders = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
-                const idx = offlineOrders.findIndex(q => q.header.id === orderId);
+                const offlineOrders = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
+                const idx = offlineOrders.findIndex(q => q.header?.id === orderId);
                 if (idx !== -1) {
                     offlineOrders[idx].header.status = 'Completed';
-                    localStorage.setItem('pos_offline_orders_queue', JSON.stringify(offlineOrders));
+                    writePosQueue('offline_orders_queue', offlineOrders);
                 } else {
                     // Queue vacate update
-                    const offlineUpdates = JSON.parse(localStorage.getItem('pos_offline_updates_queue') || '[]');
+                    const offlineUpdates = readPosQueue('offline_updates_queue', 'pos_offline_updates_queue');
                     offlineUpdates.push({
                         type: 'update_order',
                         id: orderId,
                         payload: { status: 'Completed' }
                     });
-                    localStorage.setItem('pos_offline_updates_queue', JSON.stringify(offlineUpdates));
+                    writePosQueue('offline_updates_queue', offlineUpdates);
                 }
                 
                 setOpenOrders(prev => prev.filter(o => o.id !== orderId));
@@ -1693,7 +1759,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const { error } = await supabase
                 .from('pos_orders')
                 .update({ status: 'Completed' })
-                .eq('id', orderId);
+                .eq('id', orderId)
+                .eq('restaurant_id', restaurantId);
 
             if (error) throw error;
             
@@ -1714,20 +1781,25 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     };
 
     const handleVoidOrderSubmit = async () => {
+        if (!can('void_orders', sessionUser)) {
+            alert('You do not have permission to void orders. Please ask a Manager or Admin.');
+            return;
+        }
         try {
             const isOffline = !navigator.onLine;
+            const voidedOrder = openOrders.find(o => o.id === editingOrderId);
 
             if (isOffline || String(editingOrderId).startsWith('offline-')) {
                 // If it is an offline order, check if it's in the offline queue and update it
-                const offlineOrders = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
-                const idx = offlineOrders.findIndex(q => q.header.id === editingOrderId);
+                const offlineOrders = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
+                const idx = offlineOrders.findIndex(q => q.header?.id === editingOrderId);
                 if (idx !== -1) {
                     offlineOrders[idx].header.status = clearAction;
                     offlineOrders[idx].header.payment_status = 'Voided';
-                    localStorage.setItem('pos_offline_orders_queue', JSON.stringify(offlineOrders));
+                    writePosQueue('offline_orders_queue', offlineOrders);
                 } else {
                     // Queue void action for online order
-                    const offlineUpdates = JSON.parse(localStorage.getItem('pos_offline_updates_queue') || '[]');
+                    const offlineUpdates = readPosQueue('offline_updates_queue', 'pos_offline_updates_queue');
                     offlineUpdates.push({
                         type: 'update_order',
                         id: editingOrderId,
@@ -1740,8 +1812,20 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                             payment_method: clearPayment
                         }
                     });
-                    localStorage.setItem('pos_offline_updates_queue', JSON.stringify(offlineUpdates));
+                    writePosQueue('offline_updates_queue', offlineUpdates);
                 }
+
+                await logAuditEvent({
+                    action: 'order_void',
+                    details: {
+                        order_id: editingOrderId,
+                        ticket_number: voidedOrder?.ticket_number || null,
+                        total_amount: voidedOrder?.total_amount || null,
+                        status: clearAction,
+                        offline: true
+                    },
+                    staff: { id: sessionUser.id, name: staffName, role: staffRole, restaurantId }
+                });
 
                 // Update local state
                 setOpenOrders(prev => prev.map(o => o.id === editingOrderId ? { ...o, status: clearAction, payment_status: 'Voided' } : o));
@@ -1765,9 +1849,21 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     dining_option: clearService,
                     payment_method: clearPayment
                 })
-                .eq('id', editingOrderId);
+                .eq('id', editingOrderId)
+                .eq('restaurant_id', restaurantId);
 
             if (error) throw error;
+
+            await logAuditEvent({
+                action: 'order_void',
+                details: {
+                    order_id: editingOrderId,
+                    ticket_number: voidedOrder?.ticket_number || null,
+                    total_amount: voidedOrder?.total_amount || null,
+                    status: clearAction
+                },
+                staff: { id: sessionUser.id, name: staffName, role: staffRole, restaurantId }
+            });
 
             setClearSalesModalOpen(false);
             setCart([]);
@@ -1917,9 +2013,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             localStorage.setItem(posCacheKey('active_shift_' + staffName), JSON.stringify(offlineShift));
             
             // Queue the shift creation for offline sync
-            const offlineShifts = JSON.parse(localStorage.getItem('pos_offline_shifts_queue') || '[]');
+            const offlineShifts = readPosQueue('offline_shifts_queue', 'pos_offline_shifts_queue');
             offlineShifts.push(offlineShift);
-            localStorage.setItem('pos_offline_shifts_queue', JSON.stringify(offlineShifts));
+            writePosQueue('offline_shifts_queue', offlineShifts);
         }
     };
 
@@ -1953,11 +2049,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 let shiftOrdersCount = 0;
 
                 const cachedHistory = JSON.parse(localStorage.getItem(posCacheKey('history')) || '[]');
-                const offlineQueue = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
+                const offlineQueue = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
 
                 const allOrders = [
                     ...cachedHistory,
-                    ...offlineQueue.map(q => q.header)
+                    ...offlineQueue.map(q => q.header).filter(Boolean)
                 ].filter(o => o.created_at >= shiftStartIso && (staffName ? (o.cashier_name || '').toLowerCase() === staffName.toLowerCase() : true));
 
                 allOrders.forEach(order => {
@@ -2001,14 +2097,14 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 localStorage.removeItem(posCacheKey('active_shift_' + staffName));
 
                 // Queue shift closure
-                const offlineShifts = JSON.parse(localStorage.getItem('pos_offline_shifts_queue') || '[]');
+                const offlineShifts = readPosQueue('offline_shifts_queue', 'pos_offline_shifts_queue');
                 const idx = offlineShifts.findIndex(s => s.id === activeShift.id);
                 if (idx !== -1) {
                     offlineShifts[idx] = closedOfflineShift;
                 } else {
                     offlineShifts.push(closedOfflineShift);
                 }
-                localStorage.setItem('pos_offline_shifts_queue', JSON.stringify(offlineShifts));
+                writePosQueue('offline_shifts_queue', offlineShifts);
 
                 setZReportData({
                     shift: closedOfflineShift,
@@ -2278,11 +2374,14 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             });
 
             // Append offline open orders currently queued to be synced
-            const offlineQueue = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
-            const offlineOpenOrders = offlineQueue.map(q => ({
-                ...q.header,
-                items: q.items
-            })).filter(o => o.status === 'Open');
+            const offlineQueue = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
+            const offlineOpenOrders = offlineQueue
+                .filter(q => q && q.header)
+                .map(q => ({
+                    ...q.header,
+                    items: q.items
+                }))
+                .filter(o => o.status === 'Open');
 
             let finalMerged = [...offlineOpenOrders, ...merged];
             
@@ -2481,6 +2580,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
 
         return () => {
+            clearInterval(openOrdersPoll);
             supabase.removeChannel(ordersChannel);
         };
     }, []);
@@ -3126,23 +3226,23 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             };
 
             if (isOffline || String(clearingPendingOrder.id).startsWith('offline-')) {
-                const offlineOrders = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
-                const idx = offlineOrders.findIndex(q => q.header.id === clearingPendingOrder.id);
+                const offlineOrders = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
+                const idx = offlineOrders.findIndex(q => q.header?.id === clearingPendingOrder.id);
                 if (idx !== -1) {
                     offlineOrders[idx].header.payment_status = 'Paid';
                     offlineOrders[idx].header.payment_method = clearingPaymentMethod;
                     offlineOrders[idx].header.brand = clearingBrand;
                     offlineOrders[idx].header.order_channel = clearingChannel;
                     offlineOrders[idx].header.dining_option = clearingService;
-                    localStorage.setItem('pos_offline_orders_queue', JSON.stringify(offlineOrders));
+                    writePosQueue('offline_orders_queue', offlineOrders);
                 } else {
-                    const offlineUpdates = JSON.parse(localStorage.getItem('pos_offline_updates_queue') || '[]');
+                    const offlineUpdates = readPosQueue('offline_updates_queue', 'pos_offline_updates_queue');
                     offlineUpdates.push({
                         type: 'update_order',
                         id: clearingPendingOrder.id,
                         payload: updatePayload
                     });
-                    localStorage.setItem('pos_offline_updates_queue', JSON.stringify(offlineUpdates));
+                    writePosQueue('offline_updates_queue', offlineUpdates);
                 }
 
                 setOpenOrders(prev => prev.map(o => o.id === clearingPendingOrder.id ? { ...o, ...updatePayload } : o));
@@ -3381,6 +3481,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
         return {
             id: 'offline-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            idempotency_key: orderPayload.idempotency_key || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
             ticket_number: nextTicketNum,
             restaurant_id: restaurantId,
             created_at: orderPayload.created_at || new Date().toISOString(),
@@ -3394,6 +3495,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             brand: orderPayload.brand,
             order_channel: orderPayload.order_channel,
             notes: orderPayload.notes,
+            delivery_address: orderPayload.delivery_address || null,
             status: 'Pending',
             is_offline: true
         };
@@ -3437,8 +3539,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 finalCreatedAt = new Date(localISO).toISOString();
             }
 
+            const idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `pos-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
             const orderPayload = {
                 restaurant_id: restaurantId,
+                idempotency_key: idempotencyKey,
                 customer_name: finalCustName,
                 dining_option: diningOption,
                 payment_method: paymentMethod,
@@ -3465,10 +3572,12 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     // Keep edit and new-order paths strictly separate so a delete failure
                     // never silently falls back to offline and double-inserts items.
                     isEditOfOnlineOrder = true;
+                    const { idempotency_key: _ignoredIdem, ...updateOrderPayload } = orderPayload;
                     const { data: updData, error: updErr } = await supabase
                         .from('pos_orders')
-                        .update(orderPayload)
+                        .update(updateOrderPayload)
                         .eq('id', editingOrderId)
+                        .eq('restaurant_id', restaurantId)
                         .select()
                         .single();
 
@@ -3515,15 +3624,31 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     }
                 }
             }
-            // Save/upsert customer address
-            if (diningOption === 'Delivery' && customerNameText.trim() && deliveryAddress.trim()) {
+            // Save/upsert customer address (tenant-scoped)
+            if (diningOption === 'Delivery' && customerNameText.trim() && deliveryAddress.trim() && restaurantId) {
                 try {
-                    await supabase
+                    const custKey = customerNameText.trim().toLowerCase();
+                    const { data: existingAddr } = await supabase
                         .from('pos_customer_addresses')
-                        .upsert({
-                            customer_name: customerNameText.trim().toLowerCase(),
-                            address: deliveryAddress.trim()
-                        }, { onConflict: 'customer_name' });
+                        .select('id')
+                        .eq('restaurant_id', restaurantId)
+                        .eq('customer_name', custKey)
+                        .maybeSingle();
+                    if (existingAddr?.id) {
+                        await supabase
+                            .from('pos_customer_addresses')
+                            .update({ address: deliveryAddress.trim() })
+                            .eq('id', existingAddr.id)
+                            .eq('restaurant_id', restaurantId);
+                    } else {
+                        await supabase
+                            .from('pos_customer_addresses')
+                            .insert({
+                                restaurant_id: restaurantId,
+                                customer_name: custKey,
+                                address: deliveryAddress.trim()
+                            });
+                    }
                 } catch (e) {
                     console.error('Error upserting customer address:', e);
                 }
@@ -3539,11 +3664,11 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             }));
 
             if (orderData.is_offline) {
-                // Save offline order to localStorage queue
-                const offlineOrders = JSON.parse(localStorage.getItem('pos_offline_orders_queue') || '[]');
+                // Save offline order to tenant-scoped localStorage queue
+                const offlineOrders = readPosQueue('offline_orders_queue', 'pos_offline_orders_queue');
                 
                 // If we are editing an offline order, overwrite it in the queue
-                const existingIdx = offlineOrders.findIndex(q => q.header.id === editingOrderId);
+                const existingIdx = offlineOrders.findIndex(q => q.header?.id === editingOrderId);
                 if (existingIdx !== -1) {
                     offlineOrders[existingIdx] = {
                         header: orderData,
@@ -3556,7 +3681,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                     });
                 }
                 
-                localStorage.setItem('pos_offline_orders_queue', JSON.stringify(offlineOrders));
+                writePosQueue('offline_orders_queue', offlineOrders);
                 
                 // Append offline open orders to local state
                 const mergedOfflineOrder = {

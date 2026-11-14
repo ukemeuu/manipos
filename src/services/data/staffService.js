@@ -59,7 +59,7 @@ export async function authenticateStaffLogin(email, password) {
                 };
                 setTenantContext(staffUser.restaurantId);
                 localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
-                provisionOfflineStaffCredential(cleanEmail, staffUser, password);
+                await provisionOfflineStaffCredential(cleanEmail, staffUser, password);
                 return { success: true, staffUser, session: data.session, auth: 'supabase' };
             }
 
@@ -81,7 +81,7 @@ export async function authenticateStaffLogin(email, password) {
             if (!rpcError && rpcRes && rpcRes.success) {
                 const staffPayload = rpcRes.staff_user;
                 setTenantContext(staffPayload.restaurantId || null);
-                provisionOfflineStaffCredential(cleanEmail, staffPayload, password);
+                await provisionOfflineStaffCredential(cleanEmail, staffPayload, password);
                 return { success: true, staffUser: staffPayload, auth: 'legacy' };
             }
 
@@ -96,7 +96,7 @@ export async function authenticateStaffLogin(email, password) {
     }
 
     // 3. Offline fallback.
-    return verifyOfflineStaffCredential(cleanEmail, password);
+    return await verifyOfflineStaffCredential(cleanEmail, password);
 }
 
 /**
@@ -106,16 +106,40 @@ export async function authenticateStaffPin(restaurantSlug, pinCode) {
     return authenticateStaffLogin(restaurantSlug, pinCode);
 }
 
+async function hashSecretWithSalt(secret, salt) {
+    const input = `${salt}:${secret}`;
+    if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') {
+        const bytes = new TextEncoder().encode(input);
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    // Lightweight fallback hash when SubtleCrypto is unavailable on insecure origins
+    let h1 = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+        h1 ^= input.charCodeAt(i);
+        h1 = Math.imul(h1, 0x01000193);
+    }
+    return `fnv1a_${(h1 >>> 0).toString(16)}`;
+}
+
 /**
- * Provision offline credential on local machine upon successful online login
+ * Provision salted offline credential verifier on local machine upon successful online login.
+ * Plaintext passwords/PINs are never stored in localStorage.
  */
-function provisionOfflineStaffCredential(tenantSlug, staffUser, pinCode) {
+async function provisionOfflineStaffCredential(tenantSlug, staffUser, pinCode) {
     try {
         const stored = JSON.parse(localStorage.getItem(OFFLINE_STAFF_KEY) || '{}');
-        if (!stored[tenantSlug]) stored[tenantSlug] = {};
+        const saltBytes = new Uint8Array(16);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(saltBytes);
+        }
+        const salt = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('') || String(Date.now());
+        const verifier = await hashSecretWithSalt(pinCode, salt);
 
-        stored[tenantSlug][pinCode] = {
-            ...staffUser,
+        stored[tenantSlug] = {
+            salt,
+            verifier,
+            staffUser,
             provisioned_at: new Date().toISOString()
         };
 
@@ -126,20 +150,23 @@ function provisionOfflineStaffCredential(tenantSlug, staffUser, pinCode) {
 }
 
 /**
- * Verify credentials locally ONLY if previously provisioned online for an approved tenant
+ * Verify credentials locally ONLY against previously provisioned salted verifier
  */
-function verifyOfflineStaffCredential(tenantSlug, pinCode) {
+async function verifyOfflineStaffCredential(tenantSlug, pinCode) {
     try {
         const stored = JSON.parse(localStorage.getItem(OFFLINE_STAFF_KEY) || '{}');
-        const tenantStaff = stored[tenantSlug];
+        const record = stored[tenantSlug];
 
-        if (tenantStaff && tenantStaff[pinCode]) {
-            console.log(`[StaffService] Authenticated staff offline: ${tenantStaff[pinCode].name}`);
-            return {
-                success: true,
-                staffUser: tenantStaff[pinCode],
-                is_offline_login: true
-            };
+        if (record && record.salt && record.verifier && record.staffUser) {
+            const candidate = await hashSecretWithSalt(pinCode, record.salt);
+            if (candidate === record.verifier) {
+                console.log(`[StaffService] Authenticated staff offline: ${record.staffUser.name}`);
+                return {
+                    success: true,
+                    staffUser: record.staffUser,
+                    is_offline_login: true
+                };
+            }
         }
 
         return {

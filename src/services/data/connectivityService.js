@@ -35,10 +35,13 @@ export async function checkHealth() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout
 
-        const { data, error } = await supabase
+        const query = supabase
             .from('restaurants')
             .select('id')
             .limit(1);
+        const { error } = typeof query.abortSignal === 'function'
+            ? await query.abortSignal(controller.signal)
+            : await query;
 
         clearTimeout(timeoutId);
 
@@ -79,10 +82,12 @@ export function setSyncingState(isSyncing, hasError = false) {
 if (typeof window !== 'undefined') {
     window.addEventListener('online', () => checkHealth());
     window.addEventListener('offline', () => updateState('OFFLINE'));
-    
-    // Periodic health check every 20 seconds
+
+    // Periodic health check every 20 seconds when tab is visible
     setInterval(() => {
-        checkHealth();
+        if (typeof document === 'undefined' || !document.hidden) {
+            checkHealth();
+        }
     }, 20000);
 
     // Initial check

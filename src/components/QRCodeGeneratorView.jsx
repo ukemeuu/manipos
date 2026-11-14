@@ -4,9 +4,26 @@ import {
     Check, Sparkles, ExternalLink, Globe, Star, FileText,
     Edit2, Loader2
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, getTenantContext } from '../lib/supabase';
 
 export function QRCodeGeneratorView({ brand = {} }) {
+    const resolvedRestaurantId = (() => {
+        if (brand?.id) return brand.id;
+        try {
+            const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            if (pinUser.restaurantId || pinUser.restaurant_id) return pinUser.restaurantId || pinUser.restaurant_id;
+        } catch (e) {}
+        return getTenantContext() || null;
+    })();
+    const resolvedSlug = (() => {
+        if (brand?.slug) return brand.slug;
+        try {
+            const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+            if (pinUser.tenantSlug) return pinUser.tenantSlug;
+        } catch (e) {}
+        return null;
+    })();
+
     // Branding for the printed flyer. Defaults to a neutral ManiPOS mark so the
     // platform never stamps one restaurant's identity onto another's QR code.
     const brandName = (brand?.name || 'ManiPOS').toUpperCase();
@@ -22,18 +39,21 @@ export function QRCodeGeneratorView({ brand = {} }) {
     const [printTarget, setPrintTarget] = useState(null);
     const [editingId, setEditingId] = useState(null);
 
-    // Default presets
+    // Default presets (tenant-aware URLs)
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const tenantMenuBase = resolvedSlug
+        ? `https://${resolvedSlug}.manipos.com`
+        : origin;
     const PRESETS = [
         {
             name: 'Digital Menu',
-            url: origin,
+            url: tenantMenuBase,
             icon: Globe,
             color: 'text-orange-600 bg-orange-50 border-orange-100'
         },
         {
             name: 'Customer Feedback Form',
-            url: `${origin}/feedback`,
+            url: `${tenantMenuBase}/feedback`,
             icon: Star,
             color: 'text-emerald-600 bg-emerald-50 border-emerald-100'
         }
@@ -41,11 +61,16 @@ export function QRCodeGeneratorView({ brand = {} }) {
 
 
     const fetchCodes = async () => {
+        if (!resolvedRestaurantId) {
+            setHistory([]);
+            return;
+        }
         setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('saved_qrcodes')
                 .select('*')
+                .eq('restaurant_id', resolvedRestaurantId)
                 .order('created_at', { ascending: false });
             if (error) throw error;
             setHistory(data || []);
@@ -79,6 +104,10 @@ export function QRCodeGeneratorView({ brand = {} }) {
         const encoded = encodeURIComponent(url.trim());
         const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encoded}`;
         
+        if (!resolvedRestaurantId) {
+            alert('No active restaurant session found.');
+            return;
+        }
         try {
             if (editingId) {
                 const { error } = await supabase
@@ -88,13 +117,15 @@ export function QRCodeGeneratorView({ brand = {} }) {
                         url: url.trim(),
                         qr_url: qrImgUrl
                     })
-                    .eq('id', editingId);
+                    .eq('id', editingId)
+                    .eq('restaurant_id', resolvedRestaurantId);
                 if (error) throw error;
                 setEditingId(null);
             } else {
                 const { error } = await supabase
                     .from('saved_qrcodes')
                     .insert([{
+                        restaurant_id: resolvedRestaurantId,
                         label: label.trim(),
                         url: url.trim(),
                         qr_url: qrImgUrl
@@ -131,7 +162,8 @@ export function QRCodeGeneratorView({ brand = {} }) {
             const { error } = await supabase
                 .from('saved_qrcodes')
                 .delete()
-                .eq('id', id);
+                .eq('id', id)
+                .eq('restaurant_id', resolvedRestaurantId);
             if (error) throw error;
             fetchCodes();
         } catch (err) {

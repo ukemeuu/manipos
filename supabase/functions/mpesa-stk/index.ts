@@ -11,15 +11,30 @@
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const CALLBACK_SECRET = Deno.env.get('MPESA_CALLBACK_SECRET') || '';
 
 const HOST_PRODUCTION = 'https://api.safaricom.co.ke';
 const HOST_SANDBOX = 'https://sandbox.safaricom.co.ke';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-tenant-id',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+function decodeJwtTenantId(req: Request): string | null {
+  try {
+    const auth = req.headers.get('authorization') || '';
+    const token = auth.replace(/^Bearer\s+/i, '').trim();
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(payloadJson);
+    return claims?.app_metadata?.tenant_id || null;
+  } catch {
+    return null;
+  }
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -107,6 +122,16 @@ Deno.serve(async (req: Request) => {
 
   const order = Array.isArray(found.body) ? found.body[0] : null;
   if (!order) return json({ ok: false, error: 'Order not found' }, 404);
+
+  const jwtTenantId = decodeJwtTenantId(req);
+  if (jwtTenantId && order.restaurant_id && jwtTenantId !== order.restaurant_id) {
+    return json({ ok: false, error: 'Forbidden: cross-tenant order access denied' }, 403);
+  }
+  const headerTenantId = (req.headers.get('x-tenant-id') || '').trim();
+  if (headerTenantId && order.restaurant_id && headerTenantId !== order.restaurant_id) {
+    return json({ ok: false, error: 'Forbidden: tenant mismatch' }, 403);
+  }
+
   if (order.payment_status === 'Paid') {
     return json({ ok: false, error: 'This order is already paid' }, 409);
   }
@@ -125,7 +150,9 @@ Deno.serve(async (req: Request) => {
 
   const timestamp = darajaTimestamp();
   const password = btoa(`${shortcode}${passkey}${timestamp}`);
-  const callbackUrl = `${SUPABASE_URL}/functions/v1/mpesa-callback`;
+  const callbackUrl = CALLBACK_SECRET
+    ? `${SUPABASE_URL}/functions/v1/mpesa-callback?token=${encodeURIComponent(CALLBACK_SECRET)}`
+    : `${SUPABASE_URL}/functions/v1/mpesa-callback`;
 
   try {
     const token = await darajaToken();

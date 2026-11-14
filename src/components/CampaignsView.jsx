@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import React, { useState, useEffect, useMemo } from 'react';
+import { supabase, getTenantContext } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Users, Flame, Send, CheckCircle, AlertTriangle, RefreshCw, Check, Square, ChevronRight } from 'lucide-react';
 
 export function CampaignsView() {
+    const sessionUser = useMemo(() => {
+        try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
+    }, []);
+    const restaurantId = sessionUser.restaurantId || sessionUser.restaurant_id || getTenantContext() || null;
+    const restaurantLabel = sessionUser.restaurantName || 'our kitchen';
+
     const [guests, setGuests] = useState([]);
     const [selectedGuests, setSelectedGuests] = useState([]);
     const [menuItems, setMenuItems] = useState([]);
     const [selectedItem, setSelectedItem] = useState(null);
     const [discountPercent, setDiscountPercent] = useState(20);
     const [customMessage, setCustomMessage] = useState(
-        "🔥 FLASH OFFER from Pot of Jollof! 🔥\n\nHey {{firstName}}, get our signature {{itemName}} today at {{discountPercent}}% OFF! Only KES {{promoPrice}} instead of KES {{originalPrice}}! 🥘\n\nOrder here now for instant hot delivery: {{micrositeUrl}}"
+        `🔥 FLASH OFFER from ${restaurantLabel}! 🔥\n\nHey {{firstName}}, get our signature {{itemName}} today at {{discountPercent}}% OFF! Only KES {{promoPrice}} instead of KES {{originalPrice}}! 🥘\n\nOrder here now for instant hot delivery: {{micrositeUrl}}`
     );
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
@@ -20,15 +26,22 @@ export function CampaignsView() {
     const [waConfig, setWaConfig] = useState(null);
     const [error, setError] = useState(null);
 
-    // Fetch guests, menu, and whatsapp channel configs
+    // Fetch guests, menu, and whatsapp channel configs (strictly tenant-scoped)
     useEffect(() => {
         const loadData = async () => {
+            if (!restaurantId) {
+                setGuests([]);
+                setMenuItems([]);
+                setWaConfig(null);
+                return;
+            }
             setLoading(true);
             try {
                 // Fetch WhatsApp configs
                 const { data: channelData } = await supabase
                     .from('pos_channels')
                     .select('*')
+                    .eq('restaurant_id', restaurantId)
                     .eq('name', 'whatsapp')
                     .maybeSingle();
                 setWaConfig(channelData);
@@ -37,6 +50,7 @@ export function CampaignsView() {
                 const { data: guestData } = await supabase
                     .from('guests')
                     .select('*')
+                    .eq('restaurant_id', restaurantId)
                     .not('phone', 'is', null)
                     .order('first_name', { ascending: true });
                 setGuests(guestData || []);
@@ -46,6 +60,7 @@ export function CampaignsView() {
                 const { data: menuData } = await supabase
                     .from('pos_menu')
                     .select('*')
+                    .eq('restaurant_id', restaurantId)
                     .eq('is_available', true)
                     .order('name', { ascending: true });
                 
@@ -139,6 +154,8 @@ export function CampaignsView() {
 
         const phoneId = waConfig.client_id;
         const token = waConfig.client_secret;
+        let successes = 0;
+        let failures = 0;
 
         for (let i = 0; i < targets.length; i++) {
             const guest = targets[i];
@@ -165,26 +182,17 @@ export function CampaignsView() {
 
                 const resData = await response.json();
                 if (response.ok && !resData.error) {
-                    setProgress(prev => ({
-                        ...prev,
-                        current: i + 1,
-                        successes: prev.successes + 1
-                    }));
+                    successes += 1;
+                    setProgress({ current: i + 1, total: targets.length, successes, failures });
                 } else {
                     console.error("Meta Graph API error response:", resData);
-                    setProgress(prev => ({
-                        ...prev,
-                        current: i + 1,
-                        failures: prev.failures + 1
-                    }));
+                    failures += 1;
+                    setProgress({ current: i + 1, total: targets.length, successes, failures });
                 }
             } catch (err) {
                 console.error("Error sending message to +", rawPhone, err);
-                setProgress(prev => ({
-                    ...prev,
-                    current: i + 1,
-                    failures: prev.failures + 1
-                }));
+                failures += 1;
+                setProgress({ current: i + 1, total: targets.length, successes, failures });
             }
 
             // Slight rate-limiting delay between messages to prevent spam blocks
@@ -192,7 +200,7 @@ export function CampaignsView() {
         }
 
         setSending(false);
-        setSendSummary({ successes: progress.successes, failures: progress.failures });
+        setSendSummary({ successes, failures });
     };
 
     if (loading) {

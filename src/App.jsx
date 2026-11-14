@@ -147,8 +147,7 @@ function App() {
   // Load tenant configuration (DB first, static registry fallback).
   useEffect(() => {
     let cancelled = false;
-    const slug = getActiveTenantSlug() || tenantInfo.tenantSlug ||
-      (currentRoute === 'kds' || currentRoute === 'floor' || currentRoute === 'inventory' ? 'chopnownow' : null);
+    const slug = getActiveTenantSlug() || tenantInfo.tenantSlug || session?.staffUser?.tenantSlug || null;
     if (!slug) {
       setTenant(null);
       setTenantContext(null);

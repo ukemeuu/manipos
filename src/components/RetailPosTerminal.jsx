@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, getTenantContext } from '../lib/supabase';
 import { queueOfflineOrder } from '../lib/offlineQueue';
 import { printOrFallback, isQZConnected, connectQZ } from '../lib/qzPrint';
 import {
@@ -283,8 +283,18 @@ export function RetailPosTerminal({
     if (cart.length === 0) return;
     setIsProcessingPayment(true);
 
+    const resolvedRestaurantId = (() => {
+      try {
+        const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+        return pinUser.restaurantId || pinUser.restaurant_id || getTenantContext() || null;
+      } catch (e) {
+        return getTenantContext() || null;
+      }
+    })();
+
     const orderPayload = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord-' + Date.now(),
+      restaurant_id: resolvedRestaurantId,
       ticket_number: 'R-' + Math.floor(1000 + Math.random() * 9000),
       brand: 'RETAIL POS',
       customer_name: 'Walk-in Retail Customer',
@@ -330,11 +340,11 @@ Date: ${new Date().toLocaleString()}
 Cashier: ${staffName}
 Payment: ${paymentMethod}
 --------------------------------
-${cart.map(i => `${i.qty}x ${i.name.slice(0, 18).padEnd(18)} $${(i.price * i.qty).toFixed(2)}`).join('\n')}
+${cart.map(i => `${i.qty}x ${i.name.slice(0, 18).padEnd(18)} KES ${(i.price * i.qty).toFixed(2)}`).join('\n')}
 --------------------------------
-TOTAL:             $${totalAmount.toFixed(2)}
-Tendered:          $${amountTendered ? Number(amountTendered).toFixed(2) : totalAmount.toFixed(2)}
-Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - totalAmount).toFixed(2)}
+TOTAL:             KES ${totalAmount.toFixed(2)}
+Tendered:          KES ${amountTendered ? Number(amountTendered).toFixed(2) : totalAmount.toFixed(2)}
+Change:            KES ${Math.max(0, (Number(amountTendered) || totalAmount) - totalAmount).toFixed(2)}
 ================================
   Thank you for shopping with us!
 ================================
@@ -515,7 +525,7 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
 
                   <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
                     <span className="text-sm font-black text-cyan-400 font-mono">
-                      ${product.price.toFixed(2)}
+                      KES {product.price.toFixed(2)}
                     </span>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">
                       /{product.unit}
@@ -577,11 +587,11 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
                     <div className="space-y-0.5 flex-1 pr-2">
                       <p className="text-xs font-bold text-white line-clamp-1">{item.name}</p>
                       <p className="text-[10px] font-mono text-slate-400">
-                        ${item.price.toFixed(2)} × {item.qty} | SKU: {item.sku}
+                        KES {item.price.toFixed(2)} × {item.qty} | SKU: {item.sku}
                       </p>
                     </div>
                     <span className="text-xs font-black text-cyan-400 font-mono">
-                      ${(item.price * item.qty).toFixed(2)}
+                      KES {(item.price * item.qty).toFixed(2)}
                     </span>
                   </div>
 
@@ -619,15 +629,15 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
             <div className="space-y-1.5 text-xs text-slate-400">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="font-mono text-slate-200">${subtotal.toFixed(2)}</span>
+                <span className="font-mono text-slate-200">KES {subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Tax (Included)</span>
-                <span className="font-mono text-slate-200">${taxAmount.toFixed(2)}</span>
+                <span className="font-mono text-slate-200">KES {taxAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-base font-black text-white pt-1 border-t border-slate-800">
                 <span>Total Due</span>
-                <span className="font-mono text-cyan-400">${totalAmount.toFixed(2)}</span>
+                <span className="font-mono text-cyan-400">KES {totalAmount.toFixed(2)}</span>
               </div>
             </div>
 
@@ -640,7 +650,7 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 font-black text-sm hover:from-cyan-400 hover:to-emerald-300 transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
             >
               <Banknote className="w-4 h-4" />
-              <span>Checkout (${totalAmount.toFixed(2)}) &rarr;</span>
+              <span>Checkout (KES {totalAmount.toFixed(2)}) &rarr;</span>
             </button>
           </div>
 
@@ -661,7 +671,7 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
 
             <div className="space-y-1 text-center">
               <h3 className="text-2xl font-black text-white">Tender Transaction</h3>
-              <p className="text-xs text-slate-400">Total Amount: <strong className="text-cyan-400 text-sm font-mono">${totalAmount.toFixed(2)}</strong></p>
+              <p className="text-xs text-slate-400">Total Amount: <strong className="text-cyan-400 text-sm font-mono">KES {totalAmount.toFixed(2)}</strong></p>
             </div>
 
             {/* Payment Method Selector */}
@@ -690,7 +700,7 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
             {paymentMethod === 'CASH' && (
               <div className="space-y-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Amount Tendered ($)
+                  Amount Tendered (KES)
                 </label>
                 <input
                   type="number"
@@ -701,13 +711,13 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
                 />
                 
                 <div className="grid grid-cols-4 gap-2 pt-1">
-                  {[Math.ceil(totalAmount), 20, 50, 100].map(amt => (
+                  {Array.from(new Set([Math.ceil(totalAmount), 500, 1000, 2000, 5000].filter(v => v >= Math.ceil(totalAmount)))).slice(0, 4).map(amt => (
                     <button
                       key={amt}
                       onClick={() => handleFastTender(amt)}
                       className="py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono font-bold text-slate-300 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors"
                     >
-                      ${amt}
+                      KES {amt}
                     </button>
                   ))}
                 </div>
@@ -716,7 +726,7 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
                   <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
                     <span className="text-xs text-slate-400">Change Due: </span>
                     <strong className="text-emerald-400 font-mono text-base font-black">
-                      ${(Number(amountTendered) - totalAmount).toFixed(2)}
+                      KES {(Number(amountTendered) - totalAmount).toFixed(2)}
                     </strong>
                   </div>
                 )}
@@ -754,7 +764,7 @@ Change:            $${Math.max(0, (Number(amountTendered) || totalAmount) - tota
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Total:</span>
-                <span className="text-cyan-400 font-bold">${completedOrder.total_amount.toFixed(2)}</span>
+                <span className="text-cyan-400 font-bold">KES {completedOrder.total_amount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Payment:</span>

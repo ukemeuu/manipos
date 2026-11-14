@@ -528,13 +528,20 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const selectedAddressRef = useRef(false);
 
 
-    const fetchDiscounts = async () => {
+    const guestStorageKey = `manipos_guest_${tenantSlug || 'default'}`;
+    const menuCacheKey = `manipos_menu_cache_${tenantSlug || 'default'}`;
+
+    const fetchDiscounts = async (explicitRid = null) => {
         try {
-            const { data, error } = await supabase
+            const targetRid = explicitRid || restaurantId || tenantProfile?.id || null;
+            let query = supabase
                 .from("pos_discounts")
                 .select("*")
-                .eq("is_active", true)
-                .order("created_at", { ascending: false });
+                .eq("is_active", true);
+            if (targetRid) {
+                query = query.eq("restaurant_id", targetRid);
+            }
+            const { data, error } = await query.order("created_at", { ascending: false });
             if (!error && data) {
                 setAvailableDiscounts(data);
             }
@@ -632,6 +639,11 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         loadTenant(tenantSlug).then((t) => {
             if (!cancelled && t) {
                 setTenantProfile(t);
+                if (t.id) {
+                    setRestaurantId(prev => prev || t.id);
+                    fetchMenu(t.id);
+                    fetchDiscounts(t.id);
+                }
                 document.title = `${t.name || 'Restaurant'} | Order Online & Digital Menu`;
             }
         }).catch(e => console.warn('Could not load tenant in microsite:', e));
@@ -656,11 +668,13 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         // Fetch WhatsApp channel delivery configs if available
         const fetchWaSettings = async () => {
             try {
-                const { data, error } = await supabase
+                const targetRid = restaurantId || tenantProfile?.id || null;
+                let waQuery = supabase
                     .from('pos_channels')
                     .select('*')
-                    .eq('name', 'whatsapp')
-                    .maybeSingle();
+                    .eq('name', 'whatsapp');
+                if (targetRid) waQuery = waQuery.eq('restaurant_id', targetRid);
+                const { data, error } = await waQuery.maybeSingle();
                 if (data) {
                     setWhatsappSettings({
                         paybill_number: data.paybill_number || '542542',
@@ -689,6 +703,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             const cleanTable = queryTable.toLowerCase().startsWith('table') ? queryTable : `Table ${queryTable}`;
             setTableNumber(cleanTable);
             // Clear any old delivery guest session so table orders don't inherit another person's name
+            localStorage.removeItem(guestStorageKey);
             localStorage.removeItem('mute_kitchens_guest');
             setGuestUser(null);
             setCustomerName('');
@@ -697,11 +712,15 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             const cleanPhone = queryPhone.trim().replace('+', '');
             (async () => {
                 try {
-                    const { data: guestData, error: guestErr } = await supabase
+                    const activeRid = restaurantId || tenantProfile?.id || (await loadTenant(tenantSlug).catch(() => null))?.id || null;
+                    let guestQuery = supabase
                         .from('guests')
                         .select('*')
-                        .eq('phone', cleanPhone)
-                        .maybeSingle();
+                        .eq('phone', cleanPhone);
+                    if (activeRid) {
+                        guestQuery = guestQuery.eq('restaurant_id', activeRid);
+                    }
+                    const { data: guestData, error: guestErr } = await guestQuery.maybeSingle();
                     
                     if (guestErr) throw guestErr;
                     
@@ -711,17 +730,18 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                         if (guestData.delivery_address) {
                             setDeliveryAddress(guestData.delivery_address);
                         }
-                        localStorage.setItem('mute_kitchens_guest', JSON.stringify(guestData));
+                        localStorage.setItem(guestStorageKey, JSON.stringify(guestData));
                         fetchPastOrders(guestData.id);
                     } else {
                         // Create guest record if not exists
                         const { data: newGuest, error: createErr } = await supabase
                             .from('guests')
                             .insert({
+                                ...(activeRid ? { restaurant_id: activeRid } : {}),
                                 first_name: 'Guest',
                                 last_name: '(WhatsApp)',
                                 phone: cleanPhone,
-                                email: `${cleanPhone}@whatsapp.poj`,
+                                email: `${cleanPhone}@whatsapp.manipos`,
                                 total_spend: 0,
                                 total_visits: 0
                             })
@@ -732,7 +752,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                         if (newGuest) {
                             setGuestUser(newGuest);
                             setCustomerName(`${newGuest.first_name || ''} ${newGuest.last_name || ''}`.trim());
-                            localStorage.setItem('mute_kitchens_guest', JSON.stringify(newGuest));
+                            localStorage.setItem(guestStorageKey, JSON.stringify(newGuest));
                             fetchPastOrders(newGuest.id);
                         }
                     }
@@ -743,14 +763,17 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         } else {
             // Restore guest session if exists
             try {
-                const saved = localStorage.getItem('mute_kitchens_guest');
+                const saved = localStorage.getItem(guestStorageKey)
+                    || (tenantSlug === 'potofjollof' ? localStorage.getItem('mute_kitchens_guest') : null);
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    setGuestUser(parsed);
-                    if (parsed.delivery_address) {
-                        setDeliveryAddress(parsed.delivery_address);
+                    if (!restaurantId || !parsed.restaurant_id || parsed.restaurant_id === restaurantId) {
+                        setGuestUser(parsed);
+                        if (parsed.delivery_address) {
+                            setDeliveryAddress(parsed.delivery_address);
+                        }
+                        fetchPastOrders(parsed.id);
                     }
-                    fetchPastOrders(parsed.id);
                 }
             } catch (e) {
                 console.error('Error loading guest session:', e);
@@ -1062,10 +1085,10 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         }
     };
 
-    const fetchMenu = async () => {
-        // Instant load from localStorage cache for 0ms initial load
+    const fetchMenu = async (explicitRid = null) => {
+        // Instant load from tenant-scoped localStorage cache for 0ms initial load
         try {
-            const cachedMenu = localStorage.getItem('poj_microsite_menu_cache_v2');
+            const cachedMenu = localStorage.getItem(menuCacheKey);
             if (cachedMenu) {
                 const parsed = JSON.parse(cachedMenu);
                 if (parsed && parsed.length > 0) {
@@ -1076,17 +1099,21 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         } catch(e) {}
 
         try {
-            const { data, error } = await supabase
+            const targetRid = explicitRid || restaurantId || tenantProfile?.id || null;
+            let menuQuery = supabase
                 .from('pos_menu')
                 .select('*')
-                .eq('is_available', true)
-                .order('name', { ascending: true });
+                .eq('is_available', true);
+            if (targetRid) {
+                menuQuery = menuQuery.eq('restaurant_id', targetRid);
+            }
+            const { data, error } = await menuQuery.order('name', { ascending: true });
 
             if (error) throw error;
             const validData = (data || []).filter(item => item.show_on_microsite !== false && !item.name.toUpperCase().includes('DELIVERY FEE'));
             setMenu(validData);
             // Capture restaurant_id from the first menu item so orders are tagged correctly
-            const rid = validData[0]?.restaurant_id || null;
+            const rid = validData[0]?.restaurant_id || targetRid || null;
             if (rid) setRestaurantId(rid);
 
             // Derive distinct brands from live menu data — never show another tenant's brands
@@ -1103,7 +1130,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 setActiveBrand(prev => prev === 'All' ? 'All' : prev);
             }
             try {
-                localStorage.setItem('poj_microsite_menu_cache_v2', JSON.stringify(validData));
+                localStorage.setItem(menuCacheKey, JSON.stringify(validData));
             } catch(e) {}
 
             // Extract unique categories and respect custom category order
@@ -1159,8 +1186,12 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             const input = loginInput.trim().toLowerCase();
             const isEmail = input.includes('@');
             
-            // Try fetching existing guest
+            // Try fetching existing guest scoped by tenant
+            const activeRid = restaurantId || tenantProfile?.id || null;
             let query = supabase.from('guests').select('*');
+            if (activeRid) {
+                query = query.eq('restaurant_id', activeRid);
+            }
             if (isEmail) {
                 query = query.eq('email', input);
             } else {
@@ -1178,7 +1209,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 if (guest.delivery_address) {
                     setDeliveryAddress(guest.delivery_address);
                 }
-                localStorage.setItem('mute_kitchens_guest', JSON.stringify(guest));
+                localStorage.setItem(guestStorageKey, JSON.stringify(guest));
                 fetchPastOrders(guest.id);
                 setShowLoginPanel(false);
                 setLoginInput('');
@@ -1208,6 +1239,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                     }
                     
                     const newGuestPayload = {
+                        ...(activeRid ? { restaurant_id: activeRid } : {}),
                         first_name: regFirstName.trim(),
                         last_name: regLastName.trim(),
                         phone: regPhone.trim(),
@@ -1228,7 +1260,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                     if (newGuest.delivery_address) {
                         setDeliveryAddress(newGuest.delivery_address);
                     }
-                    localStorage.setItem('mute_kitchens_guest', JSON.stringify(newGuest));
+                    localStorage.setItem(guestStorageKey, JSON.stringify(newGuest));
                     fetchPastOrders(newGuest.id);
                     setShowLoginPanel(false);
                     setLoginInput('');
@@ -1244,6 +1276,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     };
     
     const handleGuestLogout = () => {
+        localStorage.removeItem(guestStorageKey);
         localStorage.removeItem('mute_kitchens_guest');
         setGuestUser(null);
         setCustomerName('');

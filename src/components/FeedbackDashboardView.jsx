@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
 import { fetchCustomerFeedback, fetchGoogleReviewsFromSheet } from '../lib/feedbackService';
+import { supabase } from '../lib/supabase';
 
 const SPREADSHEET_ID = '102A3Yz7BlKDJB7I_0lmYd1ek1CA7HAZyIg4R8ZYFjcw';
 const SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit#gid=1130350999`;
@@ -115,6 +116,13 @@ const INITIAL_GOOGLE_REVIEWS = [
 ];
 
 export function FeedbackDashboardView({ onBack }) {
+    const activeSession = useMemo(() => {
+        try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
+    }, []);
+    const restaurantId = activeSession.restaurantId || activeSession.restaurant_id || null;
+    const isPojTenant = activeSession.tenantSlug === 'potofjollof';
+    const googleStorageKey = restaurantId ? `manipos_google_reviews_${restaurantId}` : 'poj_google_reviews_state';
+
     const [feedbackData, setFeedbackData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -127,11 +135,11 @@ export function FeedbackDashboardView({ onBack }) {
     const [showGoogleModal, setShowGoogleModal] = useState(false);
     const [googleFilter, setGoogleFilter] = useState('all'); // 'all', 'pending', 'replied'
     const [googleReviews, setGoogleReviews] = useState(() => {
-        const saved = localStorage.getItem('poj_google_reviews_state');
+        const saved = localStorage.getItem(googleStorageKey);
         if (saved) {
             try { return JSON.parse(saved); } catch(e) {}
         }
-        return INITIAL_GOOGLE_REVIEWS;
+        return isPojTenant ? INITIAL_GOOGLE_REVIEWS : [];
     });
 
     // Add New Review Form State
@@ -160,7 +168,7 @@ export function FeedbackDashboardView({ onBack }) {
 
         const updated = [newEntry, ...googleReviews];
         setGoogleReviews(updated);
-        localStorage.setItem('poj_google_reviews_state', JSON.stringify(updated));
+        localStorage.setItem(googleStorageKey, JSON.stringify(updated));
 
         // Reset
         setNewAuthor('');
@@ -183,13 +191,39 @@ export function FeedbackDashboardView({ onBack }) {
         else setLoading(true);
 
         try {
-            const data = await fetchCustomerFeedback(force, (cached) => {
-                if (cached) setFeedbackData(cached);
-            });
-            if (data) setFeedbackData(data);
-
-            // Also try auto-syncing Google Reviews from Sheet tab "Google_Reviews"
-            loadSheetGoogleReviews();
+            if (isPojTenant) {
+                const data = await fetchCustomerFeedback(force, (cached) => {
+                    if (cached) setFeedbackData(cached);
+                });
+                if (data) setFeedbackData(data);
+                loadSheetGoogleReviews();
+            } else if (restaurantId) {
+                const { data: rows, error } = await supabase
+                    .from('pos_feedback')
+                    .select('*')
+                    .eq('restaurant_id', restaurantId)
+                    .order('created_at', { ascending: false });
+                if (!error && Array.isArray(rows)) {
+                    setFeedbackData(rows.map((r) => ({
+                        timestamp: r.created_at ? new Date(r.created_at).toLocaleString() : '',
+                        code: r.code || '',
+                        serviceType: r.service_type || r.channel || 'Dine-in',
+                        customerName: r.customer_name || 'Guest',
+                        orderId: r.order_id || '',
+                        overallRating: r.overall_rating != null ? Number(r.overall_rating) : Number(r.rating || 0),
+                        foodRating: r.food_rating != null ? Number(r.food_rating) : null,
+                        serviceRating: r.service_rating != null ? Number(r.service_rating) : null,
+                        speedRating: r.speed_rating != null ? Number(r.speed_rating) : null,
+                        cleanlinessRating: r.cleanliness_rating != null ? Number(r.cleanliness_rating) : null,
+                        comments: r.comments || r.comment || '',
+                        photoUrl: r.photo_url || '',
+                    })));
+                } else {
+                    setFeedbackData([]);
+                }
+            } else {
+                setFeedbackData([]);
+            }
         } catch (err) {
             console.error('Error loading feedback data:', err);
         } finally {
@@ -199,12 +233,13 @@ export function FeedbackDashboardView({ onBack }) {
     };
 
     const loadSheetGoogleReviews = async () => {
+        if (!isPojTenant) return;
         setSyncingGoogleReviews(true);
         try {
             const sheetReviews = await fetchGoogleReviewsFromSheet();
             if (sheetReviews && sheetReviews.length > 0) {
                 setGoogleReviews(sheetReviews);
-                localStorage.setItem('poj_google_reviews_state', JSON.stringify(sheetReviews));
+                localStorage.setItem(googleStorageKey, JSON.stringify(sheetReviews));
             }
         } catch (e) {
             console.warn('Sheet google reviews load error:', e);
@@ -233,7 +268,8 @@ export function FeedbackDashboardView({ onBack }) {
                 const dummyElem = document.createElement('div');
                 const service = new window.google.maps.places.PlacesService(dummyElem);
 
-                service.textSearch({ query: 'Pot of Jollof Nairobi Kenya' }, (results, status) => {
+                const placeQuery = sessionUser?.restaurantName ? `${sessionUser.restaurantName} Nairobi Kenya` : 'Pot of Jollof Nairobi Kenya';
+                service.textSearch({ query: placeQuery }, (results, status) => {
                     if (status === 'OK' && results && results[0]) {
                         const placeId = results[0].place_id;
                         service.getDetails({ placeId, fields: ['name', 'rating', 'user_ratings_total', 'reviews'] }, (place, detailsStatus) => {
@@ -262,7 +298,7 @@ export function FeedbackDashboardView({ onBack }) {
                                     });
                                     const uniqueReviews = Array.from(uniqueMap.values());
                                     setGoogleReviews(uniqueReviews);
-                                    localStorage.setItem('poj_google_reviews_state', JSON.stringify(uniqueReviews));
+                                    localStorage.setItem(googleStorageKey, JSON.stringify(uniqueReviews));
                                     alert(`Successfully Synced Live Google Business Profile!\n⭐ Rating: ${liveRating} / 5.0\n💬 Total Reviews: ${totalReviewsCount}\nFetched ${fetched.length} customer reviews via Google Places API.`);
                                 } else {
                                     alert(`Google Business Profile Verified!\n⭐ Rating: ${liveRating}\n💬 Total Reviews: ${totalReviewsCount}`);
@@ -329,7 +365,7 @@ export function FeedbackDashboardView({ onBack }) {
 
                 const merged = [...formatted, ...googleReviews];
                 setGoogleReviews(merged);
-                localStorage.setItem('poj_google_reviews_state', JSON.stringify(merged));
+                localStorage.setItem(googleStorageKey, JSON.stringify(merged));
                 setBulkText('');
                 setShowBulkPasteModal(false);
                 alert(`Successfully imported ${formatted.length} Google Reviews!`);
@@ -1109,7 +1145,7 @@ export function FeedbackDashboardView({ onBack }) {
                                                                         : r
                                                                 );
                                                                 setGoogleReviews(updated);
-                                                                localStorage.setItem('poj_google_reviews_state', JSON.stringify(updated));
+                                                                localStorage.setItem(googleStorageKey, JSON.stringify(updated));
                                                             }}
                                                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] rounded-xl transition-all shadow-sm flex items-center gap-1.5"
                                                         >
