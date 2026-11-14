@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { resolveEffectivePrice } from '../../lib/tenantConfig';
 import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
+import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
 
 const SALES_CHANNELS = [
   'Web POS',
@@ -85,6 +86,7 @@ export function WebPosView({
   staffName = 'Web POS Staff',
   initialOrder = null,
   tendersConfig = null,
+  allowNegativeStoreCredit = false,
   onBackToOrders,
   onOrderPlaced,
 }) {
@@ -174,7 +176,7 @@ export function WebPosView({
             .eq('is_available', true),
           supabase
             .from('guests')
-            .select('id, first_name, last_name, phone, delivery_address')
+            .select('*')
             .eq('restaurant_id', restaurantId)
             .order('created_at', { ascending: false })
             .limit(80),
@@ -441,14 +443,19 @@ export function WebPosView({
     [cart]
   );
 
-  const discountAmount = useMemo(() => {
-    if (!appliedDiscount) return 0;
-    const val = Number(appliedDiscount.discount_value || appliedDiscount.value || 0);
-    if (appliedDiscount.discount_type === 'percentage') {
-      return Math.round((subtotal * val) / 100);
-    }
-    return Math.min(subtotal, val);
-  }, [appliedDiscount, subtotal]);
+  const promoEval = useMemo(() => {
+    if (!appliedDiscount) return { valid: true, discountAmount: 0, deliveryDiscount: 0 };
+    return evaluatePromotionDiscount({
+      promo: appliedDiscount,
+      subtotal,
+      deliveryFee: diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0,
+      grandTotalBeforePromo: subtotal + (diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0),
+      diningOption: diningMode,
+      paymentMethod: paymentTender,
+    });
+  }, [appliedDiscount, subtotal, deliveryFee, diningMode, paymentTender]);
+
+  const discountAmount = promoEval.valid ? promoEval.discountAmount : 0;
 
   const taxableSubtotal = useMemo(
     () =>
@@ -459,7 +466,8 @@ export function WebPosView({
     [cart]
   );
 
-  const appliedDeliveryFee = diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0;
+  const rawDeliveryFee = diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0;
+  const appliedDeliveryFee = Math.max(0, rawDeliveryFee - (promoEval.valid ? promoEval.deliveryDiscount : 0));
 
   const availableTenders = useMemo(() => {
     if (!Array.isArray(tendersConfig) || tendersConfig.length === 0) return PAYMENT_TENDERS;
@@ -509,6 +517,19 @@ export function WebPosView({
       setAppliedDiscount(null);
       return;
     }
+    const evalRes = evaluatePromotionDiscount({
+      promo: data,
+      subtotal,
+      deliveryFee: diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0,
+      grandTotalBeforePromo: subtotal + (diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0),
+      diningOption: diningMode,
+      paymentMethod: paymentTender,
+    });
+    if (!evalRes.valid) {
+      setPromoError(evalRes.reason || 'Promotion requirements not met.');
+      setAppliedDiscount(null);
+      return;
+    }
     setAppliedDiscount(data);
   };
 
@@ -520,6 +541,17 @@ export function WebPosView({
     if (!saveAsOpen && diningMode === 'Delivery' && !deliveryAddress.trim()) {
       setErrorMsg('Delivery orders require a delivery address.');
       return;
+    }
+    if (!saveAsOpen && paymentTender === 'Store Credit' && !selectedGuest?.id) {
+      setErrorMsg('Select a registered customer first to pay using Store Credit.');
+      return;
+    }
+    if (!saveAsOpen && paymentTender === 'Store Credit' && selectedGuest?.id) {
+      const bal = Number(selectedGuest.store_credit_balance || 0);
+      if (!allowNegativeStoreCredit && bal < grandTotal) {
+        setErrorMsg(`Insufficient store credit (Balance: KES ${bal.toLocaleString()}).`);
+        return;
+      }
     }
 
     setErrorMsg('');
@@ -624,6 +656,48 @@ export function WebPosView({
 
       const { error: itemsErr } = await supabase.from('pos_order_items').insert(itemsPayload);
       if (itemsErr) throw itemsErr;
+
+      // Best-effort Store Credit debit, Voucher redemption & Loyalty Points award
+      if (!saveAsOpen && orderData?.id) {
+        if (paymentTender === 'Store Credit' && selectedGuest?.id) {
+          try {
+            const nextBal = Number(selectedGuest.store_credit_balance || 0) - grandTotal;
+            await supabase.from('guest_store_credit_ledger').insert([
+              {
+                restaurant_id: restaurantId,
+                guest_id: selectedGuest.id,
+                branch_id: activeBranch?.id || null,
+                entry_type: 'debit',
+                amount: grandTotal,
+                balance_after: nextBal,
+                remark: `Order #${orderData.ticket_number || orderData.id}`,
+                order_id: orderData.id,
+                staff_name: staffName,
+              },
+            ]);
+            await supabase.from('guests').update({ store_credit_balance: nextBal }).eq('id', selectedGuest.id);
+          } catch (_) {}
+        }
+        if (paymentTender === 'Voucher' && paymentReference.trim()) {
+          try {
+            await supabase
+              .from('vouchers')
+              .update({ is_redeemed: true, remaining_amount: 0, redeemed_order_id: orderData.id })
+              .eq('restaurant_id', restaurantId)
+              .ilike('code', paymentReference.trim());
+          } catch (_) {}
+        }
+        if (selectedGuest?.id) {
+          awardLoyaltyPointsForOrder({
+            restaurantId,
+            guestId: selectedGuest.id,
+            orderId: orderData.id,
+            orderTotal: grandTotal,
+            diningOption: diningMode,
+            paymentMethod: paymentTender,
+          });
+        }
+      }
 
       // Optional STK push if enabled and M-Pesa requested
       if (

@@ -70,6 +70,9 @@ import { WebPosView } from './orda/WebPosView';
 import { LocationsManagerView, CloseStoreModal } from './orda/LocationsManagerView';
 import { OrdaReportsView } from './orda/OrdaReportsView';
 import { OrderAndPaymentSettingsView } from './orda/OrderAndPaymentSettingsView';
+import { CustomersCrmView } from './orda/CustomersCrmView';
+import { PromotionsVouchersLoyaltyView } from './orda/PromotionsVouchersLoyaltyView';
+import { DeliveryAreasView } from './orda/DeliveryAreasView';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 
@@ -892,7 +895,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
           {[
             { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
-            { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'offers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
+            { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
             { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) },
             { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
             { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
@@ -1075,32 +1078,75 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
           {activeModule === 'customers' && (
             <>
+              <button
+                type="button"
+                onClick={() => selectModule('customers', 'customers')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                  activeTab === 'customers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Users size={14} /> Customer List
+              </button>
+              <button
+                type="button"
+                onClick={() => selectModule('customers', 'store-credit')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                  activeTab === 'store-credit' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Wallet size={14} /> Store Credit Wallets
+              </button>
               {canDo(TAB_PERMISSION.offers) && (
-                <button
-                  type="button"
-                  onClick={() => selectModule('customers', 'offers')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
-                    activeTab === 'offers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Gift size={15} /> Offers & Promotions
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('customers', 'promotions')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === 'promotions' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Percent size={14} /> Promotions (5 Rules)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('customers', 'vouchers')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === 'vouchers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Tag size={14} /> Vouchers
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('customers', 'loyalty')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === 'loyalty' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Star size={14} /> Loyalty Programs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('customers', 'offers')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
+                      activeTab === 'offers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Gift size={14} /> Influencer & Legacy Offers
+                  </button>
+                </>
               )}
               {canDo(TAB_PERMISSION.feedback) && (
                 <button
                   type="button"
                   onClick={() => selectModule('customers', 'feedback')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${
                     activeTab === 'feedback' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <MessageSquare size={15} /> Customer Feedback
+                  <MessageSquare size={14} /> Customer Feedback
                 </button>
               )}
-              <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500">
-                <p className="font-black text-slate-700">Wave 3 Coming</p>
-                <p className="mt-0.5">Full Guest CRM, Order History, Store Credit & Loyalty Points.</p>
-              </div>
             </>
           )}
 
@@ -1146,6 +1192,15 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                     }`}
                   >
                     <CreditCard size={15} /> Payment & Charges
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectModule('settings', 'delivery-areas')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${
+                      activeTab === 'delivery-areas' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <MapPin size={15} /> Delivery Areas (Zones)
                   </button>
                 </>
               )}
@@ -1361,6 +1416,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               staffName={pinStaffName}
               initialOrder={settleTargetOrder}
               tendersConfig={settings.payment_tenders_config}
+              allowNegativeStoreCredit={settings.allow_negative_store_credit === true}
               onBackToOrders={() => {
                 setShowWebPos(false);
                 setSettleTargetOrder(null);
@@ -1406,6 +1462,30 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               restaurantId={activeRestaurantId}
               settings={settings}
               onSettingsUpdated={fetchDashboardData}
+            />
+          ) : activeTab === 'delivery-areas' ? (
+            <DeliveryAreasView
+              restaurantId={activeRestaurantId}
+              branches={branches}
+              settings={settings}
+              onSettingsUpdated={fetchDashboardData}
+            />
+          ) : activeTab === 'customers' || activeTab === 'store-credit' ? (
+            <CustomersCrmView
+              mode={activeTab === 'store-credit' ? 'store-credit' : 'listing'}
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              orders={orders}
+              branches={branches}
+              allowNegativeStoreCredit={settings.allow_negative_store_credit === true}
+            />
+          ) : activeTab === 'promotions' || activeTab === 'vouchers' || activeTab === 'loyalty' ? (
+            <PromotionsVouchersLoyaltyView
+              mode={activeTab}
+              restaurantId={activeRestaurantId}
+              discounts={discounts}
+              menuItems={menuItems}
+              onDiscountsChanged={fetchDashboardData}
             />
           ) : activeTab === 'locations' ? (
             <LocationsManagerView
