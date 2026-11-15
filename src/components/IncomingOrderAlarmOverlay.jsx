@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BellRing, Check, XCircle, Volume2, VolumeX, Clock, ChefHat, Phone } from 'lucide-react';
+import { BellRing, Check, XCircle, Volume2, VolumeX, Clock, ChefHat, Phone, X } from 'lucide-react';
 import { supabase, setTenantContext } from '../lib/supabase';
 import { logAuditEvent } from '../lib/auditLogger';
 import { isMicrositeOrder } from '../lib/orderChannel';
@@ -13,6 +13,8 @@ import {
   ensureAndroidAlarmChannel,
   triggerNativeOrderAlert,
   registerOrderAlarmNotificationListeners,
+  getBrowserNotificationState,
+  requestOrderPushPermission,
 } from '../lib/orderAlarm';
 
 /**
@@ -40,21 +42,17 @@ export function IncomingOrderAlarmOverlay({ restaurantId, tenantSlug = '', staff
   const [busyOrderId, setBusyOrderId] = useState(null);
   const [snoozedUntil, setSnoozedUntil] = useState(0);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [notifPermission, setNotifPermission] = useState(() => getBrowserNotificationState());
+  const [alertBannerDismissed, setAlertBannerDismissed] = useState(false);
   const alertedIdsRef = useRef(new Set());
 
   // Unlock browser/Android audio & request notification permission on first interaction
   useEffect(() => {
     ensureAndroidAlarmChannel();
     const unlock = async () => {
-      const ok = await unlockOrderAlarmAudio();
-      if (ok) setAudioUnlocked(true);
-      try {
-        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-          Notification.requestPermission().catch(() => {});
-        }
-      } catch {
-        // ignore
-      }
+      const res = await requestOrderPushPermission();
+      if (res.audioUnlocked) setAudioUnlocked(true);
+      setNotifPermission(res.notificationPermission);
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
@@ -275,7 +273,47 @@ export function IncomingOrderAlarmOverlay({ restaurantId, tenantSlug = '', staff
     }
   };
 
-  if (pendingOrders.length === 0) return null;
+  const handleEnablePhoneAlerts = async () => {
+    const res = await requestOrderPushPermission();
+    setAudioUnlocked(Boolean(res.audioUnlocked));
+    setNotifPermission(res.notificationPermission);
+    if (res.notificationPermission === 'granted') {
+      playSingleOrderRing();
+      setAlertBannerDismissed(true);
+    }
+  };
+
+  if (pendingOrders.length === 0) {
+    const needsPushPrompt =
+      !alertBannerDismissed &&
+      notifPermission === 'default' &&
+      typeof window !== 'undefined' &&
+      'Notification' in window;
+    if (!needsPushPrompt) return null;
+    return (
+      <div
+        data-testid="enable-order-alerts-pill"
+        className="fixed bottom-20 md:bottom-4 right-3 sm:right-4 z-[9990] max-w-xs bg-slate-950 text-white border border-amber-400/70 rounded-2xl shadow-xl p-2.5 pl-3 flex items-center gap-2"
+      >
+        <BellRing className="w-4 h-4 text-amber-400 shrink-0" />
+        <button
+          type="button"
+          onClick={handleEnablePhoneAlerts}
+          className="text-left text-[11px] font-bold text-amber-100 hover:text-white cursor-pointer"
+        >
+          Tap to enable phone push &amp; sound alerts
+        </button>
+        <button
+          type="button"
+          onClick={() => setAlertBannerDismissed(true)}
+          aria-label="Dismiss alerts prompt"
+          className="p-1 text-slate-400 hover:text-white cursor-pointer"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
 
   const activeOrder = pendingOrders[0];
   const isSnoozed = snoozedUntil > Date.now();

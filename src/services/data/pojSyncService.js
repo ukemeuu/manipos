@@ -1591,7 +1591,7 @@ export async function updatePojOrderStatus({
   if (!pojUrl) return { ok: false, error: 'No linked POJ bridge configured' };
 
   const cleanPatch = { ...patch };
-  const optionalCols = ['accepted_at', 'kitchen_started_at', 'kitchen_ready_at', 'completed_at', 'void_reason', 'void_disposition', 'payment_status'];
+  const optionalCols = ['accepted_at', 'kitchen_started_at', 'kitchen_ready_at', 'completed_at', 'return_reason', 'void_reason', 'void_disposition', 'payment_status'];
 
   const bearer = await getValidPojAccessToken(pojUrl);
   const attemptPatch = async (payload) => {

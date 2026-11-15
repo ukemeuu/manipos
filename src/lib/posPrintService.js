@@ -90,11 +90,12 @@ function formatCustomerName(name) {
 }
 
 function normalizeItems(rawItems = []) {
-  return (rawItems || []).map((item) => ({
+  const list = Array.isArray(rawItems) ? rawItems : [];
+  return list.map((item) => ({
     item_name: item.item_name || item.title || item.name || 'Menu Item',
     quantity: Number(item.quantity || 1),
     price: Number(item.price ?? item.unitPrice ?? item.unit_price ?? 0),
-    instructions: item.instructions || item.summary || item.note || '',
+    instructions: item.instructions || item.summary || item.note || item.modifiers || '',
   }));
 }
 
@@ -214,19 +215,24 @@ function buildOrderMetaBlock(receipt, dateFormatted) {
   `;
 }
 
-export function buildCashierSlipsHTML(rawReceipt, brandOverride = null) {
+export function buildCashierSlipsHTML(rawReceipt, brandOverride = null, { includeKot = false } = {}) {
   const receipt = normalizeReceipt(rawReceipt);
-  const items = normalizeItems(receipt.items);
+  const items = normalizeItems(receipt.items || receipt.pos_order_items);
   const totalAmount = receipt.total_amount;
   const discount = receipt.discount;
   const netBase = totalAmount / 1.18;
   const vatAmount = netBase * 0.16;
   const cateringLevy = netBase * 0.02;
-  const dateFormatted = new Date(receipt.created_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+  const parsedDate = new Date(receipt.created_at);
+  const dateFormatted = (Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
   const hdrBrand = receiptBrandHeader(brandOverride);
   const hdrMeta = buildOrderMetaBlock(receipt, dateFormatted);
 
-  const itemRowsFull = items.map((item) => `
+  const effectiveItems = items.length > 0
+    ? items
+    : [{ item_name: 'Order Items (Summary)', quantity: 1, price: totalAmount, instructions: '' }];
+
+  const itemRowsFull = effectiveItems.map((item) => `
     <tr>
       <td style="width:50%;word-break:break-word;">${escapeReceiptHtml(item.item_name)}${item.instructions ? `<br><span style="font-size:9px;font-weight:700;">* ${escapeReceiptHtml(item.instructions)}</span>` : ''}</td>
       <td class="c" style="width:10%;">${item.quantity}</td>
@@ -235,11 +241,18 @@ export function buildCashierSlipsHTML(rawReceipt, brandOverride = null) {
     </tr>
   `).join('');
 
-  const itemRowsPack = items.map((item) => `
+  const itemRowsPack = effectiveItems.map((item) => `
     <tr>
       <td class="c" style="font-size:12px;font-weight:900;width:15%;vertical-align:top;">[ &nbsp; ]</td>
       <td style="font-size:12px;font-weight:900;word-break:break-word;width:70%;">${escapeReceiptHtml(item.item_name)}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">➜ ${escapeReceiptHtml(item.instructions)}</span>` : ''}</td>
       <td class="c" style="font-size:14px;font-weight:900;vertical-align:top;width:15%;">${item.quantity}</td>
+    </tr>
+  `).join('');
+
+  const kotRows = effectiveItems.map((item) => `
+    <tr>
+      <td style="font-size:13px;font-weight:900;padding:3px 0;word-break:break-word;width:80%;">${escapeReceiptHtml(item.item_name)}${item.instructions ? `<br><span style="font-size:10px;font-weight:700;">[ ${escapeReceiptHtml(item.instructions)} ]</span>` : ''}</td>
+      <td class="c" style="font-size:16px;font-weight:900;padding:3px 0;vertical-align:top;width:20%;text-align:right;">${item.quantity}x</td>
     </tr>
   `).join('');
 
@@ -300,13 +313,33 @@ export function buildCashierSlipsHTML(rawReceipt, brandOverride = null) {
     </div>
   `;
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt #${escapeReceiptHtml(obfuscateTicket(receipt.ticket_number || receipt.id))}</title><style>${BASE_80MM_STYLE}</style></head><body>${slip1}${slip3}${slip4}</body></html>`;
+  const ticketDisplay = escapeReceiptHtml(obfuscateTicket(receipt.ticket_number || receipt.id));
+  const slipKot = includeKot
+    ? `
+    <div class="page">
+      <div class="center"><div class="badge">★ KITCHEN ORDER TICKET (KOT) ★</div></div>
+      ${hdrBrand}${hdrMeta}
+      <table><thead><tr><th style="font-size:12px;width:80%;">ITEM</th><th class="r" style="font-size:12px;width:20%;">QTY</th></tr></thead>
+      <tbody><tr><td colspan="2"><div class="divider"></div></td></tr>${kotRows}</tbody></table>
+      <div class="divider-solid"></div>
+      <div class="meta"><span>CHEF NAME:</span><span>___________________</span></div>
+      <div class="divider"></div>
+      <div class="footer" style="font-size:12px;margin-top:4px;">⚑ FIRE WHEN READY — TICKET #${ticketDisplay}</div>
+    </div>
+  `
+    : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt #${ticketDisplay}</title><style>${BASE_80MM_STYLE}</style></head><body>${slip1}${slip3}${slip4}${slipKot}</body></html>`;
 }
 
 export function buildKitchenSlipsHTML(rawReceipt, brandOverride = null) {
   const receipt = normalizeReceipt(rawReceipt);
-  const items = normalizeItems(receipt.items);
-  const dateFormatted = new Date(receipt.created_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+  const rawItems = normalizeItems(receipt.items || receipt.pos_order_items);
+  const items = rawItems.length > 0
+    ? rawItems
+    : [{ item_name: 'Order Items (Summary)', quantity: 1, price: receipt.total_amount, instructions: '' }];
+  const parsedDate = new Date(receipt.created_at);
+  const dateFormatted = (Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
   const rawTicket = receipt.ticket_number;
   const ticketDisplay = escapeReceiptHtml(obfuscateTicket(rawTicket));
   const rows = items.map((item) => `
@@ -366,18 +399,124 @@ export function buildZReportHTML(zReport, brandOverride = null) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Shift Z-Report</title><style>${BASE_80MM_STYLE}</style></head><body>${body}</body></html>`;
 }
 
-function openPrintPopup(html) {
-  const win = typeof window !== 'undefined' ? window.open('', '_blank', 'width=420,height=720,scrollbars=yes') : null;
-  if (!win) return false;
+function waitForDocumentImages(doc, maxWaitMs = 900) {
+  if (!doc) return Promise.resolve();
+  const imgs = Array.from(doc.querySelectorAll('img'));
+  if (imgs.length === 0) return Promise.resolve();
+  const pending = imgs.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    });
+  });
+  return Promise.race([
+    Promise.all(pending),
+    new Promise((resolve) => setTimeout(resolve, maxWaitMs)),
+  ]);
+}
+
+function printViaHiddenIframe(html) {
+  if (typeof document === 'undefined' || !document.body) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '80mm';
+      iframe.style.height = '1px';
+      iframe.style.border = '0';
+      iframe.style.opacity = '0';
+      iframe.style.pointerEvents = 'none';
+      document.body.appendChild(iframe);
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        try {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        } catch (_) {}
+      };
+      const safetyCleanupTimer = setTimeout(cleanup, 60000);
+
+      const trigger = async () => {
+        const win = iframe.contentWindow;
+        const doc = iframe.contentDocument || win?.document;
+        if (!win || !doc || typeof win.print !== 'function') {
+          clearTimeout(safetyCleanupTimer);
+          cleanup();
+          resolve(false);
+          return;
+        }
+        await waitForDocumentImages(doc);
+        win.addEventListener(
+          'afterprint',
+          () => {
+            clearTimeout(safetyCleanupTimer);
+            setTimeout(cleanup, 250);
+          },
+          { once: true }
+        );
+        try {
+          win.focus();
+          win.print();
+          resolve(true);
+        } catch (_) {
+          clearTimeout(safetyCleanupTimer);
+          cleanup();
+          resolve(false);
+        }
+      };
+
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+        setTimeout(trigger, 60);
+      } else {
+        iframe.onload = () => { void trigger(); };
+        iframe.srcdoc = html;
+      }
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+
+async function openPrintPopup(html) {
+  const printedViaIframe = await printViaHiddenIframe(html);
+  if (printedViaIframe) return true;
+
+  if (typeof window === 'undefined') return false;
+  const win = window.open('', '_blank', 'width=440,height=760,scrollbars=yes');
+  if (!win) {
+    // Final fallback: render an on-screen printable modal via custom event if browser blocked popups/print
+    window.dispatchEvent(new CustomEvent('manipos:receipt-preview', { detail: { html } }));
+    return false;
+  }
+  win.document.open();
   win.document.write(html);
   win.document.close();
-  win.focus();
+  await waitForDocumentImages(win.document);
+  win.addEventListener(
+    'afterprint',
+    () => {
+      setTimeout(() => {
+        try { win.close(); } catch (_) {}
+      }, 250);
+    },
+    { once: true }
+  );
   setTimeout(() => {
     try {
+      win.focus();
       win.print();
-      win.close();
     } catch (_) {}
-  }, 350);
+  }, 120);
   return true;
 }
 
@@ -395,10 +534,13 @@ export async function printKitchenSlips(receipt, printerName = null) {
 
 export async function printAllOrderSlips(receipt, prefs = null) {
   const { frontDeskPrinter, kitchenPrinter } = prefs || getPrinterPrefs();
-  await printCashierSlips(receipt, frontDeskPrinter).catch(() => {});
-  setTimeout(() => {
-    printKitchenSlips(receipt, kitchenPrinter).catch(() => {});
-  }, frontDeskPrinter ? 150 : 600);
+  if (!frontDeskPrinter && !kitchenPrinter) {
+    const combinedHtml = buildCashierSlipsHTML(receipt, null, { includeKot: true });
+    return openPrintPopup(combinedHtml);
+  }
+  const cashierPrinted = await printCashierSlips(receipt, frontDeskPrinter).catch(() => false);
+  const kotPrinted = await printKitchenSlips(receipt, kitchenPrinter).catch(() => false);
+  return Boolean(cashierPrinted || kotPrinted);
 }
 
 export async function printZReport(zReport, printerName = null) {

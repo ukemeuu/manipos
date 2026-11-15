@@ -99,7 +99,7 @@ import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { applyOrderStatusUpdate, fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 import { authenticateStaffQuickPin } from '../services/data/staffService';
 import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
-import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, printZReport } from '../lib/posPrintService';
+import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, printZReport, printCashierSlips } from '../lib/posPrintService';
 import {
   getBusinessDayStartIso,
   fetchActiveShift,
@@ -185,6 +185,8 @@ export function AdminDashboard({
   const [showWebPos, setShowWebPos] = useState(() => Boolean(initialEntry.initialWebPos));
   const [settleTargetOrder, setSettleTargetOrder] = useState(null);
   const [closeStoreOpen, setCloseStoreOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [receiptPreviewHtml, setReceiptPreviewHtml] = useState('');
 
   // Operational Interface B POS controls (Shift / PIN Lock / QZ Printers / Auto-Accept)
   const [activeShift, setActiveShift] = useState(null);
@@ -347,8 +349,14 @@ export function AdminDashboard({
     const unsubscribe = onQZStatusChange((connected) => {
       setQzConnected(connected);
     });
+    const onReceiptPreview = (evt) => {
+      const html = evt?.detail?.html;
+      if (html) setReceiptPreviewHtml(String(html));
+    };
+    window.addEventListener('manipos:receipt-preview', onReceiptPreview);
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe();
+      window.removeEventListener('manipos:receipt-preview', onReceiptPreview);
     };
   }, []);
 
@@ -1322,10 +1330,22 @@ export function AdminDashboard({
     { id: 'cancelled', label: 'Cancelled', count: bucketCounts.cancelled },
     { id: 'declined', label: 'Declined', count: bucketCounts.declined },
     { id: 'failed', label: 'Payment Failed', count: bucketCounts.failed },
+    { id: 'returned', label: 'Returned', count: bucketCounts.returned },
     { id: 'voided', label: 'Voided', count: bucketCounts.voided },
     { id: 'open', label: 'Pending Open', count: bucketCounts.open },
     { id: 'unknown', label: 'Other', count: bucketCounts.unknown },
   ];
+
+  const railNavItems = [
+    { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
+    { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
+    { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu') },
+    { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
+    { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
+    { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
+    { id: 'account', label: 'Account', icon: Building2, tab: 'account' },
+  ].filter((item) => item.visible !== false && visibleRailIds.includes(item.id));
 
   const isLegacyDarkTab = [
     'onboarding',
@@ -1351,9 +1371,9 @@ export function AdminDashboard({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans overflow-hidden">
-      {/* 1. ORDA FAR-LEFT DEEP GREEN ICON RAIL */}
-      <nav className="w-16 sm:w-[70px] bg-[#0B3B24] text-emerald-100 flex flex-col justify-between items-center py-4 shrink-0 z-30 border-r border-emerald-950">
+    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 flex font-sans overflow-x-hidden">
+      {/* 1. ORDA FAR-LEFT DEEP GREEN ICON RAIL (Tablet md+ & Desktop) */}
+      <nav className="w-16 sm:w-[70px] bg-[#0B3B24] text-emerald-100 hidden md:flex flex-col justify-between items-center py-4 shrink-0 z-30 border-r border-emerald-950">
         <div className="w-full flex flex-col items-center gap-2">
           <div
             onClick={() => selectModule('orders', 'orders')}
@@ -1363,18 +1383,7 @@ export function AdminDashboard({
             {(profileName || restaurantName || 'M')[0].toUpperCase()}
           </div>
 
-          {[
-            { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
-            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
-            { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
-            { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu') },
-            { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
-            { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
-            { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
-            { id: 'account', label: 'Account', icon: Building2, tab: 'account' },
-          ]
-            .filter((item) => item.visible !== false && visibleRailIds.includes(item.id))
-            .map((item) => {
+          {railNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeModule === item.id;
               return (
@@ -1953,18 +1962,26 @@ export function AdminDashboard({
       </aside>
 
       {/* 3. RIGHT WORKSPACE COLUMN */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-[100dvh] md:h-screen overflow-hidden">
         {/* ORDA TOP HEADER */}
-        <header className="bg-white border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 z-10">
-          <div className="flex items-center gap-3 min-w-0">
-            <div>
+        <header className="bg-white border-b border-slate-200 px-3 sm:px-5 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 shrink-0 z-10">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation menu"
+              className="md:hidden p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 shrink-0 cursor-pointer"
+            >
+              <Menu size={18} />
+            </button>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black text-slate-900 truncate">
                   {profileName || restaurantName}
                 </h1>
                 <span
                   onClick={() => { if (isAdmin) setCloseStoreOpen(true); }}
-                  className={`${isAdmin ? 'cursor-pointer' : ''} text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${settings.store_closed
+                  className={`${isAdmin ? 'cursor-pointer' : ''} text-[10px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${settings.store_closed
                     ? 'bg-rose-50 text-rose-700 border-rose-200'
                     : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     }`}
@@ -1972,7 +1989,7 @@ export function AdminDashboard({
                   {settings.store_closed ? 'Closed' : 'Open'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 truncate">
                 ManiPOS Operations · Signed in as {pinStaffName}
               </p>
             </div>
@@ -1981,7 +1998,7 @@ export function AdminDashboard({
               <select
                 value={activeBranchId}
                 onChange={(e) => setActiveBranchId(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+                className="hidden sm:block bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
               >
                 <option value="all">All Branches ({branches.length})</option>
                 {branches.map((b) => (
@@ -1993,7 +2010,7 @@ export function AdminDashboard({
             )}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => {
@@ -2004,10 +2021,10 @@ export function AdminDashboard({
                   return next;
                 });
               }}
-              className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="px-3 sm:px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Plus size={15} />
-              <span>{showWebPos ? 'View Live Orders' : 'Create Order'}</span>
+              <span>{showWebPos ? 'Live Orders' : 'Create Order'}</span>
             </button>
 
             <button
@@ -2016,20 +2033,21 @@ export function AdminDashboard({
                 setShiftAmountInput(activeShift ? '' : '0');
                 setShiftModalMode(activeShift ? 'close' : 'open');
               }}
-              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${activeShift
+              className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${activeShift
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
                 : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
                 }`}
               title={activeShift ? `Active Shift opened ${new Date(activeShift.opened_at).toLocaleTimeString()}` : 'Open Cashier Shift'}
             >
               <Clock size={14} />
-              <span>{activeShift ? 'Close Shift / Z-Report' : 'Open Shift'}</span>
+              <span className="hidden sm:inline">{activeShift ? 'Close Shift / Z-Report' : 'Open Shift'}</span>
+              <span className="sm:hidden">{activeShift ? 'Shift' : 'Shift'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleToggleAutoAccept}
-              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${autoAcceptOrders
+              className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${autoAcceptOrders
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
@@ -2042,11 +2060,11 @@ export function AdminDashboard({
             <button
               type="button"
               onClick={handleOpenPrinterModal}
-              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${qzConnected
+              className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${qzConnected
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
-              title="Configure QZ Tray Receipt & Kitchen Printers"
+              title="Configure Receipt & Kitchen Printers"
             >
               <Printer size={13} />
               <span className="hidden sm:inline">{qzConnected ? 'Printers Ready' : 'Printers'}</span>
@@ -2059,7 +2077,7 @@ export function AdminDashboard({
                 setLockError('');
                 setPinLocked(true);
               }}
-              className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 sm:px-3 py-2 rounded-xl border border-slate-200 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               title="Quick Lock Terminal (PIN)"
             >
               <Lock size={13} />
@@ -2070,7 +2088,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={onOpenAppHome}
-                className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                className="px-2.5 sm:px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <ArrowLeft size={13} />
                 <span className="hidden sm:inline">Workspace</span>
@@ -2088,8 +2106,42 @@ export function AdminDashboard({
           </div>
         </header>
 
+        {/* MOBILE HORIZONTAL BUCKET STRIP FOR ORDERS (< md) */}
+        {activeModule === 'orders' && !showWebPos && (
+          <div className="md:hidden bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0">
+            {ORDER_BUCKETS.map((b) => {
+              const selected = activeTab === 'orders' && orderBucket === b.id;
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => {
+                    setShowWebPos(false);
+                    setSettleTargetOrder(null);
+                    setActiveTab('orders');
+                    setOrderBucket(b.id);
+                    syncUrlForOrdaState('orders', 'orders', false);
+                  }}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${
+                    selected
+                      ? 'bg-emerald-700 text-white border-emerald-700'
+                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <span>{b.label}</span>
+                  {b.count > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${selected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                      {b.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* WORKSPACE MAIN */}
-        <main className="flex-1 p-5 sm:p-6 overflow-y-auto bg-slate-50">
+        <main className="flex-1 p-3 sm:p-5 md:p-6 pb-24 md:pb-6 overflow-y-auto overflow-x-hidden bg-slate-50">
           {(bucketCounts.new + bucketCounts.verifying) > 0 && (activeTab !== 'orders' || showWebPos) && (
             <div className="mb-5 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-3">
@@ -4380,7 +4432,7 @@ export function AdminDashboard({
                 <p className="text-xs text-slate-500">
                   Status:{' '}
                   <span className={qzConnected ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
-                    {qzConnected ? 'Connected to QZ Tray' : 'Offline — Using browser popup fallback'}
+                    {qzConnected ? 'Connected to QZ Tray' : 'Offline — Using built-in browser print'}
                   </span>
                 </p>
               </div>
@@ -4443,14 +4495,34 @@ export function AdminDashboard({
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={handleOpenPrinterModal}
-                className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Reconnect QZ
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenPrinterModal}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Reconnect QZ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrinterPrefs(printerPrefs);
+                    printCashierSlips({
+                      ticketNumber: 'TEST01',
+                      customerName: 'Test Print',
+                      cashier: pinStaffName,
+                      paymentMethod: 'Cash',
+                      paymentStatus: 'Paid',
+                      totalAmount: 500,
+                      items: [{ name: 'Printer Test Item', quantity: 1, price: 500 }],
+                    }, printerPrefs.frontDeskPrinter || '');
+                  }}
+                  className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                >
+                  Test Print
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -4522,6 +4594,259 @@ export function AdminDashboard({
               {lockBusy ? 'Verifying...' : 'Unlock POS'}
             </button>
           </form>
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (< md) */}
+      <nav
+        aria-label="Mobile navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0B3B24] text-emerald-100 border-t border-emerald-900 flex items-center justify-around px-1 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
+      >
+        {railNavItems.slice(0, 4).map((item) => {
+          const Icon = item.icon;
+          const isActive = activeModule === item.id && !showWebPos;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => selectModule(item.id, item.tab)}
+              className={`relative flex-1 py-1 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer ${
+                isActive ? 'text-white bg-emerald-700/70' : 'text-emerald-200/80'
+              }`}
+            >
+              <Icon size={17} />
+              <span className="truncate max-w-[68px]">{item.label}</span>
+              {item.badge > 0 && (
+                <span className="absolute top-0.5 right-3 min-w-[16px] h-4 px-1 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center">
+                  {item.badge > 99 ? '99+' : item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="flex-1 py-1 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-emerald-200/80 cursor-pointer"
+        >
+          <Menu size={17} />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {/* MOBILE SLIDE-OUT MODULE & SUB-NAV DRAWER (< md) */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs" onClick={() => setMobileNavOpen(false)} />
+          <div className="relative z-10 w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col overflow-hidden">
+            <div className="bg-[#0B3B24] text-white px-4 py-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest text-emerald-300 font-bold">ManiPOS Menu</p>
+                <h2 className="text-sm font-black truncate">{profileName || restaurantName}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="p-1.5 rounded-lg bg-emerald-900/60 text-white cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+              {branches.length > 0 && (
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                    Active Branch
+                  </label>
+                  <select
+                    value={activeBranchId}
+                    onChange={(e) => setActiveBranchId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  >
+                    <option value="all">All Branches ({branches.length})</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 px-1">
+                  Workspace Modules
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {railNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = activeModule === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          selectModule(item.id, item.tab);
+                          setMobileNavOpen(false);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border text-left cursor-pointer ${
+                          active
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-slate-50 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        <Icon size={15} className="shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {activeModule === 'dashboard' && canDo(TAB_PERMISSION.analytics) && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 px-1">
+                    Dashboard Reports
+                  </p>
+                  <div className="space-y-1">
+                    {[
+                      { id: 'overview', label: 'Executive Dashboard' },
+                      { id: 'transactions', label: 'Transactions' },
+                      { id: 'sales', label: 'Sales & Margins' },
+                      { id: 'taxes', label: 'Tax & Charges' },
+                      { id: 'eod', label: 'End of Day (6am–6am)' },
+                      { id: 'promotions', label: 'Discounts & Loyalty' },
+                      { id: 'devices', label: 'POS Devices & Audit' },
+                    ].map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setReportSubTab(r.id);
+                          selectModule('dashboard', 'reports');
+                          setMobileNavOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold ${
+                          activeTab === 'reports' && reportSubTab === r.id
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeModule === 'settings' && canDo(TAB_PERMISSION.settings) && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 px-1">
+                    Store &amp; Staff Settings
+                  </p>
+                  <div className="space-y-1">
+                    {[
+                      { id: 'settings', label: 'Store Settings & SEO' },
+                      { id: 'order-settings', label: 'Order Methods & Void' },
+                      { id: 'payment-settings', label: 'Payment & Charges' },
+                      { id: 'delivery-areas', label: 'Delivery Areas (Zones)' },
+                      { id: 'table-management', label: 'Table Management & QR' },
+                      { id: 'locations', label: 'Locations & Branches' },
+                      ...(canDo(TAB_PERMISSION.staff) ? [
+                        { id: 'staff', label: 'Staff PINs & Access' },
+                        { id: 'team-roles', label: 'Team Roles' },
+                      ] : []),
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          selectModule('settings', s.id);
+                          setMobileNavOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold ${
+                          activeTab === s.id
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setCloseStoreOpen(true);
+                  }}
+                  className="flex-1 py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  {settings.store_closed ? 'Reopen Store' : 'Close Store'}
+                </button>
+              )}
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    onSignOut();
+                  }}
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ON-SCREEN RECEIPT PREVIEW / PRINT FALLBACK MODAL */}
+      {receiptPreviewHtml && (
+        <div className="fixed inset-0 z-[120] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full max-h-[90dvh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900">Receipt Print Preview</h3>
+              <button
+                type="button"
+                onClick={() => setReceiptPreviewHtml('')}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <iframe
+              title="Receipt Preview"
+              srcDoc={receiptPreviewHtml}
+              className="w-full flex-1 min-h-[420px] border-0 bg-white"
+            />
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReceiptPreviewHtml('')}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const frame = document.querySelector('iframe[title="Receipt Preview"]');
+                  frame?.contentWindow?.focus?.();
+                  frame?.contentWindow?.print?.();
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer size={14} /> Print Now
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

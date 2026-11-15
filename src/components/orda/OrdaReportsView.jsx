@@ -97,7 +97,7 @@ export function OrdaReportsView({
       const startIso = new Date(`${sDate}T00:00:00`).toISOString();
       const endIso = new Date(`${eDate}T23:59:59.999`).toISOString();
       onDateRangeChange(startIso, endIso);
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const applyDatePreset = (presetId) => {
@@ -146,7 +146,7 @@ export function OrdaReportsView({
         if (!clRes.error) setChargeLines(clRes.data || []);
         if (!eodRes.error) setEodHistory(eodRes.data || []);
         if (!devRes.error) setDevices(devRes.data || []);
-      } catch (_) {}
+      } catch (_) { }
     })();
     return () => { active = false; };
   }, [restaurantId]);
@@ -404,7 +404,7 @@ export function OrdaReportsView({
           summary_json: { completed: done.length, gross_sales: gross, discounts: disc, tax },
         }]).select().single();
         if (!res.error && res.data) setEodHistory((prev) => [res.data, ...prev]);
-      } catch (_) {}
+      } catch (_) { }
 
       setCustomModalOpen(false);
     } catch (err) {
@@ -450,11 +450,10 @@ export function OrdaReportsView({
               key={t.id}
               type="button"
               onClick={() => onSelectReport && onSelectReport(t.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                reportKey === t.id
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${reportKey === t.id
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+                }`}
             >
               {t.label}
             </button>
@@ -468,11 +467,10 @@ export function OrdaReportsView({
                 key={p.id}
                 type="button"
                 onClick={() => applyDatePreset(p.id)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                  datePreset === p.id
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${datePreset === p.id
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 {p.label}
               </button>

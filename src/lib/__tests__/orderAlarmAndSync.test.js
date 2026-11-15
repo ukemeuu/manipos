@@ -3,13 +3,20 @@ import {
   snoozeOrderAlarm,
   clearAlarmSnooze,
   isOrderAlarmSnoozed,
+  triggerNativeOrderAlert,
 } from '../orderAlarm';
 import { isOnlineIncomingOrder } from '../../components/IncomingOrderAlarmOverlay';
 import {
   normalizeChannelLabel,
   classifyOrderBucket,
+  canReturnOrder,
   summarizeOrdersCumulativeTotals,
 } from '../../components/orda/LiveOrdersView';
+import {
+  buildCashierSlipsHTML,
+  buildKitchenSlipsHTML,
+  printAllOrderSlips,
+} from '../posPrintService';
 import {
   applyOrderStatusUpdate,
   mergeOrdersWithPoj,
@@ -349,5 +356,82 @@ describe('Microsite-only acceptance, immediate Accept update, POJ ticket merge, 
     invokeSpy.mockRestore();
     fetchSpy.mockRestore();
     fromSpy.mockRestore();
+  });
+
+  it('prefers ServiceWorkerRegistration.showNotification for Android Chrome push alerts', async () => {
+    const showNotification = vi.fn().mockResolvedValue(undefined);
+    const prevNotification = globalThis.Notification;
+    const prevSw = navigator.serviceWorker;
+
+    globalThis.Notification = function MockNotification() {
+      throw new TypeError('Illegal constructor');
+    };
+    globalThis.Notification.permission = 'granted';
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        getRegistration: vi.fn().mockResolvedValue({ showNotification }),
+      },
+    });
+
+    await triggerNativeOrderAlert({
+      id: 'ord-push-1',
+      ticket_number: '9912',
+      total_amount: 1850,
+      customer_name: 'Amina',
+      order_channel: 'Microsite',
+    });
+
+    expect(showNotification).toHaveBeenCalledTimes(1);
+    expect(showNotification).toHaveBeenCalledWith(
+      expect.stringContaining('NEW ORDER #9912'),
+      expect.objectContaining({
+        tag: 'manipos-order-ord-push-1',
+        renotify: true,
+        requireInteraction: true,
+      })
+    );
+
+    globalThis.Notification = prevNotification;
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: prevSw,
+    });
+  });
+
+  it('allows waiters and cashiers to return Completed/Duplicate orders and excludes Returned orders from cumulative totals', () => {
+    expect(canReturnOrder({ id: 'o-1', status: 'Completed' })).toBe(true);
+    expect(canReturnOrder({ id: 'o-2', status: 'Ready' })).toBe(true);
+    expect(canReturnOrder({ id: 'o-3', status: 'Pending', order_channel: 'Microsite' })).toBe(true);
+    expect(canReturnOrder({ id: 'o-4', status: 'Returned' })).toBe(false);
+    expect(canReturnOrder({ id: 'o-5', status: 'Voided' })).toBe(false);
+
+    expect(classifyOrderBucket({ id: 'o-4', status: 'Returned' })).toBe('returned');
+
+    const totals = summarizeOrdersCumulativeTotals([
+      { id: '1', status: 'Completed', payment_status: 'Paid', total_amount: 2500 },
+      { id: '2', status: 'Returned', payment_status: 'Refunded', total_amount: 1200 },
+      { id: '3', status: 'Voided', payment_status: 'Voided', total_amount: 500 },
+    ], 'active');
+
+    expect(totals.countedOrdersCount).toBe(1);
+    expect(totals.cumulativeTotal).toBe(2500);
+  });
+
+  it('builds combined cashier + KOT receipt HTML cleanly with item instructions and fallback summary', () => {
+    const html = buildCashierSlipsHTML({
+      ticketNumber: '7102',
+      customerName: 'Grace',
+      totalAmount: 1400,
+      items: [{ name: 'Jollof Rice', quantity: 2, price: 700, instructions: 'Extra Spicy' }],
+    }, null, { includeKot: true });
+
+    expect(html).toContain('CUSTOMER COPY');
+    expect(html).toContain('KITCHEN ORDER TICKET (KOT)');
+    expect(html).toContain('Extra Spicy');
+
+    const kotEmpty = buildKitchenSlipsHTML({ ticketNumber: '7103', totalAmount: 950, items: [] });
+    expect(kotEmpty).toContain('Order Items (Summary)');
+    expect(typeof printAllOrderSlips).toBe('function');
   });
 });

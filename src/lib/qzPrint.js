@@ -29,16 +29,15 @@ let _connectPromise = null;
  * Idempotent — safe to call multiple times.
  * @returns {Promise<void>}
  */
-export async function connectQZ(timeoutMs = 8000) {
+export async function connectQZ(timeoutMs = 2000) {
     if (qz.websocket.isActive()) return;
     if (_connectPromise) return _connectPromise;
 
     // QZ Tray may be installed but not running, in which case the websocket
-    // connection can stall instead of rejecting. Race it with a timeout so the
-    // caller always falls back to the browser print dialog rather than
-    // silently printing nothing.
+    // connection can stall instead of rejecting. Race it with a fast timeout so the
+    // caller falls back to browser printing without freezing or hitting popup timers.
     _connectPromise = Promise.race([
-        qz.websocket.connect({ retries: 2, delay: 1 }),
+        qz.websocket.connect({ retries: 0 }),
         new Promise((_, reject) =>
             setTimeout(() => reject(new Error('QZ Tray connection timed out')), timeoutMs)
         ),
@@ -124,16 +123,17 @@ export async function printHTMLToQZ(printerName, htmlContent) {
  * @param {Function} fallbackFn   - Called when QZ is unavailable (use window.open fallback)
  */
 export async function printOrFallback(printerName, html, fallbackFn) {
-    if (!printerName || !printerName.trim()) {
-        // No printer configured — use old popup fallback
-        fallbackFn();
-        return;
+    const runFallback = typeof fallbackFn === 'function' ? fallbackFn : () => {};
+    if (!printerName || !String(printerName).trim()) {
+        // No printer configured — use browser print fallback immediately
+        return runFallback();
     }
 
     try {
-        await printHTMLToQZ(printerName.trim(), html);
+        await printHTMLToQZ(String(printerName).trim(), html);
+        return true;
     } catch (err) {
-        console.warn('[QZ] Print failed, falling back to window.print():', err?.message || err);
-        fallbackFn();
+        console.warn('[QZ] Print failed, falling back to browser print():', err?.message || err);
+        return runFallback();
     }
 }

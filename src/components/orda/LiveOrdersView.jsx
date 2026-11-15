@@ -33,6 +33,7 @@ function classifyOrderBucket(order) {
   const pay = String(order?.payment_status || 'Pending').toLowerCase().trim();
 
   if (status === 'open' || status === 'saved') return 'open';
+  if (status === 'returned' || status === 'refunded') return 'returned';
   if (status === 'void' || status === 'voided') return 'voided';
   if (status === 'cancelled' || status === 'canceled') return 'cancelled';
   if (status === 'declined' || status === 'rejected') return 'declined';
@@ -46,9 +47,20 @@ function classifyOrderBucket(order) {
   return 'unknown';
 }
 
+/**
+ * Waiters, cashiers, managers, and admins can return or void any order that
+ * has not already been returned, voided, cancelled, or declined — including
+ * Completed orders and Duplicate orders.
+ */
+export function canReturnOrder(order) {
+  if (!order) return false;
+  const b = classifyOrderBucket(order);
+  return !['returned', 'voided', 'cancelled', 'declined'].includes(b);
+}
+
 export function summarizeOrdersCumulativeTotals(orders = [], statusFilter = 'active') {
   const list = Array.isArray(orders) ? orders : [];
-  const excludedBuckets = new Set(['voided', 'cancelled', 'declined', 'failed']);
+  const excludedBuckets = new Set(['returned', 'voided', 'cancelled', 'declined', 'failed']);
   const includeExcluded = excludedBuckets.has(String(statusFilter || '').toLowerCase());
 
   let countedOrdersCount = 0;
@@ -90,6 +102,7 @@ export function computeOrderBucketCounts(orders = []) {
     ready: 0,
     shipped: 0,
     completed: 0,
+    returned: 0,
     voided: 0,
     unknown: 0,
     open: 0,
@@ -156,6 +169,8 @@ function statusPillMeta(bucket, order) {
       return { label: 'Declined', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
     case 'cancelled':
       return { label: 'Cancelled', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
+    case 'returned':
+      return { label: 'Returned', cls: 'bg-orange-50 text-orange-800 border-orange-200' };
     case 'voided':
       return { label: 'Voided', cls: 'bg-slate-200 text-slate-700 border-slate-300' };
     case 'failed':
@@ -223,9 +238,10 @@ export function LiveOrdersView({
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
-  // Orda Void Order modal state (per-line Return to Stock vs Mark as Wastage)
+  // Return / Void Order modal state (per-line Return to Stock vs Mark as Wastage)
   const [voidTarget, setVoidTarget] = useState(null);
-  const [voidReason, setVoidReason] = useState('Customer Cancelled');
+  const [voidActionMode, setVoidActionMode] = useState('Returned'); // 'Returned' | 'Voided'
+  const [voidReason, setVoidReason] = useState('Duplicate Order');
   const [voidCustomReason, setVoidCustomReason] = useState('');
   const [voidLineDisposition, setVoidLineDisposition] = useState({});
   const [voidSubmitting, setVoidSubmitting] = useState(false);
@@ -413,35 +429,27 @@ export function LiveOrdersView({
     }
   };
 
-  const canVoidOrder = (order) => {
-    const b = classifyOrderBucket(order);
-    if (b === 'voided' || b === 'cancelled' || b === 'declined') return false;
-    if (b === 'completed') {
-      if (!voidCompletedAllowed) return false;
-      const hours = Number(voidWindowHours || 168);
-      if (hours > 0) {
-        const refDate = new Date(order.completed_at || order.created_at || Date.now()).getTime();
-        if (Date.now() - refDate > hours * 3600 * 1000) return false;
-      }
-    }
-    return true;
-  };
+  const canVoidOrder = (order) => canReturnOrder(order);
 
-  const openVoidModal = (order) => {
+  const openVoidModal = (order, actionMode = 'Returned', defaultReason = 'Duplicate Order') => {
     const lines = renderLines(order);
     const initialMap = {};
     lines.forEach((line, idx) => {
       initialMap[line.id || idx] = 'return_to_stock';
     });
     setVoidLineDisposition(initialMap);
-    setVoidReason('Customer Cancelled');
+    setVoidActionMode(actionMode === 'Voided' ? 'Voided' : 'Returned');
+    setVoidReason(defaultReason || 'Duplicate Order');
     setVoidCustomReason('');
     setVoidTarget(order);
   };
 
   const confirmVoidOrder = async () => {
     if (!voidTarget?.id || !restaurantId) return;
-    const finalReason = voidReason === 'Other' ? (voidCustomReason.trim() || 'Voided by staff') : voidReason;
+    const isReturn = voidActionMode !== 'Voided';
+    const targetStatus = isReturn ? 'Returned' : 'Voided';
+    const fallbackLabel = isReturn ? 'Returned by staff' : 'Voided by staff';
+    const finalReason = voidReason === 'Other' ? (voidCustomReason.trim() || fallbackLabel) : voidReason;
     const lines = renderLines(voidTarget);
     const dispositionDetails = lines.map((line, idx) => ({
       item_name: line.item_name || line.name || 'Item',
@@ -452,42 +460,68 @@ export function LiveOrdersView({
     setTenantContext(restaurantId);
     setVoidSubmitting(true);
     try {
+      const wasPaid = ['paid', 'settled', 'completed'].includes(
+        String(voidTarget.payment_status || '').toLowerCase().trim()
+      );
+      const targetPaymentStatus = isReturn ? (wasPaid ? 'Refunded' : 'Voided') : 'Voided';
       const fullPatch = {
-        status: 'Voided',
+        status: targetStatus,
+        payment_status: targetPaymentStatus,
+        ...(isReturn ? { return_reason: finalReason } : {}),
         void_reason: finalReason,
         void_disposition: dispositionDetails,
       };
-      let res = null;
+      let updatedLocally = false;
       if (!voidTarget._fromPoj) {
-        res = await supabase
-          .from('pos_orders')
-          .update(fullPatch)
-          .eq('id', voidTarget.id)
-          .eq('restaurant_id', restaurantId);
-
-        // Fail-safe fallback when Wave 2 migration columns have not been applied yet
-        if (res.error) {
+        const optionalCols = ['return_reason', 'void_disposition', 'void_reason', 'payment_status'];
+        let workingPatch = { ...fullPatch };
+        let res = null;
+        for (let i = 0; i <= optionalCols.length; i += 1) {
+          res = await supabase
+            .from('pos_orders')
+            .update(workingPatch)
+            .eq('id', voidTarget.id)
+            .eq('restaurant_id', restaurantId)
+            .select('id, status');
+          if (!res.error) break;
           const msg = String(res.error.message || '').toLowerCase();
-          if (msg.includes('void_disposition') || msg.includes('void_reason')) {
-            const fallbackPatch = {
-              status: 'Voided',
-              notes: [voidTarget.notes, `[VOID: ${finalReason}]`].filter(Boolean).join(' | '),
-            };
-            res = await supabase
-              .from('pos_orders')
-              .update(fallbackPatch)
-              .eq('id', voidTarget.id)
-              .eq('restaurant_id', restaurantId);
-          }
+          const missingCol = optionalCols.find((col) => col in workingPatch && msg.includes(col));
+          if (!missingCol) break;
+          const next = { ...workingPatch };
+          delete next[missingCol];
+          workingPatch = next;
         }
-        if (res.error) throw res.error;
+        if (res?.error) {
+          const fallbackPatch = {
+            status: targetStatus,
+            notes: [voidTarget.notes, `[${isReturn ? 'RETURN' : 'VOID'}: ${finalReason}]`].filter(Boolean).join(' | '),
+          };
+          const fbRes = await supabase
+            .from('pos_orders')
+            .update(fallbackPatch)
+            .eq('id', voidTarget.id)
+            .eq('restaurant_id', restaurantId)
+            .select('id, status');
+          if (fbRes.error) throw fbRes.error;
+          updatedLocally = Array.isArray(fbRes.data) && fbRes.data.length > 0;
+        } else {
+          updatedLocally = Array.isArray(res?.data) && res.data.length > 0;
+        }
       }
-      if (voidTarget._fromPoj || voidTarget.source_poj_id) {
-        await updatePojOrderStatus({
+      let updatedPoj = false;
+      if (voidTarget._fromPoj || voidTarget.source_poj_id || !updatedLocally) {
+        const pojRes = await updatePojOrderStatus({
           restaurantId,
           pojOrderId: voidTarget.source_poj_id || voidTarget.id,
           patch: fullPatch,
         });
+        updatedPoj = Boolean(pojRes?.ok);
+        if (voidTarget._fromPoj && !updatedPoj && pojRes?.error) {
+          throw new Error(pojRes.error);
+        }
+      }
+      if (!updatedLocally && !updatedPoj) {
+        throw new Error('Could not find active order record to update. Please refresh and try again.');
       }
       processVoidOrderInventoryDisposition({
         restaurantId,
@@ -500,12 +534,20 @@ export function LiveOrdersView({
         setSelectedOrder((prev) => (prev ? { ...prev, ...fullPatch } : null));
       }
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('manipos:orders-updated'));
+        window.dispatchEvent(
+          new CustomEvent('manipos:orders-updated', {
+            detail: {
+              orderId: voidTarget.id,
+              sourcePojId: voidTarget.source_poj_id || null,
+              updatedOrder: { ...voidTarget, ...fullPatch },
+            },
+          })
+        );
       }
       setVoidTarget(null);
       await onRefresh?.();
     } catch (err) {
-      alert('Failed to void order: ' + (err.message || err));
+      alert(`Failed to ${isReturn ? 'return' : 'void'} order: ` + (err.message || err));
     } finally {
       setVoidSubmitting(false);
     }
@@ -518,7 +560,7 @@ export function LiveOrdersView({
         try {
           const parsed = JSON.parse(val);
           return Array.isArray(parsed) ? parsed : [];
-        } catch (_) {}
+        } catch (_) { }
       }
       return [];
     };
@@ -550,7 +592,7 @@ export function LiveOrdersView({
         name: line.item_name || line.name || 'Item',
         quantity: Number(line.quantity || 1),
         price: Number(line.unit_price ?? line.price ?? 0),
-        note: line.note || line.modifiers || '',
+        note: line.instructions || line.summary || line.note || line.modifiers || '',
         brand: line.brand || '',
       })),
     };
@@ -567,17 +609,18 @@ export function LiveOrdersView({
     cancelled: 'Cancelled Orders',
     declined: 'Declined Orders',
     failed: 'Failed Payment Orders',
+    returned: 'Returned Orders',
     voided: 'Voided Orders',
     open: 'Open Pending Orders',
     unknown: 'Other Orders',
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Header & Filter Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
             {titles[statusFilter] || 'Orders'}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -587,15 +630,15 @@ export function LiveOrdersView({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          <div className="relative flex-1 sm:flex-none min-w-[180px]">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               placeholder="Search Order #, customer, M-Pesa receipt..."
-              className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 w-64 focus:outline-none focus:border-emerald-600"
+              className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 w-full sm:w-64 focus:outline-none focus:border-emerald-600"
             />
           </div>
 
@@ -646,11 +689,10 @@ export function LiveOrdersView({
               key={preset.id}
               type="button"
               onClick={() => handleSelectDatePreset(preset.id)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                datePreset === preset.id
-                  ? 'bg-emerald-700 text-white border-emerald-700'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${datePreset === preset.id
+                ? 'bg-emerald-700 text-white border-emerald-700'
+                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
             >
               {preset.label}
             </button>
@@ -753,7 +795,7 @@ export function LiveOrdersView({
                 {/* Main Order Content */}
                 <div
                   onClick={() => setSelectedOrder(order)}
-                  className="flex-1 p-5 cursor-pointer space-y-3"
+                  className="flex-1 p-3.5 sm:p-5 cursor-pointer space-y-3 min-w-0"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 flex-wrap">
@@ -903,10 +945,10 @@ export function LiveOrdersView({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => updateOrderStatus(order, 'Cancelled')}
+                      onClick={() => openVoidModal(order, 'Returned', 'Duplicate Order')}
                       className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
-                      <Ban size={14} /> Cancel
+                      <Ban size={14} /> Return
                     </button>
                   </div>
                 )}
@@ -920,6 +962,33 @@ export function LiveOrdersView({
                       className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <CheckCircle2 size={14} /> Complete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openVoidModal(order, 'Returned', 'Duplicate Order')}
+                      className="flex-1 py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Ban size={13} /> Return
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrder(order)}
+                      className="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <ExternalLink size={13} /> Details
+                    </button>
+                  </div>
+                )}
+
+                {bucket === 'completed' && (
+                  <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-36 shrink-0">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => openVoidModal(order, 'Returned', 'Duplicate Order')}
+                      className="flex-1 py-3 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <Ban size={14} /> Return Order
                     </button>
                     <button
                       type="button"
@@ -943,10 +1012,10 @@ export function LiveOrdersView({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => openVoidModal(order)}
+                      onClick={() => openVoidModal(order, 'Voided', 'Duplicate Order')}
                       className="flex-1 py-3 px-4 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      Void Tab
+                      Return / Void
                     </button>
                   </div>
                 )}
@@ -991,8 +1060,8 @@ export function LiveOrdersView({
         title={selectedOrder ? `Order #${selectedOrder.ticket_number || selectedOrder.order_number || String(selectedOrder.id).slice(0, 8)}` : ''}
         subtitle={selectedOrder ? `${normalizeChannelLabel(selectedOrder)} · ${new Date(selectedOrder.created_at).toLocaleString('en-KE')}` : ''}
         footer={selectedOrder && (
-          <>
-            <div className="flex items-center gap-2">
+          <div className="w-full flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => printCashierSlips(buildPrintableReceipt(selectedOrder))}
@@ -1008,7 +1077,7 @@ export function LiveOrdersView({
                 <Printer size={14} /> Print KOT
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {(classifyOrderBucket(selectedOrder) === 'new' || classifyOrderBucket(selectedOrder) === 'verifying') && isMicrositeOrder(selectedOrder) && (
                 <>
                   <button
@@ -1032,13 +1101,13 @@ export function LiveOrdersView({
               {canVoidOrder(selectedOrder) && (
                 <button
                   type="button"
-                  onClick={() => openVoidModal(selectedOrder)}
+                  onClick={() => openVoidModal(selectedOrder, 'Returned', 'Duplicate Order')}
                   className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer"
                 >
-                  Void Order
+                  Return / Void Order
                 </button>
               )}
-              {classifyOrderBucket(selectedOrder) !== 'completed' && classifyOrderBucket(selectedOrder) !== 'voided' && (
+              {!['completed', 'returned', 'voided', 'cancelled', 'declined'].includes(classifyOrderBucket(selectedOrder)) && (
                 <button
                   type="button"
                   onClick={() => updateOrderStatus(selectedOrder, 'Completed', { payment_status: 'Paid' })}
@@ -1055,7 +1124,7 @@ export function LiveOrdersView({
                 Close
               </button>
             </div>
-          </>
+          </div>
         )}
       >
         {selectedOrder && (
@@ -1194,40 +1263,68 @@ export function LiveOrdersView({
         )}
       </SlideOverDrawer>
 
-      {/* Void Order Reason & Inventory Disposition Modal */}
+      {/* Return / Void Order Reason & Inventory Disposition Modal */}
       {voidTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full max-h-[90dvh] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-black text-slate-900">
-                  Void Order #{voidTarget.ticket_number || String(voidTarget.id).slice(0, 8)}
+                  {voidActionMode === 'Voided' ? 'Void Order' : 'Return Order'} #{voidTarget.ticket_number || String(voidTarget.id).slice(0, 8)}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Choose void reason and specify whether each item returns to inventory stock or is logged as wastage.
+                  Return any duplicate, wrong, or completed order and choose how items affect stock.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setVoidTarget(null)}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-slate-400 hover:text-slate-700 p-1"
               >
                 <X size={18} />
               </button>
             </div>
 
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setVoidActionMode('Returned')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  voidActionMode !== 'Voided'
+                    ? 'bg-orange-50 border-orange-500 text-orange-900'
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+                Return Order (Refund / Duplicate)
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoidActionMode('Voided')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  voidActionMode === 'Voided'
+                    ? 'bg-rose-50 border-rose-500 text-rose-900'
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+                Void Order
+              </button>
+            </div>
+
             <div>
-              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Void Reason</label>
+              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                {voidActionMode === 'Voided' ? 'Void Reason' : 'Return Reason'}
+              </label>
               <select
                 value={voidReason}
                 onChange={(e) => setVoidReason(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
               >
+                <option value="Duplicate Order">Duplicate Order</option>
                 <option value="Customer Cancelled">Customer Cancelled</option>
                 <option value="Wrong Order Entered">Wrong Order Entered</option>
+                <option value="Customer Dissatisfied">Customer Dissatisfied</option>
                 <option value="Kitchen Out of Stock">Kitchen Out of Stock</option>
                 <option value="Payment Failed / Reversed">Payment Failed / Reversed</option>
-                <option value="Duplicate Order">Duplicate Order</option>
                 <option value="Test / Training Order">Test / Training Order</option>
                 <option value="Other">Other (Specify)</option>
               </select>
@@ -1236,7 +1333,7 @@ export function LiveOrdersView({
                   type="text"
                   value={voidCustomReason}
                   onChange={(e) => setVoidCustomReason(e.target.value)}
-                  placeholder="Enter exact void reason..."
+                  placeholder="Enter exact return / void reason..."
                   className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
                 />
               )}
@@ -1277,7 +1374,7 @@ export function LiveOrdersView({
                     const key = line.id || i;
                     const mode = voidLineDisposition[key] || 'return_to_stock';
                     return (
-                      <div key={key} className="p-2.5 flex items-center justify-between gap-2 text-xs">
+                      <div key={key} className="p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
                         <div className="min-w-0">
                           <p className="font-bold text-slate-900 truncate">{line.quantity || 1}x {line.item_name || line.name || 'Item'}</p>
                         </div>
@@ -1285,22 +1382,20 @@ export function LiveOrdersView({
                           <button
                             type="button"
                             onClick={() => setVoidLineDisposition((prev) => ({ ...prev, [key]: 'return_to_stock' }))}
-                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
-                              mode === 'return_to_stock'
-                                ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
-                                : 'bg-white border-slate-200 text-slate-500'
-                            }`}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${mode === 'return_to_stock'
+                              ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                              : 'bg-white border-slate-200 text-slate-500'
+                              }`}
                           >
                             Return to Stock
                           </button>
                           <button
                             type="button"
                             onClick={() => setVoidLineDisposition((prev) => ({ ...prev, [key]: 'wastage' }))}
-                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
-                              mode === 'wastage'
-                                ? 'bg-rose-50 border-rose-600 text-rose-800'
-                                : 'bg-white border-slate-200 text-slate-500'
-                            }`}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${mode === 'wastage'
+                              ? 'bg-rose-50 border-rose-600 text-rose-800'
+                              : 'bg-white border-slate-200 text-slate-500'
+                              }`}
                           >
                             Mark as Wastage
                           </button>
@@ -1326,7 +1421,9 @@ export function LiveOrdersView({
                 onClick={confirmVoidOrder}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black disabled:opacity-50"
               >
-                {voidSubmitting ? 'Voiding...' : 'Confirm Void Order'}
+                {voidSubmitting
+                  ? (voidActionMode === 'Voided' ? 'Voiding...' : 'Returning...')
+                  : (voidActionMode === 'Voided' ? 'Confirm Void Order' : 'Confirm Return Order')}
               </button>
             </div>
           </div>

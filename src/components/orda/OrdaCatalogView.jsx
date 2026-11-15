@@ -641,7 +641,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search menu items..."
-                    className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs w-56 focus:outline-none focus:border-emerald-600"
+                    className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-56 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
                 {branches.length > 0 && (
@@ -784,7 +784,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search modifiers..."
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs w-64"
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs w-full sm:w-64"
             />
             <div className="flex items-center gap-2">
               <button
@@ -805,6 +805,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               </button>
             </div>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
               <tr>
@@ -841,19 +842,20 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {/* COMBOS TAB */}
       {catalogTab === 'combos' && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3">
+          <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search combos..."
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs w-64"
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs w-full sm:w-64"
             />
             <button
               type="button"
@@ -863,6 +865,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               <Plus size={14} /> Add New Combo
             </button>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
               <tr>
@@ -893,6 +896,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

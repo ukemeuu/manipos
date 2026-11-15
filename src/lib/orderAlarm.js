@@ -109,7 +109,6 @@ export async function ensureAndroidAlarmChannel() {
         importance: 5,
         visibility: 1,
         vibration: true,
-        sound: 'default',
       });
     }
     nativeChannelReady = true;
@@ -118,8 +117,49 @@ export async function ensureAndroidAlarmChannel() {
   }
 }
 
+export function getBrowserNotificationState() {
+  if (typeof Notification === 'undefined') return 'unsupported';
+  return Notification.permission || 'default';
+}
+
+export async function requestOrderPushPermission() {
+  const audioOk = await unlockOrderAlarmAudio().catch(() => false);
+  await ensureAndroidAlarmChannel().catch(() => {});
+  let permission = getBrowserNotificationState();
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+  } catch {
+    // ignore permission request errors
+  }
+  return { audioUnlocked: Boolean(audioOk), notificationPermission: permission };
+}
+
+async function resolveServiceWorkerRegistration() {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+  try {
+    const existing = await navigator.serviceWorker.getRegistration?.();
+    if (existing && typeof existing.showNotification === 'function') return existing;
+    if (navigator.serviceWorker.ready) {
+      const ready = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(() => resolve(null), 600)),
+      ]);
+      if (ready && typeof ready.showNotification === 'function') return ready;
+    }
+  } catch {
+    // ignore SW lookup failure
+  }
+  return null;
+}
+
 export async function triggerNativeOrderAlert(order) {
   if (typeof window === 'undefined') return;
+  const title = `NEW ORDER #${order?.ticket_number || 'LIVE'} — KES ${Number(order?.total_amount || 0).toLocaleString()}`;
+  const body = `${order?.customer_name || 'Guest'} (${order?.dining_option || order?.order_channel || 'Microsite'}) — Tap to Accept or Decline`;
+  const tag = `manipos-order-${order?.id || 'live'}`;
+
   try {
     const { Capacitor } = await import('@capacitor/core');
     if (Capacitor.isNativePlatform()) {
@@ -136,10 +176,9 @@ export async function triggerNativeOrderAlert(order) {
         notifications: [
           {
             id: numericId || 1001,
-            title: `NEW ORDER #${order?.ticket_number || 'LIVE'} — KES ${Number(order?.total_amount || 0).toLocaleString()}`,
-            body: `${order?.customer_name || 'Guest'} (${order?.dining_option || order?.order_channel || 'Microsite'}) — Tap to Accept or Decline`,
+            title,
+            body,
             channelId: 'manipos_orders_alarm',
-            sound: 'default',
             autoCancel: true,
             extra: { orderId: order?.id || null },
           },
@@ -151,18 +190,38 @@ export async function triggerNativeOrderAlert(order) {
     // Fall back to Web Notification API below
   }
 
-  // Browser / Android Chrome PWA fallback popup notification
+  // Trigger Android Chrome haptic vibration even if tab is foregrounded
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate([400, 150, 400, 150, 400]);
+    }
+  } catch {
+    // ignore vibrate failure
+  }
+
+  // Browser / Android Chrome PWA notifications: Android requires ServiceWorkerRegistration.showNotification
+  // (`new Notification(...)` throws Illegal constructor on Android Chrome).
   try {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      const notif = new Notification(
-        `NEW ORDER #${order?.ticket_number || 'LIVE'} — KES ${Number(order?.total_amount || 0).toLocaleString()}`,
-        {
-          body: `${order?.customer_name || 'Guest'} (${order?.dining_option || order?.order_channel || 'Microsite'}) — Tap to Accept or Decline`,
-          tag: `manipos-order-${order?.id || 'live'}`,
-          requireInteraction: true,
-          renotify: true,
-        }
-      );
+      const notifOptions = {
+        body,
+        icon: '/favicon.png',
+        badge: '/favicon.png',
+        tag,
+        requireInteraction: true,
+        renotify: true,
+        vibrate: [400, 150, 400, 150, 400],
+        data: {
+          orderId: order?.id || null,
+          url: window.location?.href || '/',
+        },
+      };
+      const swReg = await resolveServiceWorkerRegistration();
+      if (swReg) {
+        await swReg.showNotification(title, notifOptions);
+        return;
+      }
+      const notif = new Notification(title, notifOptions);
       notif.onclick = () => {
         try {
           window.focus();

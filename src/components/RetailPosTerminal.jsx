@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getTenantContext } from '../lib/supabase';
 import { queueOfflineOrder } from '../lib/offlineQueue';
-import { printOrFallback, isQZConnected, connectQZ } from '../lib/qzPrint';
+import { isQZConnected, connectQZ } from '../lib/qzPrint';
+import { printCashierSlips } from '../lib/posPrintService';
 import {
   Barcode,
   Search,
@@ -403,25 +404,19 @@ export function RetailPosTerminal({
 
     // 3. Print ESC/POS Receipt
     try {
-      const receiptText = `
-================================
-  ${(storeName || 'MANIPOS RETAIL').toUpperCase().slice(0, 28)}
-         RECEIPT #${orderPayload.ticket_number}
-================================
-Date: ${new Date().toLocaleString()}
-Cashier: ${staffName}
-Payment: ${paymentMethod}
---------------------------------
-${cart.map(i => `${i.qty}x ${i.name.slice(0, 18).padEnd(18)} KES ${(i.price * i.qty).toFixed(2)}`).join('\n')}
---------------------------------
-TOTAL:             KES ${totalAmount.toFixed(2)}
-Tendered:          KES ${amountTendered ? Number(amountTendered).toFixed(2) : totalAmount.toFixed(2)}
-Change:            KES ${Math.max(0, (Number(amountTendered) || totalAmount) - totalAmount).toFixed(2)}
-================================
-  Thank you for shopping with us!
-================================
-      `;
-      printOrFallback(receiptText, 'RECEIPT');
+      await printCashierSlips({
+        ticketNumber: orderPayload.ticket_number,
+        customerName: 'Walk-in Customer',
+        cashier: staffName,
+        paymentMethod,
+        paymentStatus: 'paid',
+        totalAmount,
+        items: cart.map((i) => ({
+          name: i.name,
+          quantity: Number(i.qty || 1),
+          price: Number(i.price || 0),
+        })),
+      });
     } catch (e) {
       console.log('Silent print fallback');
     }

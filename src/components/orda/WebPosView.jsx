@@ -130,6 +130,7 @@ export function WebPosView({
   const [cart, setCart] = useState([]);
   const [orderInstructions, setOrderInstructions] = useState(initialOrder?.notes || '');
   const [step, setStep] = useState(initialOrder ? 'settle' : 'build'); // 'build' | 'settle'
+  const [mobilePane, setMobilePane] = useState(initialOrder ? 'cart' : 'catalog'); // 'catalog' | 'cart' on < lg viewports
 
   // Settle state
   const [diningMode, setDiningMode] = useState(() => {
@@ -811,6 +812,8 @@ export function WebPosView({
         tableNumber: diningMode === 'Dine In' ? tableNumber.trim() : '',
         deliveryAddress: diningMode === 'Delivery' ? deliveryAddress.trim() : '',
         deliveryFee: diningMode === 'Delivery' ? appliedDeliveryFee : 0,
+        discount: discountAmount,
+        splitDetails: paymentTender === 'Split Payment' ? resolvedSplitText : '',
         totalAmount: grandTotal,
         paymentMethod: saveAsOpen
           ? 'Pay Later (Open)'
@@ -901,6 +904,7 @@ export function WebPosView({
             onClick={() => {
               setPlacedOrder(null);
               setStep('build');
+              setMobilePane('catalog');
               setOrderInstructions('');
               setPaymentReference('');
               setSplitCash('');
@@ -1018,10 +1022,10 @@ export function WebPosView({
 
       {/* Main Split Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[640px]">
-        {/* Left: Categories Rail (hidden during settle for cleaner payment view on smaller screens) */}
-        {step === 'build' && (
-          <aside className="lg:col-span-2 border-r border-slate-200 bg-slate-50/50 p-3 space-y-1 max-h-[680px] overflow-y-auto">
-            <p className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+        {/* Left: Categories Rail (horizontal scrollable pills on mobile/tablet, vertical rail on desktop lg+) */}
+        {step === 'build' && mobilePane === 'catalog' && (
+          <aside className="lg:col-span-2 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50 p-2.5 sm:p-3 flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-y-auto lg:max-h-[680px]">
+            <p className="hidden lg:block px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
               Categories
             </p>
             {categoryTabs.map((cat) => (
@@ -1029,10 +1033,10 @@ export function WebPosView({
                 key={cat}
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition ${
+                className={`shrink-0 lg:w-full text-left px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition ${
                   selectedCategory === cat
                     ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-slate-200/70'
+                    : 'bg-white lg:bg-transparent border border-slate-200 lg:border-0 text-slate-700 hover:bg-slate-200/70'
                 }`}
               >
                 {cat}
@@ -1042,7 +1046,7 @@ export function WebPosView({
         )}
 
         {/* Center: Menu & Customer Bar OR Settle Panel */}
-        <section className={`${step === 'build' ? 'lg:col-span-6' : 'lg:col-span-7'} p-4 border-r border-slate-200 max-h-[680px] overflow-y-auto`}>
+        <section className={`${step === 'build' ? 'lg:col-span-6' : 'lg:col-span-7'} p-3 sm:p-4 lg:border-r border-slate-200 lg:max-h-[680px] lg:overflow-y-auto ${step === 'build' && mobilePane === 'cart' ? 'hidden lg:block' : 'block'}`}>
           {step === 'build' ? (
             <>
               {brandTabs.length > 1 && (
@@ -1525,13 +1529,24 @@ export function WebPosView({
         </section>
 
         {/* Right: Cart & Actions */}
-        <aside className={`${step === 'build' ? 'lg:col-span-4' : 'lg:col-span-5'} p-4 bg-slate-50/40 flex flex-col justify-between`}>
+        <aside className={`${step === 'build' ? 'lg:col-span-4' : 'lg:col-span-5'} p-3.5 sm:p-4 bg-slate-50/40 flex-col justify-between ${step === 'build' && mobilePane === 'catalog' ? 'hidden lg:flex' : 'flex'}`}>
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                <ShoppingBag className="w-4 h-4 text-emerald-700" />
-                Order Cart ({cart.reduce((s, c) => s + Number(c.quantity || 1), 0)})
-              </h3>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {step === 'build' && (
+                  <button
+                    type="button"
+                    onClick={() => setMobilePane('catalog')}
+                    className="lg:hidden inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3 h-3" /> Menu
+                  </button>
+                )}
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <ShoppingBag className="w-4 h-4 text-emerald-700" />
+                  Order Cart ({cart.reduce((s, c) => s + Number(c.quantity || 1), 0)})
+                </h3>
+              </div>
               {cart.length > 0 && !initialOrder && (
                 <button
                   type="button"
@@ -1663,7 +1678,7 @@ export function WebPosView({
                 <button
                   type="button"
                   disabled={cart.length === 0}
-                  onClick={() => setStep('settle')}
+                  onClick={() => { setStep('settle'); setMobilePane('cart'); }}
                   className="py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold disabled:opacity-50"
                 >
                   Continue to Settle →
@@ -1694,10 +1709,30 @@ export function WebPosView({
         </aside>
       </div>
 
+      {/* MOBILE / TABLET STICKY CART TRIGGER BAR (< lg) */}
+      {step === 'build' && mobilePane === 'catalog' && (
+        <div className="lg:hidden sticky bottom-0 inset-x-0 px-3.5 py-2.5 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-slate-500">
+              {cart.reduce((s, c) => s + Number(c.quantity || 1), 0)} item(s) in cart
+            </p>
+            <p className="text-sm font-black text-slate-900 truncate">KES {grandTotal.toLocaleString()}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobilePane('cart')}
+            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>{cart.length > 0 ? 'View Cart & Pay →' : 'Open Cart'}</span>
+          </button>
+        </div>
+      )}
+
       {/* Item Customization Modal */}
       {customizingItem && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[120] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[90dvh] flex flex-col overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h4 className="text-base font-black text-slate-900">{customizingItem.item.name}</h4>
