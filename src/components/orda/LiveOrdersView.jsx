@@ -18,14 +18,13 @@ export { normalizeChannelLabel };
 
 const CHANNEL_OPTIONS = [
   'All Channels',
-  'Microsite',
-  'Web POS',
-  'POS',
-  'Call Center',
-  'WhatsApp',
+  'Dine-in',
+  'Takeaway',
+  'Whatsapp',
   'Glovo',
-  'Bolt',
-  'Uber Eats',
+  'Ubereats',
+  'Bolt Food',
+  'Microsite',
 ];
 
 function classifyOrderBucket(order) {
@@ -302,8 +301,10 @@ export function LiveOrdersView({
     });
 
     if (channelFilter !== 'All Channels') {
-      const target = channelFilter.toLowerCase();
-      list = list.filter((o) => normalizeChannelLabel(o).toLowerCase().includes(target));
+      const target = channelFilter.toLowerCase().replace(/[\s-]+/g, '');
+      list = list.filter((o) =>
+        normalizeChannelLabel(o).toLowerCase().replace(/[\s-]+/g, '').includes(target)
+      );
     }
 
     if (searchQuery.trim()) {

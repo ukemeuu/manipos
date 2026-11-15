@@ -22,29 +22,20 @@ import {
 } from '../../lib/webPosCatalog';
 
 const SALES_CHANNELS = [
-  'Web POS',
-  'Call Center',
-  'WhatsApp',
-  'POS',
+  'Dine-in',
+  'Takeaway',
+  'Whatsapp',
   'Glovo',
-  'Bolt',
-  'Uber Eats',
+  'Ubereats',
+  'Bolt Food',
+  'Microsite',
 ];
 
 const PAYMENT_TENDERS = [
-  { id: 'Cash', label: 'Cash', icon: Banknote },
-  { id: 'CARD', label: 'Card / PDQ', icon: CreditCard },
-  { id: 'MPESA Paybill', label: 'MPESA Paybill', icon: Smartphone },
-  { id: 'MPESA TILL', label: 'MPESA TILL', icon: Smartphone },
-  { id: 'GLOVO', label: 'GLOVO', icon: Truck },
-  { id: 'UBER EATS', label: 'UBER EATS', icon: Truck },
-  { id: 'BOLT FOOD', label: 'BOLT FOOD', icon: Truck },
-  { id: 'Transfer', label: 'Bank Transfer', icon: CreditCard },
-  { id: 'Prepaid', label: 'Prepaid', icon: CheckCircle2 },
-  { id: 'Voucher', label: 'Voucher', icon: Tag },
-  { id: 'Store Credit', label: 'Store Credit', icon: Bookmark },
-  { id: 'Split Payment', label: 'Split Payment', icon: Layers },
-  { id: 'Paid to App', label: 'Paid to App', icon: GlobeIcon },
+  { id: 'Mpesa Paybill', label: 'Mpesa Paybill', aliases: ['MPESA Paybill', 'M-PESA Paybill', 'I&M Paybill', 'MPESA'], icon: Smartphone },
+  { id: 'Cash', label: 'Cash', aliases: ['Cash'], icon: Banknote },
+  { id: 'Card', label: 'Card', aliases: ['CARD', 'Card / PDQ', 'Credit Card', 'Debit Card'], icon: CreditCard },
+  { id: 'Paid to App', label: 'Paid to App', aliases: ['Paid to App'], icon: GlobeIcon },
 ];
 
 function GlobeIcon(props) {
@@ -145,7 +136,17 @@ export function WebPosView({
   const [selectedBrand, setSelectedBrand] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
-  const [salesChannel, setSalesChannel] = useState('Web POS');
+  const [salesChannel, setSalesChannel] = useState(() => {
+    const raw = String(initialOrder?.sales_channel || initialOrder?.order_channel || '').toLowerCase().trim();
+    if (raw.includes('takeaway') || raw.includes('pickup')) return 'Takeaway';
+    if (raw.includes('whatsapp')) return 'Whatsapp';
+    if (raw.includes('glovo')) return 'Glovo';
+    if (raw.includes('uber')) return 'Ubereats';
+    if (raw.includes('bolt')) return 'Bolt Food';
+    if (raw.includes('microsite') || raw.includes('online')) return 'Microsite';
+    if (String(initialOrder?.dining_option || '').toLowerCase().includes('takeaway')) return 'Takeaway';
+    return 'Dine-in';
+  });
   const [showOpenTabsBar, setShowOpenTabsBar] = useState(false);
 
   // Customer selection
@@ -165,9 +166,20 @@ export function WebPosView({
   const [diningMode, setDiningMode] = useState(() => {
     const d = String(initialOrder?.dining_option || '').toLowerCase();
     if (d.includes('deliv')) return 'Delivery';
-    if (d.includes('dine')) return 'Dine In';
-    return 'Pickup';
+    if (d.includes('takeaway') || d.includes('pickup')) return 'Pickup';
+    return 'Dine In';
   });
+
+  const handleSelectChannel = (nextChannel) => {
+    setSalesChannel(nextChannel);
+    if (nextChannel === 'Dine-in') {
+      setDiningMode('Dine In');
+    } else if (nextChannel === 'Takeaway') {
+      setDiningMode('Pickup');
+    } else {
+      setDiningMode('Delivery');
+    }
+  };
   const [tableNumber, setTableNumber] = useState(() => {
     const match = String(initialOrder?.notes || '').match(/Table:\s*([^|\n]+)/i);
     return initialOrder?.table_number || (match ? match[1].trim() : '');
@@ -562,10 +574,14 @@ export function WebPosView({
     const enabledSet = new Set(
       tendersConfig
         .filter((t) => t.pos_enabled !== false)
-        .map((t) => String(t.id || t.label || '').toLowerCase().trim())
+        .map((t) => String(t.code || t.id || t.name || t.label || '').toLowerCase().trim())
+        .filter(Boolean)
     );
     const filtered = PAYMENT_TENDERS.filter(
-      (t) => enabledSet.has(t.id.toLowerCase()) || enabledSet.has(t.label.toLowerCase())
+      (t) =>
+        enabledSet.has(t.id.toLowerCase()) ||
+        enabledSet.has(t.label.toLowerCase()) ||
+        (t.aliases || []).some((a) => enabledSet.has(a.toLowerCase()))
     );
     return filtered.length > 0 ? filtered : PAYMENT_TENDERS;
   }, [tendersConfig]);
@@ -669,6 +685,8 @@ export function WebPosView({
         const { error: updErr } = await safeUpdateOrder(initialOrder.id, {
           customer_name: customerName.trim() || 'Guest Customer',
           dining_option: diningVal,
+          order_channel: salesChannel,
+          sales_channel: salesChannel,
           payment_method: saveAsOpen ? 'Cash' : paymentTender,
           payment_status: saveAsOpen ? 'Pending' : isSettledNow ? 'Paid' : 'Pending',
           status: saveAsOpen ? 'Open' : 'Completed',
@@ -725,7 +743,7 @@ export function WebPosView({
         discount: discountAmount,
         cashier_name: staffName,
         brand: selectedBrand !== 'All' ? selectedBrand.toUpperCase() : restaurantName.toUpperCase(),
-        order_channel: salesChannel === 'Web POS' ? 'POS' : salesChannel,
+        order_channel: salesChannel,
         sales_channel: salesChannel,
         branch_id: activeBranch?.id || null,
         delivery_fee: appliedDeliveryFee,
@@ -820,7 +838,7 @@ export function WebPosView({
       if (
         !saveAsOpen &&
         sendStk &&
-        (paymentTender === 'MPESA Paybill' || paymentTender === 'MPESA TILL') &&
+        paymentTender.toLowerCase().includes('mpesa') &&
         customerPhone.trim() &&
         import.meta.env.VITE_MPESA_ENABLED !== 'false'
       ) {
@@ -1007,10 +1025,10 @@ export function WebPosView({
               <span>Open Tabs ({openOrders.length})</span>
             </button>
           )}
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Channel</label>
+          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Order Channel</label>
           <select
             value={salesChannel}
-            onChange={(e) => setSalesChannel(e.target.value)}
+            onChange={(e) => handleSelectChannel(e.target.value)}
             className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
           >
             {SALES_CHANNELS.map((ch) => (
@@ -1278,7 +1296,7 @@ export function WebPosView({
             /* SETTLE STEP */
             <div className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-black text-slate-900">1. Fulfillment & Customer</h3>
+                <h3 className="text-sm font-black text-slate-900">1. Order Channel & Fulfillment</h3>
                 {!initialOrder && (
                   <button
                     type="button"
@@ -1290,7 +1308,32 @@ export function WebPosView({
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1.5">Order Channel</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {SALES_CHANNELS.map((ch) => {
+                    const active = salesChannel === ch;
+                    return (
+                      <button
+                        key={ch}
+                        type="button"
+                        onClick={() => handleSelectChannel(ch)}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                          active
+                            ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {ch}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1.5">Fulfillment Type</label>
+                <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: 'Dine In', icon: UtensilsCrossed },
                   { id: 'Pickup', icon: Store },
@@ -1314,6 +1357,7 @@ export function WebPosView({
                     </button>
                   );
                 })}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1429,10 +1473,10 @@ export function WebPosView({
                 )}
               </div>
 
-              {/* 13 Orda Payment Tenders */}
+              {/* Separated Payment Methods */}
               <div>
-                <h3 className="text-sm font-black text-slate-900 mb-2">2. Select Payment Tender</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <h3 className="text-sm font-black text-slate-900 mb-2">2. Select Payment Method</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {availableTenders.map((tender) => {
                     const Icon = tender.icon;
                     const active = paymentTender === tender.id;
@@ -1441,7 +1485,7 @@ export function WebPosView({
                         key={tender.id}
                         type="button"
                         onClick={() => setPaymentTender(tender.id)}
-                        className={`p-2.5 rounded-xl border text-left text-xs font-bold flex items-center gap-2 transition ${
+                        className={`p-2.5 rounded-xl border text-left text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                           active
                             ? 'bg-emerald-50 border-emerald-700 text-emerald-900 ring-1 ring-emerald-700'
                             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -1455,11 +1499,9 @@ export function WebPosView({
                 </div>
               </div>
 
-              {(paymentTender === 'MPESA Paybill' ||
-                paymentTender === 'MPESA TILL' ||
-                paymentTender === 'CARD' ||
-                paymentTender === 'Transfer' ||
-                paymentTender === 'Voucher') && (
+              {(paymentTender === 'Mpesa Paybill' ||
+                paymentTender === 'Card' ||
+                paymentTender === 'Paid to App') && (
                 <div className="space-y-2">
                   <label className="block text-[11px] font-bold uppercase text-slate-500">
                     Transaction / Receipt Reference (optional)
@@ -1471,7 +1513,7 @@ export function WebPosView({
                     placeholder="e.g. UCD8K92LM0"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 font-mono uppercase"
                   />
-                  {(paymentTender === 'MPESA Paybill' || paymentTender === 'MPESA TILL') &&
+                  {paymentTender === 'Mpesa Paybill' &&
                     import.meta.env.VITE_MPESA_ENABLED !== 'false' && (
                       <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
                         <input

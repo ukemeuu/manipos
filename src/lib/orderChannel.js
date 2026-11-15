@@ -12,8 +12,10 @@ export function normalizeChannelLabel(order) {
 
   if (rawLower.includes('whatsapp')) return 'WHATSAPP';
   if (rawLower.includes('glovo')) return 'GLOVO';
-  if (rawLower.includes('bolt')) return 'BOLT';
+  if (rawLower.includes('bolt')) return 'BOLT FOOD';
   if (rawLower.includes('uber')) return 'UBER EATS';
+  if (rawLower.includes('dine')) return 'DINE-IN';
+  if (rawLower.includes('takeaway') || rawLower.includes('pickup') || rawLower.includes('pick-up')) return 'TAKEAWAY';
   if (rawLower.includes('call')) return 'CALL CENTER';
   if (rawLower.includes('web')) return 'WEB POS';
 
@@ -53,12 +55,16 @@ export function formatChannelDisplayName(normChannel) {
   if (!key) return 'POS';
   const labels = {
     POS: 'POS',
+    'DINE-IN': 'Dine-in',
+    TAKEAWAY: 'Takeaway',
     'WEB POS': 'Web POS',
     'WALK-IN': 'Walk-in',
     MICROSITE: 'Microsite',
     GLOVO: 'Glovo',
     'UBER EATS': 'Uber Eats',
-    BOLT: 'Bolt',
+    UBEREATS: 'Uber Eats',
+    'BOLT FOOD': 'Bolt Food',
+    BOLT: 'Bolt Food',
     WHATSAPP: 'WhatsApp',
     'CALL CENTER': 'Call Center',
   };

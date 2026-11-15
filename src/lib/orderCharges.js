@@ -123,17 +123,8 @@ export async function recordOrderChargeLines({
 }
 
 export const DEFAULT_TENDERS = [
+  { code: 'Mpesa Paybill', name: 'Mpesa Paybill', pos_enabled: true, microsite_enabled: true, is_custom: false },
   { code: 'Cash', name: 'Cash', pos_enabled: true, microsite_enabled: false, is_custom: false },
-  { code: 'MPESA Paybill', name: 'M-PESA Paybill', pos_enabled: true, microsite_enabled: true, is_custom: false },
-  { code: 'MPESA TILL', name: 'M-PESA Till', pos_enabled: true, microsite_enabled: true, is_custom: false },
-  { code: 'CARD', name: 'Card / PDQ', pos_enabled: true, microsite_enabled: true, is_custom: false },
-  { code: 'GLOVO', name: 'Glovo', pos_enabled: true, microsite_enabled: false, is_custom: false },
-  { code: 'UBER EATS', name: 'Uber Eats', pos_enabled: true, microsite_enabled: false, is_custom: false },
-  { code: 'BOLT FOOD', name: 'Bolt Food', pos_enabled: true, microsite_enabled: false, is_custom: false },
-  { code: 'Transfer', name: 'Bank Transfer', pos_enabled: true, microsite_enabled: false, is_custom: false },
-  { code: 'Prepaid', name: 'Prepaid', pos_enabled: true, microsite_enabled: false, is_custom: false },
-  { code: 'Voucher', name: 'Voucher', pos_enabled: true, microsite_enabled: true, is_custom: false },
-  { code: 'Store Credit', name: 'Store Credit', pos_enabled: true, microsite_enabled: true, is_custom: false },
-  { code: 'Split Payment', name: 'Split Payment', pos_enabled: true, microsite_enabled: false, is_custom: false },
+  { code: 'Card', name: 'Card', pos_enabled: true, microsite_enabled: true, is_custom: false },
   { code: 'Paid to App', name: 'Paid to App', pos_enabled: true, microsite_enabled: true, is_custom: false },
 ];

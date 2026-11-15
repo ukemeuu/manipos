@@ -155,9 +155,14 @@ describe('execDashboardMetrics & channel/payment normalization', () => {
 
   it('normalizes payment methods and channel labels safely on edge inputs', () => {
     expect(normalizePaymentMethodLabel({ payment_method: 'CASH' })).toBe('Cash');
+    expect(normalizePaymentMethodLabel({ payment_method: 'Mpesa Paybill' })).toBe('I&M Paybill');
     expect(normalizePaymentMethodLabel({ payment_method: 'Paid to APP' })).toBe('Paid to App');
     expect(normalizePaymentMethodLabel({ payment_method: '', payment_status: 'Pending' })).toBe('Unassigned / Pending');
     expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'pos', order_channel: 'Uber Eats' }))).toBe('Uber Eats');
+    expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Ubereats', order_channel: 'Ubereats' }))).toBe('Uber Eats');
+    expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Dine-in', order_channel: 'Dine-in' }))).toBe('Dine-in');
+    expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Takeaway', order_channel: 'Takeaway' }))).toBe('Takeaway');
+    expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Bolt Food', order_channel: 'Bolt Food' }))).toBe('Bolt Food');
     expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Microsite', order_channel: 'Online' }))).toBe('Microsite');
   });
 });

@@ -94,7 +94,11 @@ export function OrderAndPaymentSettingsView({
     });
 
     if (Array.isArray(settings.payment_tenders_config) && settings.payment_tenders_config.length > 0) {
-      setTenders(settings.payment_tenders_config);
+      const CHANNEL_CODES = new Set(['glovo', 'uber eats', 'ubereats', 'bolt food', 'bolt', 'whatsapp', 'microsite', 'dine-in', 'takeaway']);
+      const cleaned = settings.payment_tenders_config.filter(
+        (t) => !CHANNEL_CODES.has(String(t.code || t.name || '').toLowerCase().trim())
+      );
+      setTenders(cleaned.length > 0 ? cleaned : DEFAULT_TENDERS);
     } else {
       setTenders(DEFAULT_TENDERS);
     }
