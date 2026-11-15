@@ -163,9 +163,9 @@ export function PojSyncBridgeView({
               POJ Management -&gt; {restaurantName} Migration &amp; Live Link
             </h2>
             <p className="text-xs text-slate-500 max-w-2xl">
-              Extract all staff profiles, 4-digit terminal PINs, leave requests, loan requests, salary advances,
-              overtime logs, warnings, HR documents, shift rosters, expenses, FP&amp;A budgets, Guest CRM, delivery fees,
-              inventory &amp; POs from <span className="font-semibold text-slate-700">pojmanagement.com</span> safely without duplicates.
+              Extract all staff profiles, 4-digit terminal PINs, menu items, all modifier groups (spice levels, add-ons, swallow choices),
+              leave requests, loan requests, salary advances, overtime logs, warnings, HR documents, shift rosters, expenses, FP&amp;A budgets,
+              Guest CRM, delivery fees, inventory &amp; POs from <span className="font-semibold text-slate-700">pojmanagement.com</span> safely without duplicates.
             </p>
           </div>
           {linkRecord?.last_synced_at && (

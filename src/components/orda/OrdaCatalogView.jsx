@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Search, Edit3, Trash2, Upload, Download, Image as ImageIcon,
-  Check, Loader2, Layers, Sliders, Gift, Eye, EyeOff, Star, Globe, X
+  Check, Loader2, Layers, Sliders, Gift, Eye, EyeOff, Star, Globe, X, RefreshCw
 } from 'lucide-react';
 import { supabase, setTenantContext } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
+import { fetchPojCatalogEnrichment, syncPojCatalogAndModifiersToManiPos } from '../../services/data/pojSyncService';
 
 const inputCls =
   'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600';
@@ -23,6 +24,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncingPojMods, setSyncingPojMods] = useState(false);
 
   // Inline + drawers state
   const [addingCat, setAddingCat] = useState(false);
@@ -36,6 +38,33 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
 
   const fileInputRef = useRef(null);
   const uploadTargetRef = useRef(null);
+  const pojAutoSyncRanRef = useRef(false);
+
+  const handleSyncPojModifiers = async ({ silent = false } = {}) => {
+    if (!restaurantId || syncingPojMods) return;
+    setSyncingPojMods(true);
+    try {
+      const summary = await syncPojCatalogAndModifiersToManiPos({ restaurantId });
+      const [catRes, menuRes, modRes] = await Promise.all([
+        supabase.from('pos_categories').select('*').eq('restaurant_id', restaurantId).order('display_order', { ascending: true }),
+        supabase.from('pos_menu').select('*').eq('restaurant_id', restaurantId).order('display_order', { ascending: true }),
+        supabase.from('menu_modifier_groups').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: true }),
+      ]);
+      if (!catRes.error) setCategories(catRes.data || []);
+      if (!menuRes.error) setItems(menuRes.data || []);
+      if (!modRes.error) setModifiers(modRes.data || []);
+      if ((summary?.menu_modifier_groups?.inserted || 0) > 0 || (summary?.menu_modifier_groups?.updated || 0) > 0 || (summary?.pos_menu?.inserted || 0) > 0) {
+        onCatalogChanged?.();
+      }
+      if (!silent && summary?.error) {
+        alert('POJ modifier sync warning: ' + summary.error);
+      }
+    } catch (err) {
+      if (!silent) alert('POJ modifier sync failed: ' + err.message);
+    } finally {
+      setSyncingPojMods(false);
+    }
+  };
 
   const loadAll = async () => {
     if (!restaurantId) return;
@@ -54,6 +83,17 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
       if (!modRes.error) setModifiers(modRes.data || []);
       if (!groupRes.error) setMenuGroups(groupRes.data || []);
       if (!comboRes.error) setCombos(comboRes.data || []);
+
+      if (!pojAutoSyncRanRef.current) {
+        pojAutoSyncRanRef.current = true;
+        fetchPojCatalogEnrichment({ restaurantId })
+          .then(({ modifierGroups: pojMods }) => {
+            if (Array.isArray(pojMods) && pojMods.length > (modRes.data || []).length) {
+              handleSyncPojModifiers({ silent: true });
+            }
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       console.error('Catalog load error:', err);
     } finally {
@@ -738,7 +778,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
       {/* MODIFIERS TAB */}
       {catalogTab === 'modifiers' && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3">
+          <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <input
               type="text"
               value={search}
@@ -746,13 +786,24 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               placeholder="Search modifiers..."
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs w-64"
             />
-            <button
-              type="button"
-              onClick={() => setModDrawer({ name: '', is_required: false, allow_multiple: false, min_selected: 0, max_selected: 1, options: [{ name: '', price: 0, is_available: true }], menu_item_ids: [] })}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
-            >
-              <Plus size={14} /> Add New Modifier
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSyncPojModifiers({ silent: false })}
+                disabled={syncingPojMods}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {syncingPojMods ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                <span>{syncingPojMods ? 'Syncing POJ…' : 'Sync POJ Modifiers'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModDrawer({ name: '', is_required: false, allow_multiple: false, min_selected: 0, max_selected: 1, options: [{ name: '', price: 0, is_available: true }], menu_item_ids: [] })}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+              >
+                <Plus size={14} /> Add New Modifier
+              </button>
+            </div>
           </div>
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">

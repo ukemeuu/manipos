@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { supabase } from '../../lib/supabase';
-import { normalizeMenuText } from '../../lib/webPosCatalog';
+import { supabase, setTenantContext } from '../../lib/supabase';
+import { computeEffectiveMinSelected, normalizeMenuText } from '../../lib/webPosCatalog';
 
 export const POJ_DEFAULT_URL = 'https://bfrvzwmckuiafkgwemdt.supabase.co';
 export const POJ_ANON_KEY =
@@ -260,6 +260,8 @@ export async function exportSnapshotFromPoj({
     'suppliers',
     'inventory_items',
     'purchase_orders',
+    'pos_categories',
+    'pos_menu',
     'menu_modifier_groups',
     'pos_orders',
     'pos_order_items',
@@ -800,6 +802,17 @@ export async function importPojSnapshotToManiPos({
     restaurantId
   );
 
+  // 10b. Categories, Menu Items & Modifier Groups (e.g. Preference / Spice Level, Protein Add-on, etc.)
+  onProgress?.('Importing menu categories, items & all modifier groups…');
+  const catalogSummary = await syncPojCatalogAndModifiersToManiPos({
+    restaurantId,
+    snapshotTables: t,
+    onProgress,
+  });
+  summary.pos_categories = catalogSummary.pos_categories;
+  summary.pos_menu = catalogSummary.pos_menu;
+  summary.menu_modifier_groups = catalogSummary.menu_modifier_groups;
+
   // 11. POS Orders & Line Items (when pos_orders.source_poj_id exists)
   if ((t.pos_orders || []).length) {
     onProgress?.('Importing POS order history…');
@@ -967,9 +980,28 @@ async function resolvePojBridgeUrl(tenantSlug, restaurantId) {
   return cleanSlug === 'potofjollof' ? POJ_DEFAULT_URL : null;
 }
 
+let edgePojOrdersSyncUnavailable = false;
+
+export function resetPojEdgeProxyCache() {
+  edgePojOrdersSyncUnavailable = false;
+}
+
+function mapRawPojOrders(rows, restaurantId) {
+  return (Array.isArray(rows) ? rows : []).map((o) => ({
+    ...o,
+    restaurant_id: restaurantId,
+    source_poj_id: String(o.id),
+    ticket_number: o.ticket_number != null ? String(o.ticket_number) : '',
+    items: Array.isArray(o.items) ? o.items : [],
+    _fromPoj: true,
+  }));
+}
+
 /**
  * Fetches live pos_orders from linked pojmanagement.com for a date range
  * so Order History and Admin Dashboard show orders placed on either system.
+ * Uses the `poj-orders-sync` Edge Function when the staff member signed in via
+ * Store Code + 4-digit PIN (no POJ user JWT) so line items are populated too.
  */
 export async function fetchPojOrdersForRange({
   tenantSlug,
@@ -982,6 +1014,31 @@ export async function fetchPojOrdersForRange({
   if (!restaurantId) return [];
   const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
   if (!pojUrl) return [];
+
+  const bearer = await getValidPojAccessToken(pojUrl);
+  const needsEdgeProxy = bearer === POJ_ANON_KEY;
+
+  if (needsEdgeProxy && !edgePojOrdersSyncUnavailable) {
+    try {
+      const fnRes = await supabase.functions.invoke('poj-orders-sync', {
+        body: {
+          restaurant_id: restaurantId,
+          tenant_slug: tenantSlug,
+          startIso,
+          endIso,
+          limit,
+        },
+      });
+      if (!fnRes?.error && fnRes?.data?.ok && Array.isArray(fnRes.data.orders)) {
+        return mapRawPojOrders(fnRes.data.orders, restaurantId);
+      }
+      if (fnRes?.error || fnRes?.data?.missingSecret || fnRes?.data?.notLinked) {
+        edgePojOrdersSyncUnavailable = true;
+      }
+    } catch (_) {
+      edgePojOrdersSyncUnavailable = true;
+    }
+  }
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller && timeoutMs > 0
@@ -996,7 +1053,6 @@ export async function fetchPojOrdersForRange({
     if (startIso) params.append('created_at', `gte.${startIso}`);
     if (endIso) params.append('created_at', `lte.${endIso}`);
 
-    const bearer = await getValidPojAccessToken(pojUrl);
     const res = await fetch(`${pojUrl}/rest/v1/pos_orders?${params.toString()}`, {
       headers: {
         apikey: POJ_ANON_KEY,
@@ -1008,19 +1064,336 @@ export async function fetchPojOrdersForRange({
     const rows = await res.json();
     if (!Array.isArray(rows)) return [];
 
-    return rows.map((o) => ({
-      ...o,
-      restaurant_id: restaurantId,
-      source_poj_id: String(o.id),
-      ticket_number: o.ticket_number != null ? String(o.ticket_number) : '',
-      items: Array.isArray(o.items) ? o.items : [],
-      _fromPoj: true,
-    }));
+    return mapRawPojOrders(rows, restaurantId);
   } catch (_) {
     return [];
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Maps a POJ `menu_modifier_groups` record onto a ManiPOS `menu_modifier_groups`
+ * payload, resolving `menu_item_ids` across databases by normalized item name and
+ * clamping legacy invalid `min_selected` values cleanly.
+ */
+export function remapPojModifierGroupForManiPos({
+  pojGroup,
+  pojNameById = new Map(),
+  maniIdByName = new Map(),
+  existingGroup = null,
+}) {
+  const sanitizedOptions = (Array.isArray(pojGroup?.options) ? pojGroup.options : [])
+    .filter((o) => o && String(o.name || o.label || '').trim() !== '')
+    .map((o) => ({
+      name: String(o.name || o.label).trim(),
+      price: Number(o.price) || 0,
+      is_available: o.is_available !== false,
+    }));
+
+  const existingOptions = Array.isArray(existingGroup?.options) ? existingGroup.options : [];
+  const finalOptions = sanitizedOptions.length > 0 ? sanitizedOptions : existingOptions;
+
+  const mappedIds = [];
+  const seenIds = new Set();
+  const pushManiId = (id) => {
+    if (!id) return;
+    const str = String(id);
+    if (!seenIds.has(str)) {
+      seenIds.add(str);
+      mappedIds.push(str);
+    }
+  };
+
+  for (const id of Array.isArray(existingGroup?.menu_item_ids) ? existingGroup.menu_item_ids : []) {
+    pushManiId(id);
+  }
+  for (const pojItemId of Array.isArray(pojGroup?.menu_item_ids) ? pojGroup.menu_item_ids : []) {
+    const normName = pojNameById.get(String(pojItemId));
+    if (normName) {
+      pushManiId(maniIdByName.get(normName));
+    }
+  }
+  for (const normName of Array.isArray(pojGroup?._matchedItemNames) ? pojGroup._matchedItemNames : []) {
+    pushManiId(maniIdByName.get(normalizeMenuText(normName)));
+  }
+
+  const effectiveMin = computeEffectiveMinSelected({
+    ...pojGroup,
+    options: finalOptions,
+  });
+  const rawMax = Number(pojGroup?.max_selected);
+  const effectiveMax = Number.isFinite(rawMax) && rawMax > 0 ? Math.max(effectiveMin || 1, rawMax) : Math.max(1, finalOptions.length);
+
+  return {
+    name: String(pojGroup?.name || existingGroup?.name || 'Modifiers').trim(),
+    is_required: Boolean(pojGroup?.is_required),
+    min_selected: effectiveMin,
+    max_selected: effectiveMax,
+    allow_multiple: Boolean(pojGroup?.allow_multiple ?? (effectiveMax > 1)),
+    options: finalOptions,
+    menu_item_ids: mappedIds,
+  };
+}
+
+/**
+ * Exports and imports ALL POJ `pos_categories`, `pos_menu`, and `menu_modifier_groups`
+ * (including `Preference` spice levels, `Protein Add-on`, `Swallow Choice`, etc.)
+ * into ManiPOS cleanly without duplicates, matching by normalized name.
+ */
+export async function syncPojCatalogAndModifiersToManiPos({
+  tenantSlug,
+  restaurantId,
+  snapshotTables = null,
+  onProgress = null,
+}) {
+  const result = {
+    pos_categories: { inserted: 0, updated: 0, error: null },
+    pos_menu: { inserted: 0, updated: 0, error: null },
+    menu_modifier_groups: { inserted: 0, updated: 0, error: null },
+    error: null,
+  };
+  if (!restaurantId) return result;
+
+  try {
+    setTenantContext(restaurantId);
+
+    let pojCategories = Array.isArray(snapshotTables?.pos_categories) ? snapshotTables.pos_categories : null;
+    let pojMenu = Array.isArray(snapshotTables?.pos_menu) ? snapshotTables.pos_menu : null;
+    let pojModifiers = Array.isArray(snapshotTables?.menu_modifier_groups) ? snapshotTables.menu_modifier_groups : null;
+
+    if (!pojMenu || !pojModifiers) {
+      const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
+      if (!pojUrl) return result;
+      const bearer = await getValidPojAccessToken(pojUrl);
+      const headers = {
+        apikey: POJ_ANON_KEY,
+        Authorization: `Bearer ${bearer}`,
+      };
+      const [catRes, menuRes, modRes] = await Promise.all([
+        pojCategories ? Promise.resolve(null) : fetch(`${pojUrl}/rest/v1/pos_categories?select=*&limit=500`, { headers }).catch(() => null),
+        pojMenu ? Promise.resolve(null) : fetch(`${pojUrl}/rest/v1/pos_menu?select=*&limit=1500`, { headers }),
+        pojModifiers ? Promise.resolve(null) : fetch(`${pojUrl}/rest/v1/menu_modifier_groups?select=*&limit=500`, { headers }),
+      ]);
+      if (!pojCategories) pojCategories = catRes?.ok ? (await catRes.json().catch(() => [])) : [];
+      if (!pojMenu) pojMenu = menuRes?.ok ? (await menuRes.json().catch(() => [])) : [];
+      if (!pojModifiers) pojModifiers = modRes?.ok ? (await modRes.json().catch(() => [])) : [];
+    }
+
+    pojCategories = Array.isArray(pojCategories) ? pojCategories : [];
+    pojMenu = Array.isArray(pojMenu) ? pojMenu : [];
+    pojModifiers = Array.isArray(pojModifiers) ? pojModifiers : [];
+
+    // 1. Categories
+    onProgress?.('Syncing menu categories…');
+    const existingCatsRes = await supabase
+      .from('pos_categories')
+      .select('id, name, display_order')
+      .eq('restaurant_id', restaurantId);
+    const existingCatNames = new Set(
+      (existingCatsRes.data || []).map((c) => normalizeMenuText(c.name)).filter(Boolean)
+    );
+    const catsToInsert = [];
+    const seenNewCats = new Set();
+    let maxCatOrder = (existingCatsRes.data || []).length;
+
+    for (const c of pojCategories) {
+      const name = String(c?.name || '').trim();
+      const norm = normalizeMenuText(name);
+      if (!norm || existingCatNames.has(norm) || seenNewCats.has(norm)) continue;
+      seenNewCats.add(norm);
+      catsToInsert.push({
+        restaurant_id: restaurantId,
+        name,
+        display_order: Number.isFinite(Number(c?.display_order)) ? Number(c.display_order) : maxCatOrder++,
+      });
+    }
+    for (const pm of pojMenu) {
+      const catName = String(pm?.category || '').trim();
+      const norm = normalizeMenuText(catName);
+      if (!norm || existingCatNames.has(norm) || seenNewCats.has(norm)) continue;
+      seenNewCats.add(norm);
+      catsToInsert.push({
+        restaurant_id: restaurantId,
+        name: catName,
+        display_order: maxCatOrder++,
+      });
+    }
+    if (catsToInsert.length > 0) {
+      const { error: catErr } = await supabase.from('pos_categories').insert(catsToInsert);
+      if (catErr) result.pos_categories.error = catErr.message;
+      else result.pos_categories.inserted = catsToInsert.length;
+    }
+
+    // 2. Menu items (sync missing items + enrich brand pricing / metadata)
+    onProgress?.('Syncing menu items & brands…');
+    const existingMenuRes = await supabase
+      .from('pos_menu')
+      .select('*')
+      .eq('restaurant_id', restaurantId);
+    if (existingMenuRes.error) {
+      result.pos_menu.error = existingMenuRes.error.message;
+    }
+    const existingMenu = Array.isArray(existingMenuRes.data) ? existingMenuRes.data : [];
+    const maniByName = new Map();
+    const maniIdByName = new Map();
+    for (const m of existingMenu) {
+      const key = normalizeMenuText(m?.name);
+      if (key && !maniByName.has(key)) {
+        maniByName.set(key, m);
+        maniIdByName.set(key, String(m.id));
+      }
+    }
+
+    const pojNameById = new Map();
+    const menuItemsToInsert = [];
+    for (const pm of pojMenu) {
+      if (pm?.id != null && pm?.name) {
+        pojNameById.set(String(pm.id), normalizeMenuText(pm.name));
+      }
+      const key = normalizeMenuText(pm?.name);
+      if (!key) continue;
+
+      const existing = maniByName.get(key);
+      if (!existing) {
+        menuItemsToInsert.push({
+          base: {
+            restaurant_id: restaurantId,
+            name: String(pm.name).trim(),
+            description: pm.description || '',
+            category: pm.category || 'Uncategorized',
+            subcategory: pm.subcategory || null,
+            price: Number(pm.price) || 0,
+            image_url: pm.image_url || null,
+            is_available: pm.is_available !== false,
+            show_on_microsite: pm.show_on_microsite !== false,
+            is_featured: pm.is_featured === true,
+            display_order: Number(pm.display_order) || 0,
+          },
+          extended: {
+            brands: Array.isArray(pm.brands) ? pm.brands : undefined,
+            brand: pm.brand || undefined,
+            brand_prices: pm.brand_prices && typeof pm.brand_prices === 'object' ? pm.brand_prices : undefined,
+            variations: Array.isArray(pm.variations) ? pm.variations : undefined,
+            additions: Array.isArray(pm.additions) ? pm.additions : undefined,
+          },
+        });
+      } else {
+        // Backfill missing brand/image/variations metadata on existing ManiPOS item
+        const patch = {};
+        const hasManiBrands = Array.isArray(existing.brands) ? existing.brands.length > 0 : Boolean(existing.brands || existing.brand);
+        const hasPojBrands = Array.isArray(pm.brands) ? pm.brands.length > 0 : Boolean(pm.brands || pm.brand);
+        if (!hasManiBrands && hasPojBrands) {
+          if (pm.brands !== undefined) patch.brands = pm.brands;
+          if (pm.brand !== undefined) patch.brand = pm.brand;
+        }
+        if ((!existing.brand_prices || Object.keys(existing.brand_prices).length === 0) && pm.brand_prices && Object.keys(pm.brand_prices).length > 0) {
+          patch.brand_prices = pm.brand_prices;
+        }
+        if (!existing.image_url && pm.image_url) patch.image_url = pm.image_url;
+        if ((!Array.isArray(existing.variations) || existing.variations.length === 0) && Array.isArray(pm.variations) && pm.variations.length > 0) {
+          patch.variations = pm.variations;
+        }
+        if ((!Array.isArray(existing.additions) || existing.additions.length === 0) && Array.isArray(pm.additions) && pm.additions.length > 0) {
+          patch.additions = pm.additions;
+        }
+        if (Object.keys(patch).length > 0) {
+          const { error: updErr } = await supabase
+            .from('pos_menu')
+            .update(patch)
+            .eq('id', existing.id)
+            .eq('restaurant_id', restaurantId);
+          if (!updErr) result.pos_menu.updated += 1;
+        }
+      }
+    }
+
+    if (menuItemsToInsert.length > 0) {
+      const extRows = menuItemsToInsert.map(({ base, extended }) => {
+        const cleanExt = {};
+        for (const [k, v] of Object.entries(extended)) {
+          if (v !== undefined) cleanExt[k] = v;
+        }
+        return { ...base, ...cleanExt };
+      });
+      let insRes = await supabase.from('pos_menu').insert(extRows).select('id, name');
+      if (insRes.error && /column .* does not exist|schema cache/i.test(insRes.error.message || '')) {
+        insRes = await supabase
+          .from('pos_menu')
+          .insert(menuItemsToInsert.map(({ base }) => base))
+          .select('id, name');
+      }
+      if (insRes.error) {
+        result.pos_menu.error = insRes.error.message;
+      } else {
+        result.pos_menu.inserted = (insRes.data || []).length;
+        for (const row of insRes.data || []) {
+          const key = normalizeMenuText(row?.name);
+          if (key) maniIdByName.set(key, String(row.id));
+        }
+      }
+    }
+
+    // 3. Modifier groups (import ALL POJ modifier groups & remap menu_item_ids)
+    onProgress?.('Syncing all modifier groups & spice levels…');
+    const existingModsRes = await supabase
+      .from('menu_modifier_groups')
+      .select('*')
+      .eq('restaurant_id', restaurantId);
+    if (existingModsRes.error) {
+      result.menu_modifier_groups.error = existingModsRes.error.message;
+      return result;
+    }
+
+    const existingModByName = new Map();
+    for (const mg of existingModsRes.data || []) {
+      const key = normalizeMenuText(mg?.name);
+      if (key && !existingModByName.has(key)) existingModByName.set(key, mg);
+    }
+
+    const writeModWithFallback = async (existingId, payload) => {
+      const run = (body) =>
+        existingId
+          ? supabase.from('menu_modifier_groups').update(body).eq('id', existingId).eq('restaurant_id', restaurantId)
+          : supabase.from('menu_modifier_groups').insert([body]);
+      let res = await run(payload);
+      if (res.error && /allow_multiple/i.test(res.error.message || '')) {
+        const { allow_multiple: _drop, ...compat } = payload;
+        res = await run(compat);
+      }
+      return res;
+    };
+
+    for (const pg of pojModifiers) {
+      const key = normalizeMenuText(pg?.name);
+      if (!key) continue;
+      const existingGroup = existingModByName.get(key) || null;
+      const mapped = remapPojModifierGroupForManiPos({
+        pojGroup: pg,
+        pojNameById,
+        maniIdByName,
+        existingGroup,
+      });
+
+      const payload = {
+        restaurant_id: restaurantId,
+        ...mapped,
+      };
+
+      const { error: writeErr } = await writeModWithFallback(existingGroup?.id || null, payload);
+      if (writeErr) {
+        result.menu_modifier_groups.error = writeErr.message;
+      } else if (existingGroup) {
+        result.menu_modifier_groups.updated += 1;
+      } else {
+        result.menu_modifier_groups.inserted += 1;
+      }
+    }
+  } catch (err) {
+    result.error = err?.message || 'Catalog & modifier sync failed';
+  }
+
+  return result;
 }
 
 /**

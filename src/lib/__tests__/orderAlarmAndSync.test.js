@@ -10,7 +10,15 @@ import {
   classifyOrderBucket,
   summarizeOrdersCumulativeTotals,
 } from '../../components/orda/LiveOrdersView';
-import { applyOrderStatusUpdate, mergeOrdersWithPoj } from '../../services/data/pojSyncService';
+import {
+  applyOrderStatusUpdate,
+  mergeOrdersWithPoj,
+  remapPojModifierGroupForManiPos,
+  fetchPojOrdersForRange,
+  resetPojEdgeProxyCache,
+  clearPojSession,
+} from '../../services/data/pojSyncService';
+import { supabase } from '../supabase';
 import {
   writeActivePortalCookie,
   readActivePortalCookie,
@@ -195,5 +203,151 @@ describe('Microsite-only acceptance, immediate Accept update, POJ ticket merge, 
     });
     clearActivePortalCookie();
     expect(readActivePortalCookie()).toBeNull();
+  });
+
+  it('remaps POJ modifier groups (e.g. Preference spice levels) to ManiPOS UUIDs without duplicates and clamps min_selected', () => {
+    const pojNameById = new Map([
+      ['poj-item-1', 'JOLLOF RICE & CHICKEN'],
+      ['poj-item-2', 'BEEF SUYA'],
+      ['poj-item-unmapped', 'SEASONAL SPECIAL'],
+    ]);
+    const maniIdByName = new Map([
+      ['JOLLOF RICE & CHICKEN', 'mani-uuid-1'],
+      ['BEEF SUYA', 'mani-uuid-2'],
+    ]);
+
+    const pref = remapPojModifierGroupForManiPos({
+      pojGroup: {
+        name: 'Preference',
+        is_required: false,
+        min_selected: 0,
+        max_selected: 99,
+        options: [
+          { name: 'Extra Spicy', price: 0, is_available: true },
+          { name: 'Mild / Less Spice', price: 0, is_available: true },
+          { name: 'No Pepper', price: 0, is_available: true },
+        ],
+        menu_item_ids: ['poj-item-1', 'poj-item-2', 'poj-item-unmapped'],
+      },
+      pojNameById,
+      maniIdByName,
+      existingGroup: {
+        id: 'existing-pref',
+        name: 'Preference',
+        menu_item_ids: ['mani-uuid-1'],
+      },
+    });
+
+    expect(pref.name).toBe('Preference');
+    expect(pref.options.map((o) => o.name)).toEqual(['Extra Spicy', 'Mild / Less Spice', 'No Pepper']);
+    expect(pref.menu_item_ids).toEqual(['mani-uuid-1', 'mani-uuid-2']);
+    expect(pref.allow_multiple).toBe(true);
+
+    const dirtyLarge = remapPojModifierGroupForManiPos({
+      pojGroup: {
+        name: 'large',
+        is_required: true,
+        min_selected: 200,
+        max_selected: 1,
+        options: [
+          { name: 'Regular', price: 0 },
+          { name: 'Large', price: 350 },
+        ],
+        menu_item_ids: ['poj-item-1'],
+      },
+      pojNameById,
+      maniIdByName,
+    });
+    expect(dirtyLarge.min_selected).toBe(1);
+    expect(dirtyLarge.max_selected).toBe(1);
+    expect(dirtyLarge.is_required).toBe(true);
+    expect(dirtyLarge.menu_item_ids).toEqual(['mani-uuid-1']);
+  });
+
+  it('uses poj-orders-sync Edge Function for PIN-only sessions and falls back cleanly on missingSecret/404', async () => {
+    clearPojSession();
+    resetPojEdgeProxyCache();
+
+    const fromSpy = vi.spyOn(supabase, 'from').mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          limit: () => ({
+            maybeSingle: async () => ({
+              data: { poj_supabase_url: 'https://bfrvzwmckuiafkgwemdt.supabase.co', link_auth_enabled: true },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const invokeSpy = vi
+      .spyOn(Object.getPrototypeOf(supabase.functions), 'invoke')
+      .mockResolvedValueOnce({
+        data: {
+          ok: true,
+          orders: [
+            {
+              id: 'poj-6478',
+              ticket_number: '6478',
+              customer_name: 'Adam',
+              total_amount: 1980,
+              items: [{ id: 'it-1', item_name: 'Jollof Rice', quantity: 1, unit_price: 1980 }],
+            },
+          ],
+        },
+        error: null,
+      });
+
+    const edgeOrders = await fetchPojOrdersForRange({
+      tenantSlug: 'potofjollof',
+      restaurantId: 'd0db680a-7956-45a5-85ae-a4286f3370a0',
+    });
+
+    expect(invokeSpy).toHaveBeenCalledWith('poj-orders-sync', expect.objectContaining({
+      body: expect.objectContaining({
+        tenant_slug: 'potofjollof',
+        restaurant_id: 'd0db680a-7956-45a5-85ae-a4286f3370a0',
+      }),
+    }));
+    expect(edgeOrders).toHaveLength(1);
+    expect(edgeOrders[0].items).toHaveLength(1);
+    expect(edgeOrders[0]._fromPoj).toBe(true);
+
+    // Fallback test when POJ_SERVICE_ROLE_KEY secret is not configured yet
+    resetPojEdgeProxyCache();
+    invokeSpy.mockResolvedValueOnce({
+      data: { ok: false, missingSecret: true },
+      error: null,
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ([
+        { id: 'poj-6479', ticket_number: '6479', total_amount: 1200, items: [] },
+      ]),
+    });
+
+    const fallbackOrders = await fetchPojOrdersForRange({
+      tenantSlug: 'potofjollof',
+      restaurantId: 'd0db680a-7956-45a5-85ae-a4286f3370a0',
+    });
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(fallbackOrders).toHaveLength(1);
+    expect(fallbackOrders[0].ticket_number).toBe('6479');
+
+    // Second call skips cached unavailable edge function without re-invoking
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ([]),
+    });
+    await fetchPojOrdersForRange({
+      tenantSlug: 'potofjollof',
+      restaurantId: 'd0db680a-7956-45a5-85ae-a4286f3370a0',
+    });
+    expect(invokeSpy).toHaveBeenCalledTimes(2);
+
+    invokeSpy.mockRestore();
+    fetchSpy.mockRestore();
+    fromSpy.mockRestore();
   });
 });
