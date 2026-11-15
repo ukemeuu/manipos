@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { supabase, setTenantContext } from './lib/supabase';
+import { supabase, setTenantContext, getTenantContext } from './lib/supabase';
 import { PinLogin } from './components/PinLogin';
 import { LandingPage } from './components/LandingPage';
 import { RetailLandingPage } from './components/RetailLandingPage';
@@ -348,7 +348,8 @@ function App() {
                 } catch (_) { return null; }
               })();
               setSession(prev => ({ ...prev, ...data.session }));
-              setTenantContext(data.session.user?.app_metadata?.tenant_id || pinFallback);
+              const nextTid = data.session.user?.app_metadata?.tenant_id || pinFallback || getTenantContext();
+              if (nextTid) setTenantContext(nextTid);
               setLoading(false);
               return;
             }
@@ -366,7 +367,8 @@ function App() {
             } catch (_) { return null; }
           })();
           setSession(prev => ({ ...prev, ...activeSession }));
-          setTenantContext(activeSession.user?.app_metadata?.tenant_id || pinFallback);
+          const nextTid = activeSession.user?.app_metadata?.tenant_id || pinFallback || getTenantContext();
+          if (nextTid) setTenantContext(nextTid);
         }
       } catch (_) {}
       setLoading(false);
@@ -384,7 +386,8 @@ function App() {
           } catch (_) { return null; }
         })();
         setSession(prev => ({ ...prev, ...activeSession }));
-        setTenantContext(activeSession.user?.app_metadata?.tenant_id || pinFallback);
+        const nextTid = activeSession.user?.app_metadata?.tenant_id || pinFallback || getTenantContext();
+        if (nextTid) setTenantContext(nextTid);
       }
     });
 
@@ -706,6 +709,7 @@ function App() {
             onSignOut={handleGlobalSignOut}
             onBack={isAdmin ? () => setCurrentRoute('app') : null}
             tenantSlug={tenantInfo.tenantSlug}
+            tenantId={resolvedRestId}
           />
         </div>
       );
@@ -722,6 +726,7 @@ function App() {
               onSignOut={handleGlobalSignOut}
             onBack={isAdmin ? () => setCurrentRoute('app') : null} 
               tenantSlug={tenantInfo.tenantSlug}
+              tenantId={resolvedRestId}
             />
           </div>
         );
@@ -770,6 +775,7 @@ function App() {
             onOpenModule={openModule}
             onSignOut={handleGlobalSignOut}
             tenantSlug={tenantInfo.tenantSlug} 
+            tenantId={resolvedRestId}
           />
         );
       }
@@ -797,6 +803,7 @@ function App() {
           onOpenModule={openModule}
           onSignOut={handleGlobalSignOut}
           tenantSlug={tenantInfo.tenantSlug} 
+          tenantId={resolvedRestId}
         />
       );
     }
@@ -863,6 +870,7 @@ function App() {
             onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
             onOpenAppHome={() => setCurrentRoute('app')}
             tenantSlug={tenantInfo.tenantSlug}
+            tenantId={resolvedRestId}
           />
         </div>
       );
@@ -943,7 +951,7 @@ function App() {
     currentRoute !== 'microsite' &&
     currentRoute !== 'feedback' &&
     currentRoute !== 'links'
-      ? (activeStaff?.restaurantId || activeStaff?.restaurant_id || tenant?.id || null)
+      ? (activeStaff?.restaurantId || activeStaff?.restaurant_id || tenant?.id || getTenantContext() || null)
       : null;
 
   return (

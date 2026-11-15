@@ -363,20 +363,19 @@ export const deobfuscateTicket = (scrambledStr) => {
     return original;
 };
 
-export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onBack, tenantSlug }) {
+export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, onBack, tenantSlug, tenantId: propTenantId = null }) {
     // Tenant isolation: every query is scoped to the signed-in staff member's restaurant.
     const sessionUser = React.useMemo(() => {
         try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
     }, []);
-    const restaurantId = sessionUser.restaurantId || sessionUser.restaurant_id || null;
+    const [tenantProfile, setTenantProfile] = React.useState(null);
+    const restaurantId = sessionUser.restaurantId || sessionUser.restaurant_id || propTenantId || tenantProfile?.id || null;
     const activeTenantSlug = tenantSlug || sessionUser.tenantSlug;
     setPosTenantId(restaurantId);
 
     // Keep the Supabase tenant context in sync so RLS can scope every request,
     // and key the offline caches to this tenant.
     React.useEffect(() => { setTenantContext(restaurantId); setPosTenantId(restaurantId); }, [restaurantId]);
-
-    const [tenantProfile, setTenantProfile] = React.useState(null);
 
     // Load this tenant's profile so printed receipts and slips carry the
     // restaurant's own name, address, phone and M-Pesa details rather than a
@@ -388,6 +387,9 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 if (!cancelled) {
                     setReceiptBrand(tenant);
                     setTenantProfile(tenant);
+                    if (tenant?.id && !sessionUser.restaurantId && !sessionUser.restaurant_id) {
+                        setTenantContext(tenant.id);
+                    }
                 }
             })
             .catch((err) => console.warn('[PosTerminal] Could not load receipt branding:', err?.message || err));
@@ -616,12 +618,13 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     const isMicrositeOrder = (o) => {
         if (!o) return false;
         const cashier = (o.cashier_name || '').toLowerCase();
-        const channel = (o.order_channel || '').toLowerCase();
+        const channel = (o.sales_channel || o.order_channel || o.channel || '').toLowerCase();
         const dining = (o.dining_option || '').toLowerCase();
         return cashier.includes('microsite') || 
                cashier.includes('self-service') ||
                channel.includes('microsite') || 
                channel.includes('self-service') || 
+               channel === 'online' ||
                dining.includes('self-service') ||
                cashier === 'self-service microsite';
     };
@@ -1625,6 +1628,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             if (!silent) {
                 alert(`Order #${obfuscateTicket(order.ticket_number)} accepted & receipt printed successfully!`);
             }
+            try { window.dispatchEvent(new CustomEvent('manipos:orders-updated')); } catch (_) { /* ignore */ }
             fetchOpenOrders();
             const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
             if (typeof fetchHistory === 'function') fetchHistory(today, today);
@@ -1661,6 +1665,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             setOpenOrders(prev => prev.filter(o => o.id !== order.id));
 
             alert(`Order #${obfuscateTicket(order.ticket_number)} declined.`);
+            try { window.dispatchEvent(new CustomEvent('manipos:orders-updated')); } catch (_) { /* ignore */ }
             fetchOpenOrders();
             const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Nairobi' });
             if (typeof fetchHistory === 'function') fetchHistory(today, today);
@@ -2362,6 +2367,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
 
     const fetchOpenOrders = async () => {
         if (!restaurantId) return;
+        setTenantContext(restaurantId);
         try {
             // Fetch:
             // 1. Orders awaiting payment OR awaiting payment verification.
@@ -2644,6 +2650,16 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             supabase.removeChannel(ordersChannel);
         };
     }, [restaurantId]);
+
+    useEffect(() => {
+        if (!restaurantId) return;
+        const onOrdersSync = () => {
+            fetchOpenOrders();
+            if (activeView === 'history') fetchHistory(historyStartDate, historyEndDate);
+        };
+        window.addEventListener('manipos:orders-updated', onOrdersSync);
+        return () => window.removeEventListener('manipos:orders-updated', onOrdersSync);
+    }, [restaurantId, activeView, historyStartDate, historyEndDate]);
 
     useEffect(() => {
         if (activeView === 'history') {
@@ -5562,47 +5578,48 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                                                              <span className="font-mono font-black text-sm text-gray-900">
                                                                  KES {parseFloat(order.total_amount || 0).toLocaleString()}
                                                              </span>
+                                                             {isMicrositeOrder(order) && !isReturned && (
+                                                                 order.payment_status?.toLowerCase().includes('pending') ||
+                                                                 ['pending', 'new', 'verifying'].includes(String(order.status || '').toLowerCase().trim())
+                                                             ) && (
+                                                                 <>
+                                                                     <button
+                                                                         type="button"
+                                                                         onClick={(e) => {
+                                                                             e.stopPropagation();
+                                                                             handleAcceptOrder(order);
+                                                                         }}
+                                                                         className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
+                                                                         title="Accept Order & Route to KDS/Printers"
+                                                                     >
+                                                                         <span>✅ Accept</span>
+                                                                     </button>
+                                                                     <button
+                                                                         type="button"
+                                                                         onClick={(e) => {
+                                                                             e.stopPropagation();
+                                                                             handleDeclineOrder(order);
+                                                                         }}
+                                                                         className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
+                                                                         title="Decline Order"
+                                                                     >
+                                                                         <span>❌ Decline</span>
+                                                                     </button>
+                                                                 </>
+                                                             )}
                                                              {order.payment_status?.toLowerCase().includes('pending') && !isReturned && (
-                                                                  <>
-                                                                      {isMicrositeOrder(order) && (
-                                                                          <>
-                                                                              <button
-                                                                                  type="button"
-                                                                                  onClick={(e) => {
-                                                                                      e.stopPropagation();
-                                                                                      handleAcceptOrder(order);
-                                                                                  }}
-                                                                                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
-                                                                                  title="Accept Order & Route to KDS/Printers"
-                                                                              >
-                                                                                  <span>✅ Accept</span>
-                                                                              </button>
-                                                                              <button
-                                                                                  type="button"
-                                                                                  onClick={(e) => {
-                                                                                      e.stopPropagation();
-                                                                                      handleDeclineOrder(order);
-                                                                                  }}
-                                                                                  className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
-                                                                                  title="Decline Order"
-                                                                              >
-                                                                                  <span>❌ Decline</span>
-                                                                              </button>
-                                                                          </>
-                                                                      )}
-                                                                      <button
-                                                                          type="button"
-                                                                          onClick={(e) => {
-                                                                              e.stopPropagation();
-                                                                              handleOpenClearModal(order);
-                                                                          }}
-                                                                          className="px-2 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
-                                                                          title="Clear Pending Payment"
-                                                                      >
-                                                                          <span>💵 Clear</span>
-                                                                      </button>
-                                                                  </>
-                                                              )}
+                                                                 <button
+                                                                     type="button"
+                                                                     onClick={(e) => {
+                                                                         e.stopPropagation();
+                                                                         handleOpenClearModal(order);
+                                                                     }}
+                                                                     className="px-2 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black text-[10px] shadow-sm hover:shadow transition-all flex items-center gap-1 cursor-pointer"
+                                                                     title="Clear Pending Payment"
+                                                                 >
+                                                                     <span>💵 Clear</span>
+                                                                 </button>
+                                                             )}
                                                              <button
                                                                  type="button"
                                                                  onClick={(e) => { e.stopPropagation(); setActiveReceipt(order); }}

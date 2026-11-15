@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BellRing, Check, XCircle, Volume2, VolumeX, Clock, ChefHat, Phone } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTenantContext } from '../lib/supabase';
 import { logAuditEvent } from '../lib/auditLogger';
 import {
   startContinuousOrderAlarm,
@@ -18,10 +18,10 @@ import {
  */
 export function isOnlineIncomingOrder(order) {
   if (!order) return false;
-  const status = String(order.status || '').toLowerCase();
-  if (status !== 'pending' && status !== 'new') return false;
+  const status = String(order.status || '').toLowerCase().trim();
+  if (status !== 'pending' && status !== 'new' && status !== 'verifying') return false;
 
-  const channel = String(order.order_channel || '').toLowerCase();
+  const channel = String(order.sales_channel || order.order_channel || order.channel || '').toLowerCase();
   const dining = String(order.dining_option || '').toLowerCase();
   const cashier = String(order.cashier_name || '').toLowerCase();
 
@@ -37,6 +37,14 @@ export function isOnlineIncomingOrder(order) {
     cashier.includes('microsite') ||
     cashier.includes('self-service')
   );
+}
+
+function extractDeliveryAddress(order) {
+  if (!order) return '';
+  if (order.delivery_address) return String(order.delivery_address).trim();
+  const notes = String(order.notes || '');
+  const m = notes.match(/Delivery Address:\s*([^\n]+(?:\n(?!Notes:|\[Promo|\[Loyalty)[^\n]+)*)/i);
+  return m ? m[1].replace(/\n+/g, ', ').trim() : '';
 }
 
 export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', staffRole = 'cashier' }) {
@@ -67,19 +75,35 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
       setPendingOrders([]);
       return;
     }
+    setTenantContext(restaurantId);
     try {
-      const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const sinceIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from('pos_orders')
-        .select('id, ticket_number, customer_name, customer_phone, dining_option, order_channel, payment_method, payment_status, total_amount, delivery_address, notes, status, cashier_name, created_at, pos_order_items(id, item_name, quantity, price, instructions)')
+        .select('id, ticket_number, customer_name, customer_phone, dining_option, order_channel, sales_channel, payment_method, payment_status, total_amount, notes, status, cashier_name, created_at, pos_order_items(id, item_name, quantity, price, instructions)')
         .eq('restaurant_id', restaurantId)
-        .in('status', ['Pending', 'New', 'pending', 'new'])
+        .in('status', ['Pending', 'New', 'Verifying', 'pending', 'new', 'verifying'])
         .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
 
-      if (error || !Array.isArray(data)) return;
-      const incoming = data.filter(isOnlineIncomingOrder);
+      let rows = data;
+      if (error) {
+        console.warn('[OrderAlarm] Primary pending query notice, trying fallback:', error?.message);
+        const fallback = await supabase
+          .from('pos_orders')
+          .select('*, items:pos_order_items(*)')
+          .eq('restaurant_id', restaurantId)
+          .in('status', ['Pending', 'New', 'Verifying', 'pending', 'new', 'verifying'])
+          .gte('created_at', sinceIso)
+          .order('created_at', { ascending: false })
+          .limit(30);
+        if (fallback.error || !Array.isArray(fallback.data)) return;
+        rows = fallback.data;
+      }
+
+      if (!Array.isArray(rows)) return;
+      const incoming = rows.filter(isOnlineIncomingOrder);
       setPendingOrders(incoming);
 
       // Fire native Android push/vibration alert once per newly discovered incoming order
@@ -97,6 +121,7 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
   // Realtime subscription + 5s resilient polling (mobile WiFi drop safe)
   useEffect(() => {
     if (!restaurantId) return undefined;
+    setTenantContext(restaurantId);
     fetchPendingIncoming();
 
     const channel = supabase
@@ -111,8 +136,11 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
       .subscribe();
 
     const pollId = setInterval(fetchPendingIncoming, 5000);
+    const onOrdersSync = () => fetchPendingIncoming();
+    window.addEventListener('manipos:orders-updated', onOrdersSync);
     return () => {
       clearInterval(pollId);
+      window.removeEventListener('manipos:orders-updated', onOrdersSync);
       supabase.removeChannel(channel);
     };
   }, [restaurantId]);
@@ -129,13 +157,18 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
 
   const handleDecision = async (order, nextStatus) => {
     if (!order?.id || !restaurantId) return;
+    setTenantContext(restaurantId);
     await unlockOrderAlarmAudio();
     setAudioUnlocked(true);
     setBusyOrderId(order.id);
     try {
+      const patch = nextStatus === 'Declined'
+        ? { status: 'Declined', payment_status: 'Voided' }
+        : { status: nextStatus };
+
       const { error } = await supabase
         .from('pos_orders')
-        .update({ status: nextStatus })
+        .update(patch)
         .eq('id', order.id)
         .eq('restaurant_id', restaurantId);
 
@@ -146,13 +179,14 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
         details: {
           order_id: order.id,
           ticket_number: order.ticket_number,
-          channel: order.order_channel || order.dining_option,
+          channel: order.sales_channel || order.order_channel || order.dining_option,
           total_amount: order.total_amount,
         },
         staff: { name: staffName, role: staffRole, restaurantId },
       });
 
       setPendingOrders((prev) => prev.filter((o) => o.id !== order.id));
+      window.dispatchEvent(new CustomEvent('manipos:orders-updated'));
     } catch (err) {
       alert(`Could not update order #${order.ticket_number}: ${err?.message || err}`);
     } finally {
@@ -164,7 +198,10 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
 
   const activeOrder = pendingOrders[0];
   const isSnoozed = snoozedUntil > Date.now();
-  const items = Array.isArray(activeOrder.pos_order_items) ? activeOrder.pos_order_items : [];
+  const items = Array.isArray(activeOrder.pos_order_items)
+    ? activeOrder.pos_order_items
+    : (Array.isArray(activeOrder.items) ? activeOrder.items : []);
+  const deliveryAddr = extractDeliveryAddress(activeOrder);
 
   return (
     <div className="fixed inset-x-0 top-0 z-[9999] p-3 sm:p-5 pointer-events-none">
@@ -253,9 +290,9 @@ export function IncomingOrderAlarmOverlay({ restaurantId, staffName = 'Staff', s
             </div>
           )}
 
-          {activeOrder.delivery_address && (
+          {deliveryAddr && (
             <p className="text-[11px] text-slate-300">
-              <strong className="text-white">Address:</strong> {activeOrder.delivery_address}
+              <strong className="text-white">Address:</strong> {deliveryAddr}
             </p>
           )}
           {activeOrder.notes && (

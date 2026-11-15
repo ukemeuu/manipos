@@ -1,4 +1,5 @@
 import { supabase, setTenantContext } from '../../lib/supabase';
+import { getActiveTenantSlug } from '../../lib/tenantConfig';
 import { isOnline } from './connectivityService';
 import { getLocalCollection, insertLocalRecord } from './localStoreService';
 import { roleDefaults } from '../../lib/permissions';
@@ -25,22 +26,37 @@ async function buildStaffSessionFromAuth(data, cleanEmail, password) {
     let resolvedTenantName = appMeta.tenant_name || '';
     let resolvedTenantSlug = appMeta.tenant_slug || '';
 
-    // Resolve tenant & role from staff_access via RPC/lookup if JWT app_metadata is absent
+    // Resolve tenant & role from SECURITY DEFINER RPC (safe when staff_access RLS is strict)
+    // and subdomain fallback if JWT app_metadata is absent.
     if (!resolvedTenantId || !resolvedRole) {
         try {
-            const { data: staffRow } = await supabase
-                .from('staff_access')
-                .select('id, name, role, restaurant_id, restaurants(id, name, slug)')
-                .ilike('email', cleanEmail)
-                .limit(1)
-                .maybeSingle();
-            if (staffRow) {
-                staffId = staffRow.id || staffId;
-                resolvedRole = resolvedRole || staffRow.role;
-                resolvedName = resolvedName || staffRow.name;
-                resolvedTenantId = resolvedTenantId || staffRow.restaurant_id;
-                resolvedTenantName = resolvedTenantName || staffRow.restaurants?.name || '';
-                resolvedTenantSlug = resolvedTenantSlug || staffRow.restaurants?.slug || '';
+            const { data: myProfile } = await supabase.rpc('get_my_staff_profile');
+            if (myProfile) {
+                staffId = myProfile.id || staffId;
+                resolvedRole = resolvedRole || myProfile.role;
+                resolvedName = resolvedName || myProfile.name;
+                resolvedTenantId = resolvedTenantId || myProfile.restaurant_id;
+                resolvedTenantName = resolvedTenantName || myProfile.restaurant_name || '';
+                resolvedTenantSlug = resolvedTenantSlug || myProfile.restaurant_slug || '';
+            }
+        } catch (_) {}
+    }
+
+    if (!resolvedTenantId) {
+        try {
+            const hostSlug = getActiveTenantSlug();
+            if (hostSlug) {
+                const { data: restRow } = await supabase
+                    .from('restaurants')
+                    .select('id, name, slug')
+                    .eq('slug', hostSlug)
+                    .limit(1)
+                    .maybeSingle();
+                if (restRow?.id) {
+                    resolvedTenantId = restRow.id;
+                    resolvedTenantName = resolvedTenantName || restRow.name || '';
+                    resolvedTenantSlug = resolvedTenantSlug || restRow.slug || hostSlug;
+                }
             }
         } catch (_) {}
     }

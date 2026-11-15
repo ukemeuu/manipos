@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, setTenantContext } from '../lib/supabase';
+import { loadTenant } from '../lib/tenantConfig';
 import { 
   BarChart as RechartsBarChart, 
   Bar, 
@@ -106,7 +107,8 @@ function setupCompletedKey() {
   }
 }
 
-export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, onSignOut, tenantSlug }) {
+export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, onSignOut, tenantSlug, tenantId: propTenantId = null }) {
+  const [fallbackTenantId, setFallbackTenantId] = useState(propTenantId || null);
   const [setupCompleted, setSetupCompleted] = useState(() => {
     try {
       return localStorage.getItem(setupCompletedKey()) === 'true';
@@ -190,10 +192,27 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   }, []);
 
   useEffect(() => {
-    fetchDashboardData();
+    if (propTenantId) {
+      setFallbackTenantId(propTenantId);
+      return;
+    }
+    const slug = tenantSlug || (() => {
+      try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}').tenantSlug; } catch { return null; }
+    })();
+    if (slug && !getActiveRestaurantId()) {
+      loadTenant(slug).then((resolved) => {
+        if (resolved?.id) setFallbackTenantId(resolved.id);
+      }).catch(() => {});
+    }
+  }, [propTenantId, tenantSlug]);
+
+  useEffect(() => {
     const restId = getActiveRestaurantId();
+    if (restId) setTenantContext(restId);
+    fetchDashboardData();
     if (!restId) return undefined;
     const refreshOrdersOnly = () => {
+      setTenantContext(restId);
       supabase
         .from('pos_orders')
         .select('*, items:pos_order_items(*)')
@@ -205,6 +224,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     };
     // Poll every 8s as fallback because Supabase Realtime websockets cannot carry the custom x-tenant-id header under RLS
     const pollTimer = setInterval(refreshOrdersOnly, 8000);
+    window.addEventListener('manipos:orders-updated', refreshOrdersOnly);
     const channel = supabase
       .channel(`admin-orders-${restId}`)
       .on(
@@ -215,9 +235,10 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       .subscribe();
     return () => {
       clearInterval(pollTimer);
+      window.removeEventListener('manipos:orders-updated', refreshOrdersOnly);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [propTenantId, fallbackTenantId]);
 
   // Seed the editable store name from the signed-in session. Saved changes
   // write back to localStorage so the rest of the app picks the new name up.
@@ -229,7 +250,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     setLoading(true);
     try {
       const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-      const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id;
+      const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id || propTenantId || fallbackTenantId;
 
       // Never fall back to an unscoped query — a missing tenant must show no data,
       // not every tenant's data.
@@ -242,6 +263,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         setLoading(false);
         return;
       }
+
+      setTenantContext(currentRestaurantId);
 
       // 1. Fetch Orders
       let ordersQuery = supabase.from('pos_orders').select('*, items:pos_order_items(*)').order('created_at', { ascending: false });
@@ -296,9 +319,22 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       if (fetchedSettings && fetchedSettings.length > 0) {
         const currentSetting = fetchedSettings[0];
         setSettings(currentSetting);
-        if (currentSetting.setup_completed) {
+        const hasOperationalData = (fetchedOrders && fetchedOrders.length > 0) || (fetchedMenu && fetchedMenu.length > 0);
+        if (currentSetting.setup_completed || hasOperationalData) {
           setSetupCompleted(true);
           localStorage.setItem(setupCompletedKey(), 'true');
+          if (!currentSetting.setup_completed && currentRestaurantId) {
+            supabase
+              .from('restaurant_settings')
+              .update({ setup_completed: true })
+              .eq('restaurant_id', currentRestaurantId)
+              .then(() => {})
+              .catch(() => {});
+          }
+          if (activeTab === 'onboarding') {
+            setActiveTab('orders');
+            setActiveModule('orders');
+          }
         } else {
           setSetupCompleted(false);
           localStorage.removeItem(setupCompletedKey());
@@ -751,9 +787,9 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   const getActiveRestaurantId = () => {
     try {
       const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-      return pinUser.restaurantId || pinUser.restaurant_id || null;
+      return pinUser.restaurantId || pinUser.restaurant_id || propTenantId || fallbackTenantId || null;
     } catch (e) {
-      return null;
+      return propTenantId || fallbackTenantId || null;
     }
   };
 
@@ -1644,6 +1680,28 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
         {/* WORKSPACE MAIN */}
         <main className="flex-1 p-5 sm:p-6 overflow-y-auto bg-slate-50">
+          {(bucketCounts.new + bucketCounts.verifying) > 0 && activeTab !== 'orders' && (
+            <div className="mb-5 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-xl bg-amber-500 text-white font-black flex items-center justify-center animate-pulse">!</span>
+                <div>
+                  <p className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                    {bucketCounts.new + bucketCounts.verifying} New Incoming Order{(bucketCounts.new + bucketCounts.verifying) > 1 ? 's' : ''} Waiting Approval
+                  </p>
+                  <p className="text-xs text-amber-800">
+                    Review and click Accept or Decline in Live Orders.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setOrderBucket('new'); selectModule('orders', 'orders'); }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer"
+              >
+                View Incoming Orders &rarr;
+              </button>
+            </div>
+          )}
           {!setupCompleted && activeTab !== 'onboarding' && (
             <div className="mb-5">
               <button

@@ -23,6 +23,24 @@ describe('orderAlarm & IncomingOrderAlarmOverlay detection', () => {
 
     expect(
       isOnlineIncomingOrder({
+        status: 'Pending',
+        order_channel: 'Online',
+        sales_channel: 'Microsite',
+        payment_status: 'pending_verification',
+        cashier_name: 'Self-Service Microsite',
+      })
+    ).toBe(true);
+
+    expect(
+      isOnlineIncomingOrder({
+        status: 'Verifying',
+        sales_channel: 'Microsite',
+        cashier_name: 'Staff',
+      })
+    ).toBe(true);
+
+    expect(
+      isOnlineIncomingOrder({
         status: 'Preparing',
         order_channel: 'Microsite',
       })
