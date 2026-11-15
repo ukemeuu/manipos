@@ -1,5 +1,5 @@
 /* ManiPOS service worker — offline shell & Android push alerts for POS terminals. */
-const VERSION = 'manipos-v10';
+const VERSION = 'manipos-v11';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 

@@ -10,6 +10,9 @@ import {
   applyFlatMarkupToPrice,
   applyPercentMarkupToPrice,
   applyBulkMarkupToCartItems,
+  getLocalDateString,
+  getRelativeLocalDateString,
+  buildOrderCreatedAtForDate,
 } from '../webPosCatalog';
 
 describe('webPosCatalog helpers', () => {
@@ -189,5 +192,23 @@ describe('webPosCatalog helpers', () => {
 
     const reset = applyBulkMarkupToCartItems(marked, 0);
     expect(reset[0].unitPrice).toBe(850);
+  });
+
+  it('resolves local business dates and backdated past-midnight created_at timestamps cleanly', () => {
+    // Simulated local 00:08 AM (past midnight)
+    const afterMidnight = new Date(2026, 10, 16, 0, 8, 0);
+    expect(getLocalDateString(afterMidnight)).toBe('2026-11-16');
+    expect(getRelativeLocalDateString(-1, afterMidnight)).toBe('2026-11-15');
+
+    // Selecting Today keeps Postgres live timestamp (returns null)
+    expect(buildOrderCreatedAtForDate('2026-11-16', afterMidnight)).toBeNull();
+
+    // Selecting Yesterday produces a 23:59 local timestamp on 2026-11-15
+    const backdatedIso = buildOrderCreatedAtForDate('2026-11-15', afterMidnight);
+    expect(backdatedIso).toBeTruthy();
+    const parsedBack = new Date(backdatedIso);
+    expect(getLocalDateString(parsedBack)).toBe('2026-11-15');
+    expect(parsedBack.getHours()).toBe(23);
+    expect(parsedBack.getMinutes()).toBe(59);
   });
 });

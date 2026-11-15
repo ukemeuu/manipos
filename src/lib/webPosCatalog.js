@@ -279,3 +279,43 @@ export function applyBulkMarkupToCartItems(cart = [], markupPercent = 0) {
     };
   });
 }
+
+/**
+ * Formats a Date into local YYYY-MM-DD (avoiding UTC off-by-one between midnight and UTC+3).
+ */
+export function getLocalDateString(now = new Date()) {
+  const d = now instanceof Date ? now : new Date(now);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Returns local YYYY-MM-DD shifted by `daysOffset` (e.g. -1 for Yesterday).
+ */
+export function getRelativeLocalDateString(daysOffset = 0, now = new Date()) {
+  const base = now instanceof Date ? new Date(now.getTime()) : new Date(now);
+  base.setDate(base.getDate() + Number(daysOffset || 0));
+  return getLocalDateString(base);
+}
+
+/**
+ * Builds an ISO `created_at` timestamp when a backdated local order date (YYYY-MM-DD)
+ * is selected (e.g. past-midnight sales recorded for Yesterday at 23:59 local time).
+ * Returns null when the selected date matches today's local date so Postgres uses live `now()`.
+ */
+export function buildOrderCreatedAtForDate(orderDateStr, now = new Date()) {
+  if (!orderDateStr || typeof orderDateStr !== 'string') return null;
+  const trimmed = orderDateStr.trim();
+  const todayStr = getLocalDateString(now);
+  if (trimmed === todayStr) return null;
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const localEnd = new Date(y, m - 1, d, 23, 59, 0, 0);
+  if (Number.isNaN(localEnd.getTime())) return null;
+  return localEnd.toISOString();
+}

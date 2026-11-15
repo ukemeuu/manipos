@@ -100,6 +100,7 @@ export async function recordOrderChargeLines({
   lines = [],
   grandTotal = 0,
   source = 'POS',
+  createdAt = null,
 }) {
   if (!restaurantId || !orderId || !Array.isArray(lines) || lines.length === 0) return;
   try {
@@ -115,6 +116,7 @@ export async function recordOrderChargeLines({
       charge_value: Number(line.amount || 0),
       base_grand_total: Number(grandTotal || 0),
       source,
+      ...(createdAt ? { created_at: createdAt } : {}),
     }));
     await supabase.from('order_charge_lines').insert(payload);
   } catch {

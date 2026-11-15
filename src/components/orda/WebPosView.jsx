@@ -21,6 +21,9 @@ import {
   applyFlatMarkupToPrice,
   applyPercentMarkupToPrice,
   applyBulkMarkupToCartItems,
+  getLocalDateString,
+  getRelativeLocalDateString,
+  buildOrderCreatedAtForDate,
 } from '../../lib/webPosCatalog';
 
 const SALES_CHANNELS = [
@@ -162,6 +165,7 @@ export function WebPosView({
   const [cart, setCart] = useState([]);
   const [editingMarkupKey, setEditingMarkupKey] = useState(null);
   const [bulkMarkupPct, setBulkMarkupPct] = useState('');
+  const [orderDate, setOrderDate] = useState(() => getLocalDateString());
   const [orderInstructions, setOrderInstructions] = useState(initialOrder?.notes || '');
   const [step, setStep] = useState(initialOrder ? 'settle' : 'build'); // 'build' | 'settle'
   const [mobilePane, setMobilePane] = useState(initialOrder ? 'cart' : 'catalog'); // 'catalog' | 'cart' on < lg viewports
@@ -752,6 +756,7 @@ export function WebPosView({
         return;
       }
 
+      const customCreatedAt = buildOrderCreatedAtForDate(orderDate);
       const payload = {
         restaurant_id: restaurantId,
         customer_name: customerName.trim() || 'Guest Customer',
@@ -775,6 +780,7 @@ export function WebPosView({
         notes: noteParts.join(' | ') || null,
         guest_id: selectedGuest?.id || null,
         idempotency_key: makeUuid(),
+        ...(customCreatedAt ? { created_at: customCreatedAt } : {}),
       };
 
       const { data: orderData, error: orderErr } = await safeInsertOrder(payload);
@@ -787,6 +793,7 @@ export function WebPosView({
           lines: chargesComputation.lines,
           grandTotal,
           source: salesChannel || 'Web POS',
+          createdAt: orderData.created_at || customCreatedAt || null,
         });
       }
 
@@ -1829,6 +1836,61 @@ export function WebPosView({
                 })
               )}
             </div>
+
+            {!initialOrder && (() => {
+              const todayStr = getLocalDateString();
+              const yesterdayStr = getRelativeLocalDateString(-1);
+              const isPastMidnightHours = new Date().getHours() < 6;
+              const isBackdated = orderDate !== todayStr;
+              return (
+                <div className={`p-2.5 rounded-xl border space-y-1.5 ${isBackdated ? 'bg-amber-50/70 border-amber-300' : 'bg-white border-slate-200'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-bold uppercase text-slate-600">
+                      Order Date
+                    </label>
+                    {isBackdated ? (
+                      <span className="text-[10px] font-bold text-amber-800">
+                        Backdated · {orderDate} (23:59)
+                      </span>
+                    ) : isPastMidnightHours ? (
+                      <span className="text-[10px] font-bold text-amber-700">
+                        Past midnight · switch to Yesterday if needed
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setOrderDate(todayStr)}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition ${orderDate === todayStr
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderDate(yesterdayStr)}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition ${orderDate === yesterdayStr
+                        ? 'bg-amber-700 text-white border-amber-700'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50'
+                        }`}
+                    >
+                      Yesterday
+                    </button>
+                    <input
+                      type="date"
+                      aria-label="Order Date"
+                      max={todayStr}
+                      value={orderDate}
+                      onChange={(e) => setOrderDate(e.target.value || todayStr)}
+                      className="flex-1 min-w-[125px] bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             <div>
               <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
