@@ -96,4 +96,22 @@ describe('POJ live order history bridge', () => {
       'Itunu Kuku',
     ]);
   });
+
+  it('aborts and returns [] if the external POJ endpoint stalls past timeoutMs', async () => {
+    mockFrom.mockImplementation(() => makeQueryChain({ data: null, error: null }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_url, opts) => {
+      return new Promise((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      });
+    });
+
+    const orders = await fetchPojOrdersForRange({
+      tenantSlug: 'potofjollof',
+      restaurantId: 'rest-poj',
+      timeoutMs: 25,
+    });
+
+    expect(orders).toEqual([]);
+    fetchSpy.mockRestore();
+  });
 });

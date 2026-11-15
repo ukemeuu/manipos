@@ -1,5 +1,5 @@
 /* ManiPOS service worker — offline shell for POS terminals. */
-const VERSION = 'manipos-v6';
+const VERSION = 'manipos-v7';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 
@@ -13,7 +13,6 @@ const ASSET_PREFIX = `${BASE_PATHNAME.endsWith('/') ? BASE_PATHNAME : `${BASE_PA
 const MAX_ASSET_CACHE_ENTRIES = 80;
 
 const SHELL_ASSETS = [
-  BASE,
   OFFLINE_URL,
   `${BASE}manifest.webmanifest`,
   `${BASE}favicon.png`,
@@ -45,13 +44,16 @@ self.addEventListener('fetch', (event) => {
   // Never intercept Supabase, payment or third-party API traffic.
   if (url.origin !== self.location.origin) return;
 
-  // Navigations: network first, fall back to the offline shell.
+  // Navigations: always bypass HTTP cache when online so updated HTML and
+  // hashed chunk references take effect immediately after a deploy.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+          }
           return response;
         })
         .catch(async () => {
@@ -81,22 +83,6 @@ self.addEventListener('fetch', (event) => {
           })
           .catch(() => cached);
         return cached || networkPromise;
-      })
-    );
-    return;
-  }
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        const network = fetch(request)
-          .then((response) => {
-            if (response && response.status === 200) {
-              const copy = response.clone();
-              caches.open(ASSET_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
-            }
-            return response;
-          })
-          .catch(() => cached);
-        return cached || network;
       })
     );
   }

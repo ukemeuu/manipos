@@ -5,6 +5,7 @@ import App from './App.jsx'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { reportError } from './lib/errorReporter'
 import { initSentry } from './lib/sentry'
+import { recoverFromChunkError } from './lib/chunkRecovery'
 
 // Load Sentry only when a DSN is configured; otherwise the Telegram error
 // pipeline handles reporting.
@@ -12,25 +13,8 @@ initSentry();
 
 // Handle dynamic import failures (e.g. redeployments deleting old chunks)
 if (typeof window !== 'undefined') {
-  const handleChunkError = (error) => {
-    if (!error) return false;
-    const msg = error.message || "";
-    const name = error.name || "";
-    const isChunkError = 
-      msg.includes("Failed to fetch dynamically imported module") ||
-      msg.includes("loading chunk") ||
-      name === "ChunkLoadError";
-      
-    if (isChunkError) {
-      console.warn("Chunk loading error detected. Auto-reloading page for latest version...");
-      window.location.reload();
-      return true;
-    }
-    return false;
-  };
-
   window.addEventListener('error', (event) => {
-    if (handleChunkError(event.error)) {
+    if (recoverFromChunkError(event.error || event.message)) {
       event.preventDefault();
       return;
     }
@@ -39,7 +23,7 @@ if (typeof window !== 'undefined') {
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (handleChunkError(event.reason)) {
+    if (recoverFromChunkError(event.reason)) {
       event.preventDefault();
       return;
     }

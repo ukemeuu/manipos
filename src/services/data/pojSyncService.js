@@ -817,10 +817,16 @@ export async function fetchPojOrdersForRange({
   startIso = null,
   endIso = null,
   limit = 5000,
+  timeoutMs = 8000,
 }) {
   if (!restaurantId) return [];
   const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
   if (!pojUrl) return [];
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller && timeoutMs > 0
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
 
   try {
     const params = new URLSearchParams();
@@ -835,6 +841,7 @@ export async function fetchPojOrdersForRange({
         apikey: POJ_ANON_KEY,
         Authorization: `Bearer ${POJ_ANON_KEY}`,
       },
+      ...(controller ? { signal: controller.signal } : {}),
     });
     if (!res.ok) return [];
     const rows = await res.json();
@@ -850,6 +857,8 @@ export async function fetchPojOrdersForRange({
     }));
   } catch (_) {
     return [];
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
