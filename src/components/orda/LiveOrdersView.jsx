@@ -495,12 +495,20 @@ export function LiveOrdersView({
   };
 
   const renderLines = (order) => {
-    if (Array.isArray(order?.pos_order_items) && order.pos_order_items.length > 0) {
-      return order.pos_order_items;
-    }
-    if (Array.isArray(order?.items) && order.items.length > 0) {
-      return order.items;
-    }
+    const parseArr = (val) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string' && val.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(val);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {}
+      }
+      return [];
+    };
+    const posItems = parseArr(order?.pos_order_items);
+    if (posItems.length > 0) return posItems;
+    const nestedItems = parseArr(order?.items);
+    if (nestedItems.length > 0) return nestedItems;
     return [];
   };
 
@@ -751,9 +759,18 @@ export function LiveOrdersView({
                     </div>
                     <div>
                       <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">Items</span>
-                      <span className="font-bold text-slate-800 block mt-0.5">
-                        {itemCount} {itemCount === 1 ? 'Item' : 'Items'}
-                      </span>
+                      {lines.length === 0 && order._fromPoj && Number(order.total_amount || 0) > 0 ? (
+                        <span
+                          className="font-bold text-amber-700 block mt-0.5"
+                          title="POJ line items require POJ Email & Password login or POJ Sync Bridge import"
+                        >
+                          Items in POJ
+                        </span>
+                      ) : (
+                        <span className="font-bold text-slate-800 block mt-0.5">
+                          {itemCount} {itemCount === 1 ? 'Item' : 'Items'}
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">Fulfillment</span>
@@ -1055,8 +1072,11 @@ export function LiveOrdersView({
                     ))}
                     {renderLines(selectedOrder).length === 0 && (
                       <tr>
-                        <td colSpan={3} className="py-4 px-3 text-center text-slate-400">
-                          <AlertCircle size={14} className="inline mr-1" /> Line items not loaded for this order.
+                        <td colSpan={3} className="py-4 px-3 text-center text-slate-500">
+                          <AlertCircle size={14} className="inline mr-1 text-amber-600" />
+                          {selectedOrder._fromPoj
+                            ? 'Line items are protected on pojmanagement.com. Sign in with POJ Email & Password or run POJ Sync Bridge to import item details.'
+                            : 'Line items not loaded for this order.'}
                         </td>
                       </tr>
                     )}

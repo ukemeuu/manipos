@@ -3,7 +3,7 @@ import { getActiveTenantSlug } from '../../lib/tenantConfig';
 import { isOnline } from './connectivityService';
 import { getLocalCollection, insertLocalRecord } from './localStoreService';
 import { roleDefaults } from '../../lib/permissions';
-import { POJ_DEFAULT_URL, POJ_ANON_KEY, normalizePojRole } from './pojSyncService';
+import { POJ_DEFAULT_URL, POJ_ANON_KEY, normalizePojRole, savePojSession, tryAcquirePojSession } from './pojSyncService';
 
 const OFFLINE_STAFF_KEY = 'manipos_offline_staff_credentials';
 
@@ -105,6 +105,7 @@ async function authenticateWithPojFallback(cleanEmail, password, preferredSlug =
         const pojAuthData = await res.json();
         if (!pojAuthData?.access_token || !pojAuthData?.user) return null;
 
+        savePojSession(pojAuthData);
         const pojUser = pojAuthData.user;
         const pojToken = pojAuthData.access_token;
 
@@ -217,6 +218,7 @@ export async function authenticateStaffLogin(email, password, preferredSlug = ''
             });
 
             if (!error && data?.session) {
+                tryAcquirePojSession(cleanEmail, password).catch(() => {});
                 return await buildStaffSessionFromAuth(data, cleanEmail, password);
             }
 
@@ -226,6 +228,7 @@ export async function authenticateStaffLogin(email, password, preferredSlug = ''
                     body: { email: cleanEmail, password, tenant_slug: targetSlug },
                 });
                 if (bridgeRes?.data?.success) {
+                    tryAcquirePojSession(cleanEmail, password).catch(() => {});
                     const retry = await supabase.auth.signInWithPassword({
                         email: cleanEmail,
                         password,

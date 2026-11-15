@@ -1,9 +1,100 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { normalizeMenuText } from '../../lib/webPosCatalog';
 
 export const POJ_DEFAULT_URL = 'https://bfrvzwmckuiafkgwemdt.supabase.co';
 export const POJ_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmcnZ6d21ja3VpYWZrZ3dlbWR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgzMjE1NTUsImV4cCI6MjA4Mzg5NzU1NX0.RfrrfzR9nlJH6ZC_Jz5Sy8EByobAnXL-VOuP0onVWfE';
+
+const POJ_SESSION_STORAGE_KEY = 'manipos_poj_session_v1';
+
+export function savePojSession(authData, pojUrl = POJ_DEFAULT_URL) {
+  if (typeof window === 'undefined' || !authData?.access_token) return;
+  try {
+    const cleanUrl = String(pojUrl || POJ_DEFAULT_URL).replace(/\/+$/, '');
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expiresAt = authData.expires_at
+      ? Number(authData.expires_at)
+      : nowSec + Number(authData.expires_in || 3600);
+    window.localStorage.setItem(
+      POJ_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        access_token: authData.access_token,
+        refresh_token: authData.refresh_token || null,
+        expires_at: expiresAt,
+        poj_url: cleanUrl,
+      })
+    );
+  } catch (_) {}
+}
+
+export function clearPojSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(POJ_SESSION_STORAGE_KEY);
+  } catch (_) {}
+}
+
+export async function getValidPojAccessToken(pojUrl = POJ_DEFAULT_URL) {
+  if (typeof window === 'undefined') return POJ_ANON_KEY;
+  const cleanUrl = String(pojUrl || POJ_DEFAULT_URL).replace(/\/+$/, '');
+  try {
+    const raw = window.localStorage.getItem(POJ_SESSION_STORAGE_KEY);
+    if (!raw) return POJ_ANON_KEY;
+    const session = JSON.parse(raw);
+    if (!session?.access_token) return POJ_ANON_KEY;
+    if (session.poj_url && String(session.poj_url).replace(/\/+$/, '') !== cleanUrl) {
+      return POJ_ANON_KEY;
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (Number(session.expires_at || 0) > nowSec + 60) {
+      return session.access_token;
+    }
+
+    if (session.refresh_token) {
+      const res = await fetch(`${cleanUrl}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: {
+          apikey: POJ_ANON_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: session.refresh_token }),
+      });
+      if (res.ok) {
+        const refreshed = await res.json();
+        if (refreshed?.access_token) {
+          savePojSession(refreshed, cleanUrl);
+          return refreshed.access_token;
+        }
+      }
+    }
+  } catch (_) {}
+  return POJ_ANON_KEY;
+}
+
+export async function tryAcquirePojSession(email, password, pojUrl = POJ_DEFAULT_URL) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail || !password) return false;
+  const cleanUrl = String(pojUrl || POJ_DEFAULT_URL).replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${cleanUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: POJ_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: cleanEmail, password }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data?.access_token) return false;
+    savePojSession(data, cleanUrl);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 function makePojClient(pojUrl = POJ_DEFAULT_URL, serviceOrAnonKey = POJ_ANON_KEY) {
   return createClient(pojUrl, serviceOrAnonKey, {
@@ -142,6 +233,7 @@ export async function exportSnapshotFromPoj({
     if (error || !data?.session) {
       throw new Error(error?.message || 'POJ Management authentication failed.');
     }
+    savePojSession(data.session, cleanUrl);
   }
 
   const tables = [
@@ -168,6 +260,7 @@ export async function exportSnapshotFromPoj({
     'suppliers',
     'inventory_items',
     'purchase_orders',
+    'menu_modifier_groups',
     'pos_orders',
     'pos_order_items',
   ];
@@ -185,10 +278,6 @@ export async function exportSnapshotFromPoj({
     snapshot.tables[tbl] = rows;
     if (error) snapshot.errors[tbl] = error;
   }
-
-  try {
-    if (!serviceRoleKey) await client.auth.signOut();
-  } catch (_) {}
 
   return snapshot;
 }
@@ -711,7 +800,7 @@ export async function importPojSnapshotToManiPos({
     restaurantId
   );
 
-  // 11. POS Orders (when pos_orders.source_poj_id exists)
+  // 11. POS Orders & Line Items (when pos_orders.source_poj_id exists)
   if ((t.pos_orders || []).length) {
     onProgress?.('Importing POS order history…');
     summary.pos_orders = await syncRowsByPojId(
@@ -737,6 +826,77 @@ export async function importPojSnapshotToManiPos({
       })),
       restaurantId
     );
+
+    if ((t.pos_order_items || []).length) {
+      onProgress?.('Importing POS order line items…');
+      try {
+        const orderMapRes = await supabase
+          .from('pos_orders')
+          .select('id, source_poj_id')
+          .eq('restaurant_id', restaurantId)
+          .not('source_poj_id', 'is', null);
+
+        if (!orderMapRes.error && Array.isArray(orderMapRes.data)) {
+          const pojOrderIdToManiId = new Map();
+          for (const o of orderMapRes.data) {
+            if (o.source_poj_id) pojOrderIdToManiId.set(String(o.source_poj_id), o.id);
+          }
+
+          const maniOrderIds = Array.from(new Set(pojOrderIdToManiId.values()));
+          const existingItemPojIds = new Set();
+          for (let i = 0; i < maniOrderIds.length; i += 200) {
+            const chunkIds = maniOrderIds.slice(i, i + 200);
+            const exItems = await supabase
+              .from('pos_order_items')
+              .select('source_poj_id')
+              .in('order_id', chunkIds)
+              .not('source_poj_id', 'is', null);
+            if (!exItems.error && Array.isArray(exItems.data)) {
+              for (const row of exItems.data) {
+                if (row.source_poj_id) existingItemPojIds.add(String(row.source_poj_id));
+              }
+            }
+          }
+
+          const newItemRows = [];
+          for (const r of t.pos_order_items || []) {
+            const pojItemId = r?.id != null ? String(r.id) : '';
+            const maniOrderId = pojOrderIdToManiId.get(String(r?.order_id || ''));
+            if (!pojItemId || !maniOrderId || existingItemPojIds.has(pojItemId)) continue;
+            existingItemPojIds.add(pojItemId);
+            newItemRows.push({
+              order_id: maniOrderId,
+              source_poj_id: pojItemId,
+              item_name: r.item_name || r.name || 'Item',
+              quantity: Number(r.quantity || 1),
+              price: Number(r.price || 0),
+              instructions: r.instructions || null,
+              modifiers: Array.isArray(r.modifiers) ? r.modifiers : [],
+              notes: r.notes || null,
+              status: r.status || 'Completed',
+              created_at: r.created_at || new Date().toISOString(),
+            });
+          }
+
+          let itemInserted = 0;
+          let itemErr = null;
+          for (let i = 0; i < newItemRows.length; i += 200) {
+            const chunk = newItemRows.slice(i, i + 200);
+            const { error } = await supabase.from('pos_order_items').insert(chunk);
+            if (error) itemErr = error.message;
+            else itemInserted += chunk.length;
+          }
+          summary.pos_order_items = {
+            inserted: itemInserted,
+            updated: 0,
+            skipped: (t.pos_order_items || []).length - newItemRows.length,
+            error: itemErr,
+          };
+        }
+      } catch (err) {
+        summary.pos_order_items = { inserted: 0, updated: 0, skipped: 0, error: err?.message || 'Failed importing order items' };
+      }
+    }
   }
 
   // Record sync timestamp in restaurant_poj_links
@@ -836,10 +996,11 @@ export async function fetchPojOrdersForRange({
     if (startIso) params.append('created_at', `gte.${startIso}`);
     if (endIso) params.append('created_at', `lte.${endIso}`);
 
+    const bearer = await getValidPojAccessToken(pojUrl);
     const res = await fetch(`${pojUrl}/rest/v1/pos_orders?${params.toString()}`, {
       headers: {
         apikey: POJ_ANON_KEY,
-        Authorization: `Bearer ${POJ_ANON_KEY}`,
+        Authorization: `Bearer ${bearer}`,
       },
       ...(controller ? { signal: controller.signal } : {}),
     });
@@ -863,27 +1024,120 @@ export async function fetchPojOrdersForRange({
 }
 
 /**
+ * Fetches live POJ menu items & modifier groups (matched cleanly by normalized item name)
+ * so Create Order immediately exposes multi-brand menus, brand pricing, and modifier groups.
+ */
+export async function fetchPojCatalogEnrichment({
+  tenantSlug,
+  restaurantId,
+  timeoutMs = 8000,
+}) {
+  if (!restaurantId) return { modifierGroups: [], pojMenuItems: [] };
+  const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
+  if (!pojUrl) return { modifierGroups: [], pojMenuItems: [] };
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller && timeoutMs > 0
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+
+  try {
+    const bearer = await getValidPojAccessToken(pojUrl);
+    const headers = {
+      apikey: POJ_ANON_KEY,
+      Authorization: `Bearer ${bearer}`,
+    };
+    const [menuRes, modRes] = await Promise.all([
+      fetch(`${pojUrl}/rest/v1/pos_menu?select=*&order=display_order.asc&limit=1000`, {
+        headers,
+        ...(controller ? { signal: controller.signal } : {}),
+      }),
+      fetch(`${pojUrl}/rest/v1/menu_modifier_groups?select=*&order=created_at.asc&limit=500`, {
+        headers,
+        ...(controller ? { signal: controller.signal } : {}),
+      }),
+    ]);
+
+    const rawMenu = menuRes.ok ? await menuRes.json().catch(() => []) : [];
+    const rawMods = modRes.ok ? await modRes.json().catch(() => []) : [];
+    const pojMenuItems = Array.isArray(rawMenu) ? rawMenu : [];
+    const nameById = new Map();
+    for (const item of pojMenuItems) {
+      if (item?.id != null && item?.name) {
+        nameById.set(String(item.id), normalizeMenuText(item.name));
+      }
+    }
+
+    const modifierGroups = (Array.isArray(rawMods) ? rawMods : []).map((g) => {
+      const ids = Array.isArray(g?.menu_item_ids) ? g.menu_item_ids : [];
+      const matchedNames = Array.from(
+        new Set(ids.map((id) => nameById.get(String(id))).filter(Boolean))
+      );
+      return {
+        ...g,
+        _fromPoj: true,
+        _matchedItemNames: matchedNames,
+      };
+    });
+
+    return {
+      modifierGroups,
+      pojMenuItems: pojMenuItems.filter((m) => m && m.is_available !== false),
+    };
+  } catch (_) {
+    return { modifierGroups: [], pojMenuItems: [] };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function orderHasLineItems(order) {
+  return (
+    (Array.isArray(order?.pos_order_items) && order.pos_order_items.length > 0) ||
+    (Array.isArray(order?.items) && order.items.length > 0)
+  );
+}
+
+/**
  * Merges ManiPOS pos_orders with linked POJ Management orders without duplicating
- * rows that already carry a matching source_poj_id or id.
+ * rows that already carry a matching source_poj_id or id, while preserving non-empty
+ * line items if one side has them and the other side lacks them.
  */
 export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
   const maniList = Array.isArray(maniOrders) ? maniOrders : [];
   const pojList = Array.isArray(pojOrders) ? pojOrders : [];
   if (!pojList.length) return maniList;
 
-  const seenIds = new Set();
-  const seenPojIds = new Set();
-  for (const o of maniList) {
-    if (o?.id) seenIds.add(String(o.id));
-    if (o?.source_poj_id) seenPojIds.add(String(o.source_poj_id));
-  }
+  const indexById = new Map();
+  const indexByPojId = new Map();
+  const merged = maniList.map((o, idx) => {
+    if (o?.id) indexById.set(String(o.id), idx);
+    if (o?.source_poj_id) indexByPojId.set(String(o.source_poj_id), idx);
+    return o;
+  });
 
-  const merged = [...maniList];
   for (const po of pojList) {
     const poId = po?.id ? String(po.id) : '';
     const srcId = po?.source_poj_id ? String(po.source_poj_id) : poId;
-    if ((poId && seenIds.has(poId)) || (srcId && seenPojIds.has(srcId))) continue;
+    const matchIdx =
+      (poId && indexById.has(poId) ? indexById.get(poId) : undefined) ??
+      (srcId && indexByPojId.has(srcId) ? indexByPojId.get(srcId) : undefined);
+
+    if (matchIdx !== undefined) {
+      const existing = merged[matchIdx];
+      if (!orderHasLineItems(existing) && orderHasLineItems(po)) {
+        merged[matchIdx] = {
+          ...existing,
+          items: Array.isArray(po.items) && po.items.length > 0 ? po.items : po.pos_order_items || [],
+        };
+      }
+      continue;
+    }
+
+    const newIdx = merged.length;
     merged.push(po);
+    if (poId) indexById.set(poId, newIdx);
+    if (srcId) indexByPojId.set(srcId, newIdx);
   }
 
   merged.sort((a, b) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime());
@@ -908,6 +1162,7 @@ export async function updatePojOrderStatus({
   const cleanPatch = { ...patch };
   const optionalCols = ['accepted_at', 'kitchen_started_at', 'kitchen_ready_at', 'completed_at', 'void_reason', 'void_disposition', 'payment_status'];
 
+  const bearer = await getValidPojAccessToken(pojUrl);
   const attemptPatch = async (payload) => {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller && timeoutMs > 0
@@ -920,7 +1175,7 @@ export async function updatePojOrderStatus({
           method: 'PATCH',
           headers: {
             apikey: POJ_ANON_KEY,
-            Authorization: `Bearer ${POJ_ANON_KEY}`,
+            Authorization: `Bearer ${bearer}`,
             'Content-Type': 'application/json',
             Prefer: 'return=representation',
           },

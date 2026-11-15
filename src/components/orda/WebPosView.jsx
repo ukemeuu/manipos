@@ -4,12 +4,22 @@ import {
   MapPin, Tag, CreditCard, Banknote, Smartphone, CheckCircle2, Loader2,
   Gift, Layers, Store, UtensilsCrossed, Truck, Clock, X, Bookmark, Sparkles, Printer
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, setTenantContext } from '../../lib/supabase';
 import { resolveEffectivePrice } from '../../lib/tenantConfig';
 import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
 import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
+import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
+import {
+  extractBrandTabs,
+  itemMatchesBrand,
+  resolveBrandItemPrice,
+  getLinkedModifierGroupsForItem,
+  computeEffectiveMinSelected,
+  mergeMenuItemsWithPoj,
+  mergeModifierGroupsWithPoj,
+} from '../../lib/webPosCatalog';
 
 const SALES_CHANNELS = [
   'Web POS',
@@ -167,7 +177,8 @@ export function WebPosView({
       }
       setLoading(true);
       try {
-        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList, tableRes] = await Promise.all([
+        setTenantContext(restaurantId);
+        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList, tableRes, pojEnrichment] = await Promise.all([
           supabase
             .from('pos_categories')
             .select('*')
@@ -199,12 +210,17 @@ export function WebPosView({
             .select('id, name, zone, seats, status')
             .eq('restaurant_id', restaurantId)
             .order('display_order', { ascending: true }),
+          fetchPojCatalogEnrichment({ tenantSlug, restaurantId }),
         ]);
 
         if (!active) return;
         if (!catRes.error) setCategories(catRes.data || []);
-        if (!menuRes.error) setMenuItems((menuRes.data || []).filter((m) => m.is_available !== false));
-        if (!modRes.error) setModifierGroups(modRes.data || []);
+        if (!menuRes.error) {
+          setMenuItems(mergeMenuItemsWithPoj(menuRes.data || [], pojEnrichment?.pojMenuItems || []));
+        }
+        if (!modRes.error) {
+          setModifierGroups(mergeModifierGroupsWithPoj(modRes.data || [], pojEnrichment?.modifierGroups || []));
+        }
         if (!comboRes.error) setCombos(comboRes.data || []);
         if (!guestRes.error) setGuests(guestRes.data || []);
         setActiveCharges(Array.isArray(chargesList) ? chargesList : []);
@@ -219,7 +235,7 @@ export function WebPosView({
     return () => {
       active = false;
     };
-  }, [restaurantId]);
+  }, [restaurantId, tenantSlug]);
 
   // Hydrate initial open order items when settling an Open order
   useEffect(() => {
@@ -250,42 +266,39 @@ export function WebPosView({
     return map;
   }, [modifierGroups]);
 
-  const brandTabs = useMemo(() => {
-    const counts = new Map();
-    menuItems.forEach((item) => {
-      const b = String(item?.brand || '').trim();
-      if (!b || b.toUpperCase() === 'MANIPOS' || b.toUpperCase() === 'ALL') return;
-      counts.set(b, (counts.get(b) || 0) + 1);
-    });
-    const list = Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
-    if (list.length <= 1) return [];
-    return [{ name: 'All', count: menuItems.length }, ...list];
-  }, [menuItems]);
+  const brandTabs = useMemo(() => extractBrandTabs(menuItems), [menuItems]);
 
-  const categoryTabs = useMemo(() => {
-    const set = new Set();
-    categories.forEach((c) => c.name && set.add(c.name));
-    menuItems.forEach((m) => set.add(m.category || 'Uncategorized'));
-    const list = ['All', ...Array.from(set)];
-    if (combos.length > 0) list.push('Combos');
-    return list;
-  }, [categories, menuItems, combos]);
-
-  const filteredItems = useMemo(() => {
-    if (selectedCategory === 'Combos') return [];
+  const brandScopedItems = useMemo(() => {
     let list = menuItems;
     if (activeBranch?.id) {
       list = list.filter((i) => !i.branch_id || i.branch_id === activeBranch.id);
     }
     if (selectedBrand !== 'All') {
-      const targetUpper = selectedBrand.toUpperCase();
-      list = list.filter((i) => {
-        const b = String(i.brand || '').toUpperCase();
-        const bs = Array.isArray(i.brands) ? i.brands.map((x) => String(x || '').toUpperCase()) : [];
-        if (!b && bs.length === 0) return true;
-        return b === targetUpper || b.includes(targetUpper) || bs.some((x) => x === targetUpper || x.includes(targetUpper));
-      });
+      list = list.filter((i) => itemMatchesBrand(i, selectedBrand));
     }
+    return list;
+  }, [menuItems, selectedBrand, activeBranch]);
+
+  const categoryTabs = useMemo(() => {
+    const itemCatSet = new Set();
+    brandScopedItems.forEach((m) => itemCatSet.add(m.category || 'Uncategorized'));
+    const ordered = [];
+    categories.forEach((c) => {
+      if (c.name && itemCatSet.has(c.name) && !ordered.includes(c.name)) {
+        ordered.push(c.name);
+      }
+    });
+    itemCatSet.forEach((name) => {
+      if (!ordered.includes(name)) ordered.push(name);
+    });
+    const list = ['All', ...ordered];
+    if (combos.length > 0) list.push('Combos');
+    return list;
+  }, [categories, brandScopedItems, combos]);
+
+  const filteredItems = useMemo(() => {
+    if (selectedCategory === 'Combos') return [];
+    let list = brandScopedItems;
     if (selectedCategory !== 'All') {
       list = list.filter((i) => (i.category || 'Uncategorized') === selectedCategory);
     }
@@ -299,7 +312,7 @@ export function WebPosView({
       );
     }
     return list;
-  }, [menuItems, selectedBrand, selectedCategory, search, activeBranch]);
+  }, [brandScopedItems, selectedCategory, search]);
 
   const filteredCombos = useMemo(() => {
     if (selectedCategory !== 'All' && selectedCategory !== 'Combos') return [];
@@ -322,14 +335,13 @@ export function WebPosView({
   const openCustomize = (item) => {
     const variations = Array.isArray(item.variations) ? item.variations : [];
     const additions = Array.isArray(item.additions) ? item.additions : [];
-    const linkedIds = Array.isArray(item.modifier_group_ids) ? item.modifier_group_ids : [];
-    const linkedGroups = linkedIds.map((id) => modifierMap.get(id)).filter(Boolean);
+    const linkedGroups = getLinkedModifierGroupsForItem(item, modifierGroups);
 
     // Quick add if item has zero variations, modifiers, or additions
     if (variations.length === 0 && linkedGroups.length === 0 && additions.length === 0) {
-      const effective = resolveEffectivePrice(item);
+      const effective = resolveBrandItemPrice(item, selectedBrand, resolveEffectivePrice);
       setCart((prev) => {
-        const existingIdx = prev.findIndex((c) => c.id === item.id && !c.summary);
+        const existingIdx = prev.findIndex((c) => c.id === item.id && c.unitPrice === effective && !c.summary);
         if (existingIdx >= 0) {
           return prev.map((c, i) => (i === existingIdx ? { ...c, quantity: c.quantity + 1 } : c));
         }
@@ -399,7 +411,7 @@ export function WebPosView({
   const modalUnitPrice = useMemo(() => {
     if (!customizingItem) return 0;
     const { item, additions, linkedGroups } = customizingItem;
-    let base = resolveEffectivePrice(item);
+    let base = resolveBrandItemPrice(item, selectedBrand, resolveEffectivePrice);
     if (selectedVariation && Number(selectedVariation.price || 0) > 0) {
       base = Number(selectedVariation.price);
     }
@@ -407,7 +419,8 @@ export function WebPosView({
     linkedGroups.forEach((g) => {
       const picks = modSelections[g.id] || {};
       (g.options || []).forEach((opt) => {
-        const qty = Number(picks[opt.name] || 0);
+        const optName = opt?.name || opt?.label || '';
+        const qty = Number(picks[optName] || 0);
         if (qty > 0) extras += Number(opt.price || 0) * qty;
       });
     });
@@ -416,7 +429,7 @@ export function WebPosView({
       if (found) extras += Number(found.price || 0);
     });
     return base + extras;
-  }, [customizingItem, selectedVariation, modSelections, selectedAdditions]);
+  }, [customizingItem, selectedVariation, modSelections, selectedAdditions, selectedBrand]);
 
   const confirmCustomItem = () => {
     if (!customizingItem) return;
@@ -425,7 +438,7 @@ export function WebPosView({
     for (const g of linkedGroups) {
       const picks = modSelections[g.id] || {};
       const total = Object.values(picks).reduce((s, n) => s + Number(n || 0), 0);
-      const minReq = g.is_required ? Math.max(1, Number(g.min_selected || 1)) : Number(g.min_selected || 0);
+      const minReq = computeEffectiveMinSelected(g);
       if (total < minReq) {
         setModalError(`"${g.name}" requires at least ${minReq} selection(s).`);
         return;
@@ -597,6 +610,7 @@ export function WebPosView({
     setErrorMsg('');
     setSubmitting(true);
     try {
+      setTenantContext(restaurantId);
       const diningVal = diningMode === 'Pickup' ? 'Takeaway' : diningMode;
       const isSettledNow = !saveAsOpen && paymentTender !== 'Paid to App';
       const resolvedSplitText = splitBreakdown.trim() || [
@@ -1032,19 +1046,22 @@ export function WebPosView({
           {step === 'build' ? (
             <>
               {brandTabs.length > 1 && (
-                <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                <div className="flex items-center gap-1.5 flex-wrap mb-3" data-testid="webpos-brand-tabs">
                   {brandTabs.map((brand) => (
                     <button
-                      key={brand}
+                      key={brand.id}
                       type="button"
-                      onClick={() => setSelectedBrand(brand)}
+                      onClick={() => {
+                        setSelectedBrand(brand.id);
+                        setSelectedCategory('All');
+                      }}
                       className={`px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${
-                        selectedBrand === brand
+                        selectedBrand === brand.id
                           ? 'bg-slate-900 text-white border-slate-900'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      {brand}
+                      {brand.name} <span className="opacity-70 text-[10px] ml-0.5">({brand.count})</span>
                     </button>
                   ))}
                 </div>
@@ -1163,12 +1180,13 @@ export function WebPosView({
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {filteredItems.map((item) => {
-                      const effPrice = resolveEffectivePrice(item);
+                      const effPrice = resolveBrandItemPrice(item, selectedBrand, resolveEffectivePrice);
                       const hasSpecial = effPrice !== Number(item.price || 0);
+                      const itemLinkedMods = getLinkedModifierGroupsForItem(item, modifierGroups);
                       const hasCustoms =
                         (item.variations?.length || 0) > 0 ||
                         (item.additions?.length || 0) > 0 ||
-                        (item.modifier_group_ids?.length || 0) > 0;
+                        itemLinkedMods.length > 0;
                       return (
                         <button
                           key={item.id}
@@ -1725,22 +1743,26 @@ export function WebPosView({
 
               {customizingItem.linkedGroups.map((g) => {
                 const picks = modSelections[g.id] || {};
-                const minReq = g.is_required ? Math.max(1, Number(g.min_selected || 1)) : Number(g.min_selected || 0);
+                const minReq = computeEffectiveMinSelected(g);
+                const availableOpts = (g.options || []).filter(
+                  (opt) => opt && opt.is_available !== false && String(opt.name || opt.label || '').trim() !== ''
+                );
                 return (
                   <div key={g.id} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black uppercase tracking-wider text-slate-700">{g.name}</p>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {g.is_required ? `Required · Min ${minReq}` : `Optional · Max ${g.max_selected || 1}`}
+                        {minReq > 0 ? `Required · Min ${minReq}` : `Optional · Max ${g.max_selected || 1}`}
                       </span>
                     </div>
                     <div className="space-y-1.5">
-                      {(g.options || []).map((opt) => {
-                        const qty = Number(picks[opt.name] || 0);
+                      {availableOpts.map((opt) => {
+                        const optName = opt.name || opt.label || '';
+                        const qty = Number(picks[optName] || 0);
                         return (
                           <div
-                            key={opt.name}
-                            onClick={() => !g.allow_multiple && toggleModOption(g, opt.name)}
+                            key={optName}
+                            onClick={() => !g.allow_multiple && toggleModOption(g, optName)}
                             className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
                               qty > 0
                                 ? 'border-emerald-600 bg-emerald-50/50'
@@ -1748,7 +1770,7 @@ export function WebPosView({
                             } ${!g.allow_multiple ? 'cursor-pointer' : ''}`}
                           >
                             <div>
-                              <span className="font-bold text-slate-900">{opt.name}</span>
+                              <span className="font-bold text-slate-900">{optName}</span>
                               {Number(opt.price || 0) > 0 && (
                                 <span className="ml-2 text-emerald-700 font-semibold">
                                   +KES {Number(opt.price).toLocaleString()}
@@ -1759,7 +1781,7 @@ export function WebPosView({
                               <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => toggleModOption(g, opt.name, -1)}
+                                  onClick={() => toggleModOption(g, optName, -1)}
                                   className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
                                 >
                                   <Minus className="w-3 h-3" />
@@ -1767,7 +1789,7 @@ export function WebPosView({
                                 <span className="w-4 text-center font-black">{qty}</span>
                                 <button
                                   type="button"
-                                  onClick={() => toggleModOption(g, opt.name, 1)}
+                                  onClick={() => toggleModOption(g, optName, 1)}
                                   className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
                                 >
                                   <Plus className="w-3 h-3" />

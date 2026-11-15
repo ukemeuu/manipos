@@ -11,7 +11,7 @@ vi.mock('../../../lib/supabase', () => ({
   },
 }));
 
-import { fetchPojOrdersForRange, mergeOrdersWithPoj } from '../pojSyncService';
+import { fetchPojOrdersForRange, mergeOrdersWithPoj, fetchPojCatalogEnrichment } from '../pojSyncService';
 
 function makeQueryChain(result) {
   const chain = {
@@ -112,6 +112,54 @@ describe('POJ live order history bridge', () => {
     });
 
     expect(orders).toEqual([]);
+    fetchSpy.mockRestore();
+  });
+
+  it('enriches an existing ManiPOS synced order that had 0 items with POJ items when available', () => {
+    const mani = [
+      { id: 'm-1', source_poj_id: 'poj-order-1', customer_name: 'John', created_at: '2026-11-15T10:00:00Z', pos_order_items: [] },
+    ];
+    const poj = [
+      {
+        id: 'poj-order-1',
+        source_poj_id: 'poj-order-1',
+        customer_name: 'John',
+        created_at: '2026-11-15T10:00:00Z',
+        items: [{ id: 'it-1', item_name: 'Jollof Rice', quantity: 2, price: 950 }],
+      },
+    ];
+
+    const merged = mergeOrdersWithPoj(mani, poj);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].items).toHaveLength(1);
+    expect(merged[0].items[0].item_name).toBe('Jollof Rice');
+  });
+
+  it('fetches POJ catalog enrichment mapping modifier group item IDs to normalized names', async () => {
+    mockFrom.mockImplementation(() => makeQueryChain({ data: null, error: null }));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 'pm-1', name: 'Smoky Jollof Rice', brands: ['POT OF JOLLOF', 'LITTLE LAGOS'], is_available: true },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 'mg-1', name: 'Protein Add-on', menu_item_ids: ['pm-1'], options: [{ name: 'Grilled Chicken', price: 350 }] },
+        ],
+      });
+
+    const enrichment = await fetchPojCatalogEnrichment({
+      tenantSlug: 'potofjollof',
+      restaurantId: 'rest-poj',
+    });
+
+    expect(enrichment.pojMenuItems).toHaveLength(1);
+    expect(enrichment.modifierGroups).toHaveLength(1);
+    expect(enrichment.modifierGroups[0]._matchedItemNames).toEqual(['SMOKY JOLLOF RICE']);
     fetchSpy.mockRestore();
   });
 });
