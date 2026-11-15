@@ -1048,11 +1048,11 @@ export async function fetchPojCatalogEnrichment({
       Authorization: `Bearer ${bearer}`,
     };
     const [menuRes, modRes] = await Promise.all([
-      fetch(`${pojUrl}/rest/v1/pos_menu?select=*&order=display_order.asc&limit=1000`, {
+      fetch(`${pojUrl}/rest/v1/pos_menu?select=*&limit=1000`, {
         headers,
         ...(controller ? { signal: controller.signal } : {}),
       }),
-      fetch(`${pojUrl}/rest/v1/menu_modifier_groups?select=*&order=created_at.asc&limit=500`, {
+      fetch(`${pojUrl}/rest/v1/menu_modifier_groups?select=*&limit=500`, {
         headers,
         ...(controller ? { signal: controller.signal } : {}),
       }),
