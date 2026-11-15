@@ -117,9 +117,35 @@ const ROLE_HOME_ROUTE = {
   issuer: 'store-ops',
 };
 
+function isGenericPosHost() {
+  return typeof window !== 'undefined' && window.location.hostname === 'pos.manipos.com';
+}
+
+function wipeLocalSessionStorage() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('pin_staff_user');
+    localStorage.removeItem('manipos_selected_brand');
+    sessionStorage.removeItem('manipos_pending_supa_session');
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch (_) {}
+}
+
 function App() {
   const [session, setSession] = useState(() => {
     try {
+      // pos.manipos.com is the shared login portal; never boot into another
+      // tenant's leftover session from localStorage (prevents redirect hijacks).
+      if (isGenericPosHost()) {
+        wipeLocalSessionStorage();
+        return null;
+      }
+
       // 1. Check URL hash/query for session transferred from pos.manipos.com login
       if (typeof window !== 'undefined') {
         const hash = window.location.hash || '';
@@ -315,21 +341,25 @@ function App() {
       ? `?page=${encodeURIComponent(explicitRoute)}`
       : (window.location.search || '');
     const targetPath = window.location.pathname && window.location.pathname !== '/' ? window.location.pathname : '/';
+    // Keep the shared pos.manipos.com login host free of any tenant tokens after handoff.
+    wipeLocalSessionStorage();
     window.location.replace(`https://${slug}.pos.manipos.com${targetPath}${search}#session=${encodeURIComponent(encodedSession)}`);
     return true;
   };
-
-  useEffect(() => {
-    if (session?.staffUser) {
-      redirectToTenantPosIfGenericHost(session.staffUser);
-    }
-  }, [session?.staffUser]);
 
   useEffect(() => {
     // Safety timer: guarantee loading spinner dismisses within 500ms
     const timer = setTimeout(() => {
       setLoading(false);
     }, 500);
+
+    // On generic pos.manipos.com login host, keep the login portal clean instead
+    // of restoring any cached tenant session from another store.
+    if (isGenericPosHost()) {
+      wipeLocalSessionStorage();
+      setLoading(false);
+      return () => clearTimeout(timer);
+    }
 
     // Restore transferred Supabase Auth session if arriving from pos.manipos.com redirect
     const restoreOrGetSession = async () => {
@@ -378,6 +408,7 @@ function App() {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
+      if (isGenericPosHost()) return;
       if (activeSession) {
         const pinFallback = (() => {
           try {
@@ -449,8 +480,7 @@ function App() {
       await supabase.auth.signOut();
     } catch (e) {}
     setTenantContext(null);
-    localStorage.removeItem('pin_staff_user');
-    localStorage.removeItem('manipos_selected_brand');
+    wipeLocalSessionStorage();
     setSession(null);
     setCurrentRoute('home');
 

@@ -16,7 +16,7 @@ function makePojClient(pojUrl = POJ_DEFAULT_URL, serviceOrAnonKey = POJ_ANON_KEY
   });
 }
 
-function normalizePojRole(pojRole, jobTitle) {
+export function normalizePojRole(pojRole, jobTitle) {
   const r = String(pojRole || '').toLowerCase().trim();
   const jt = String(jobTitle || '').toLowerCase();
   if (r === 'admin' || r === 'superadmin' || r === 'owner') return 'admin';

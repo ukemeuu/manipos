@@ -3,6 +3,7 @@ import { getActiveTenantSlug } from '../../lib/tenantConfig';
 import { isOnline } from './connectivityService';
 import { getLocalCollection, insertLocalRecord } from './localStoreService';
 import { roleDefaults } from '../../lib/permissions';
+import { POJ_DEFAULT_URL, POJ_ANON_KEY, normalizePojRole } from './pojSyncService';
 
 const OFFLINE_STAFF_KEY = 'manipos_offline_staff_credentials';
 
@@ -89,8 +90,123 @@ async function buildStaffSessionFromAuth(data, cleanEmail, password) {
     return { success: true, staffUser, session: data.session, auth: 'supabase' };
 }
 
-export async function authenticateStaffLogin(email, password) {
+async function authenticateWithPojFallback(cleanEmail, password, preferredSlug = '') {
+    try {
+        const res = await fetch(`${POJ_DEFAULT_URL}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: {
+                apikey: POJ_ANON_KEY,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email: cleanEmail, password }),
+        });
+
+        if (!res.ok) return null;
+        const pojAuthData = await res.json();
+        if (!pojAuthData?.access_token || !pojAuthData?.user) return null;
+
+        const pojUser = pojAuthData.user;
+        const pojToken = pojAuthData.access_token;
+
+        let pojProfile = {};
+        try {
+            const profRes = await fetch(
+                `${POJ_DEFAULT_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(pojUser.id)}&select=*&limit=1`,
+                {
+                    headers: {
+                        apikey: POJ_ANON_KEY,
+                        Authorization: `Bearer ${pojToken}`,
+                    },
+                }
+            );
+            if (profRes.ok) {
+                const rows = await profRes.json();
+                if (Array.isArray(rows) && rows[0]) pojProfile = rows[0];
+            }
+        } catch (_) {}
+
+        if (pojProfile.is_active === false || pojProfile.deleted_at) {
+            return { success: false, error: 'This staff account is inactive in POJ Management.' };
+        }
+
+        const slugCandidates = [
+            String(preferredSlug || getActiveTenantSlug() || '').toLowerCase().trim(),
+            'potofjollof',
+        ].filter(Boolean);
+
+        let restaurant = null;
+        for (const candidate of [...new Set(slugCandidates)]) {
+            const { data: restRow } = await supabase
+                .from('restaurants')
+                .select('id, name, slug, status, is_active')
+                .eq('slug', candidate)
+                .limit(1)
+                .maybeSingle();
+            if (restRow?.id) {
+                restaurant = restRow;
+                break;
+            }
+        }
+
+        if (!restaurant) {
+            return { success: false, error: 'Restaurant store not found in ManiPOS.' };
+        }
+
+        if (restaurant.is_active === false || ['suspended', 'rejected'].includes(restaurant.status)) {
+            return { success: false, error: 'Store access is suspended.' };
+        }
+
+        try {
+            const { data: linkRow } = await supabase
+                .from('restaurant_poj_links')
+                .select('link_auth_enabled')
+                .eq('restaurant_id', restaurant.id)
+                .limit(1)
+                .maybeSingle();
+            if (linkRow && linkRow.link_auth_enabled === false) {
+                return { success: false, error: 'POJ Auth Bridge is disabled for this restaurant.' };
+            }
+        } catch (_) {}
+
+        const fullName = String(
+            pojProfile.full_name ||
+            pojUser.user_metadata?.full_name ||
+            pojUser.user_metadata?.name ||
+            cleanEmail.split('@')[0] ||
+            'Staff'
+        );
+        const finalRole = normalizePojRole(
+            pojProfile.role || pojUser.user_metadata?.role || 'staff',
+            pojProfile.job_title || ''
+        );
+
+        const staffUser = {
+            id: pojUser.id,
+            authUid: pojUser.id,
+            name: fullName,
+            email: cleanEmail,
+            role: finalRole,
+            restaurantId: restaurant.id,
+            restaurantName: restaurant.name || '',
+            tenantSlug: restaurant.slug || 'potofjollof',
+            mustChangePassword: false,
+            permissions: roleDefaults(finalRole),
+            authSource: 'poj_direct',
+        };
+
+        setTenantContext(staffUser.restaurantId);
+        localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+        await provisionOfflineStaffCredential(cleanEmail, staffUser, password);
+        return { success: true, staffUser, auth: 'poj_direct' };
+    } catch (err) {
+        console.warn('[StaffService] POJ direct auth fallback notice:', err?.message || err);
+        return null;
+    }
+}
+
+export async function authenticateStaffLogin(email, password, preferredSlug = '') {
     const cleanEmail = (email || '').toLowerCase().trim();
+    const targetSlug = (preferredSlug || getActiveTenantSlug() || '').toLowerCase().trim() || 'potofjollof';
 
     // 1. Preferred: Supabase Auth (with automatic POJ Auth Bridge fallback).
     if (isOnline()) {
@@ -107,7 +223,7 @@ export async function authenticateStaffLogin(email, password) {
             // Try linked POJ Management Supabase Auth Bridge for migrated accounts
             try {
                 const bridgeRes = await supabase.functions.invoke('poj-auth-bridge', {
-                    body: { email: cleanEmail, password },
+                    body: { email: cleanEmail, password, tenant_slug: targetSlug },
                 });
                 if (bridgeRes?.data?.success) {
                     const retry = await supabase.auth.signInWithPassword({
@@ -119,6 +235,13 @@ export async function authenticateStaffLogin(email, password) {
                     }
                 }
             } catch (_) {}
+
+            // Fallback when poj-auth-bridge Edge Function isn't deployed yet:
+            // verify directly against POJ Management Supabase Auth + profiles.
+            const pojResult = await authenticateWithPojFallback(cleanEmail, password, targetSlug);
+            if (pojResult) {
+                return pojResult;
+            }
 
             // Auth user not found / password mismatch — try the legacy PIN RPC below.
             console.info('[StaffService] Supabase Auth unavailable for this account, trying legacy PIN.');
@@ -157,10 +280,127 @@ export async function authenticateStaffLogin(email, password) {
 }
 
 /**
+ * Fetch non-sensitive active staff names for Quick PIN selection on a store's POS terminal.
+ */
+export async function fetchTerminalStaffRoster(tenantSlug) {
+    const cleanSlug = String(tenantSlug || getActiveTenantSlug() || '').toLowerCase().trim();
+    if (!cleanSlug || !isOnline()) return [];
+    try {
+        const { data, error } = await supabase.rpc('get_terminal_staff_names', {
+            p_tenant_slug: cleanSlug,
+        });
+        if (!error && Array.isArray(data)) return data;
+    } catch (_) {}
+    return [];
+}
+
+/**
+ * Store-scoped 4-digit Staff PIN sign-in for POS terminals.
+ */
+export async function authenticateStaffQuickPin({ tenantSlug, pin, staffId = null, staffName = '' }) {
+    const cleanSlug = String(tenantSlug || getActiveTenantSlug() || '').toLowerCase().trim();
+    const cleanPin = String(pin || '').trim();
+    const cleanName = String(staffName || '').trim();
+
+    if (!cleanSlug) {
+        return { success: false, error: 'Enter your store code (e.g. potofjollof).' };
+    }
+    if (cleanPin.length < 4) {
+        return { success: false, error: 'Enter your 4-digit PIN.' };
+    }
+
+    if (isOnline()) {
+        let store = null;
+        try {
+            const { data: restRow } = await supabase
+                .from('restaurants')
+                .select('id, name, slug, status, is_active')
+                .eq('slug', cleanSlug)
+                .limit(1)
+                .maybeSingle();
+            if (restRow?.id) store = restRow;
+        } catch (_) {}
+
+        try {
+            const { data: rpcRes, error: rpcError } = await supabase.rpc('verify_staff_pin_for_store', {
+                p_tenant_slug: cleanSlug,
+                p_pin: cleanPin,
+                p_staff_id: staffId || null,
+            });
+
+            if (!rpcError && rpcRes) {
+                if (rpcRes.success && rpcRes.staff_user) {
+                    const raw = rpcRes.staff_user;
+                    const staffUser = {
+                        ...raw,
+                        restaurantId: raw.restaurantId || store?.id || null,
+                        restaurantName: raw.restaurantName || store?.name || '',
+                        tenantSlug: raw.tenantSlug || store?.slug || cleanSlug,
+                        permissions: Array.isArray(raw.permissions) && raw.permissions.length
+                            ? raw.permissions
+                            : roleDefaults(raw.role || 'cashier'),
+                    };
+                    setTenantContext(staffUser.restaurantId);
+                    localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+                    await provisionOfflineStaffCredential(`${cleanSlug}:pin:${String(staffUser.name || '').toLowerCase()}`, staffUser, cleanPin);
+                    await provisionOfflineStaffCredential(`${cleanSlug}:pin`, staffUser, cleanPin);
+                    return { success: true, staffUser, auth: 'pin' };
+                }
+                return { success: false, error: rpcRes.error || 'Incorrect PIN.' };
+            }
+        } catch (_) {}
+
+        // Fallback to existing 3-arg verify_staff_pin(p_name, p_pin, p_restaurant_id)
+        // when 20261121_terminal_pin_and_poj_auth.sql hasn't been applied yet.
+        if (!store?.id) {
+            return { success: false, error: 'Store not found. Check your store code.' };
+        }
+        if (!cleanName) {
+            return {
+                success: false,
+                needsStaffName: true,
+                error: 'Enter your Staff Name alongside your 4-digit PIN.',
+            };
+        }
+
+        try {
+            const { data: legacyPinRes, error: legacyPinErr } = await supabase.rpc('verify_staff_pin', {
+                p_name: cleanName,
+                p_pin: cleanPin,
+                p_restaurant_id: store.id,
+            });
+            if (!legacyPinErr && legacyPinRes?.success && legacyPinRes.staff_user) {
+                const raw = legacyPinRes.staff_user;
+                const staffUser = {
+                    ...raw,
+                    restaurantId: raw.restaurantId || store.id,
+                    restaurantName: store.name || '',
+                    tenantSlug: store.slug || cleanSlug,
+                    permissions: Array.isArray(raw.permissions) && raw.permissions.length
+                        ? raw.permissions
+                        : roleDefaults(raw.role || 'cashier'),
+                };
+                setTenantContext(staffUser.restaurantId);
+                localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+                await provisionOfflineStaffCredential(`${cleanSlug}:pin:${cleanName.toLowerCase()}`, staffUser, cleanPin);
+                await provisionOfflineStaffCredential(`${cleanSlug}:pin`, staffUser, cleanPin);
+                return { success: true, staffUser, auth: 'pin_legacy' };
+            }
+            return { success: false, error: legacyPinRes?.error || 'Incorrect Staff Name or PIN.' };
+        } catch (err) {
+            console.warn('[StaffService] PIN verification notice:', err);
+        }
+    }
+
+    const offlineKey = cleanName ? `${cleanSlug}:pin:${cleanName.toLowerCase()}` : `${cleanSlug}:pin`;
+    return await verifyOfflineStaffCredential(offlineKey, cleanPin);
+}
+
+/**
  * Legacy/PIN compatibility wrapper
  */
 export async function authenticateStaffPin(restaurantSlug, pinCode) {
-    return authenticateStaffLogin(restaurantSlug, pinCode);
+    return authenticateStaffQuickPin({ tenantSlug: restaurantSlug, pin: pinCode });
 }
 
 async function hashSecretWithSalt(secret, salt) {
