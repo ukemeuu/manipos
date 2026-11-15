@@ -97,6 +97,7 @@ import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
+import { authenticateStaffQuickPin } from '../services/data/staffService';
 import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
 import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, printZReport } from '../lib/posPrintService';
 import {
@@ -630,28 +631,24 @@ export function AdminDashboard({
       return;
     }
     const restId = getActiveRestaurantId();
+    const resolvedSlug = tenantSlug || effectiveStaffUser?.tenantSlug || '';
     setLockBusy(true);
     setLockError('');
     try {
-      const { data, error } = await supabase.rpc('verify_staff_pin', {
-        p_restaurant_id: restId,
-        p_pin: cleanPin,
-        p_staff_name: null,
+      const res = await authenticateStaffQuickPin({
+        tenantSlug: resolvedSlug,
+        pin: cleanPin,
       });
-      if (error) throw error;
-      if (!data?.success || !data?.staff) {
-        setLockError(data?.error || 'Incorrect PIN.');
+      if (!res?.success || !res?.staffUser) {
+        setLockError(res?.error || 'Incorrect PIN.');
         setLockBusy(false);
         return;
       }
       const nextStaff = {
-        ...(effectiveStaffUser || {}),
-        id: data.staff.id,
-        name: data.staff.name,
-        role: data.staff.role,
-        permissions: data.staff.permissions ?? null,
-        restaurantId: restId,
-        restaurantName: restaurantName || profileName,
+        ...res.staffUser,
+        restaurantId: res.staffUser.restaurantId || restId,
+        restaurantName: res.staffUser.restaurantName || restaurantName || profileName,
+        tenantSlug: res.staffUser.tenantSlug || resolvedSlug,
       };
       localStorage.setItem('pin_staff_user', JSON.stringify(nextStaff));
       setSessionStaffUser(nextStaff);
