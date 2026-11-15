@@ -19,6 +19,24 @@ const normalizeName = (val: unknown) =>
     .toLowerCase()
     .replace(/\s+/g, ' ');
 
+function inspectSupabaseKeyRole(rawKey: string): string {
+  const clean = String(rawKey || '').trim();
+  if (clean.startsWith('sb_publishable_')) return 'publishable';
+  if (clean.startsWith('sb_secret_')) return 'secret';
+  const parts = clean.split('.');
+  if (parts.length === 3) {
+    try {
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+      const payload = JSON.parse(atob(padded));
+      return String(payload?.role || 'unknown');
+    } catch {
+      return 'unknown';
+    }
+  }
+  return 'unknown';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -35,12 +53,21 @@ serve(async (req) => {
       return jsonResponse({ ok: false, error: 'Server configuration error' }, 500);
     }
 
-    const pojServiceKey = Deno.env.get('POJ_SERVICE_ROLE_KEY') || '';
+    const pojServiceKey = (Deno.env.get('POJ_SERVICE_ROLE_KEY') || '').trim();
     if (!pojServiceKey) {
       return jsonResponse({
         ok: false,
         missingSecret: true,
         error: 'POJ_SERVICE_ROLE_KEY secret is not configured.',
+      });
+    }
+
+    const keyRole = inspectSupabaseKeyRole(pojServiceKey);
+    if (keyRole === 'anon' || keyRole === 'publishable') {
+      return jsonResponse({
+        ok: false,
+        wrongKeyRole: keyRole,
+        error: `POJ_SERVICE_ROLE_KEY is a public "${keyRole}" key. Set the POJ project's secret service_role key instead.`,
       });
     }
 
@@ -112,11 +139,45 @@ serve(async (req) => {
       const errText = await ordersRes.text().catch(() => '');
       return jsonResponse({
         ok: false,
+        keyRole,
         error: `POJ REST query failed (${ordersRes.status}): ${errText.slice(0, 200)}`,
       });
     }
 
-    const orders = (await ordersRes.json()) || [];
+    const orders = ((await ordersRes.json()) || []) as Record<string, unknown>[];
+
+    // If any returned POJ orders still have empty embedded items, query pos_order_items directly by order_id
+    let itemsFallbackCount = 0;
+    const missingOrderIds = orders
+      .filter((o) => o?.id && (!Array.isArray(o.items) || o.items.length === 0))
+      .map((o) => String(o.id));
+
+    if (missingOrderIds.length > 0) {
+      const itemsByOrderId = new Map<string, Record<string, unknown>[]>();
+      for (let i = 0; i < missingOrderIds.length; i += 80) {
+        const chunk = missingOrderIds.slice(i, i + 80);
+        const itemRes = await fetch(
+          `${pojBaseUrl}/rest/v1/pos_order_items?select=*&order_id=in.(${chunk.join(',')})&limit=2000`,
+          { headers: pojHeaders }
+        );
+        if (itemRes.ok) {
+          const itemList = ((await itemRes.json()) || []) as Record<string, unknown>[];
+          for (const it of itemList) {
+            const oid = String(it.order_id || '');
+            if (!oid) continue;
+            if (!itemsByOrderId.has(oid)) itemsByOrderId.set(oid, []);
+            itemsByOrderId.get(oid)!.push(it);
+            itemsFallbackCount++;
+          }
+        }
+      }
+      for (const o of orders) {
+        const oid = String(o.id || '');
+        if ((!Array.isArray(o.items) || o.items.length === 0) && itemsByOrderId.has(oid)) {
+          o.items = itemsByOrderId.get(oid);
+        }
+      }
+    }
 
     // Optional catalog & modifier export using service role
     let catalog: Record<string, unknown> | undefined;
@@ -140,68 +201,68 @@ serve(async (req) => {
       catalog = { pos_categories, pos_menu, menu_modifier_groups };
     }
 
-    // Best-effort upsert POJ orders + items into ManiPOS DB so downstream PIN-only queries stay populated
+    // Best-effort upsert POJ orders + items into ManiPOS DB using ManiPOS's exact pos_orders / pos_order_items schema
     let syncedCount = 0;
     let syncedItemsCount = 0;
-    let syncWarning: string | undefined;
+    const warnings: string[] = [];
 
     if (syncToManiPos && Array.isArray(orders) && orders.length > 0) {
       try {
-        const orderRows = orders.map((o: Record<string, unknown>) => ({
+        const orderRows = orders.map((o) => ({
           restaurant_id: restaurantId,
           source_poj_id: String(o.id),
-          order_number: o.order_number ?? null,
-          channel: o.channel || 'walk-in',
-          order_type: o.order_type || o.fulfillment_type || 'dine-in',
-          customer_name: o.customer_name || o.guest_name || null,
-          customer_phone: o.customer_phone || o.guest_phone || null,
-          table_number: o.table_number ?? null,
+          ticket_number: o.ticket_number != null ? String(o.ticket_number) : '',
+          customer_name: String(o.customer_name || o.guest_name || 'Walk-in Guest'),
+          dining_option: String(o.dining_option || 'Dine In'),
+          payment_method: o.payment_method ? String(o.payment_method) : 'Cash',
+          payment_status: o.payment_status ? String(o.payment_status) : 'Pending',
+          status: o.status ? String(o.status) : 'Pending',
           total_amount: Number(o.total_amount ?? o.total ?? 0),
-          subtotal: Number(o.subtotal ?? o.total_amount ?? o.total ?? 0),
-          tax_amount: Number(o.tax_amount ?? 0),
-          discount_amount: Number(o.discount_amount ?? 0),
-          payment_method: o.payment_method || null,
-          payment_status: o.payment_status || 'pending',
-          status: o.status || 'new',
-          notes: o.notes || null,
-          brand_name: o.brand_name || null,
+          discount: Number(o.discount ?? 0),
+          cashier_name: o.cashier_name ? String(o.cashier_name) : 'Staff',
+          notes: o.notes ? String(o.notes) : null,
+          brand: o.brand ? String(o.brand) : 'POT OF JOLLOF',
+          order_channel: o.order_channel ? String(o.order_channel) : 'Walk-in',
+          delivery_address: o.delivery_address ? String(o.delivery_address) : null,
+          delivery_fee: Number(o.delivery_fee ?? 0),
           created_at: o.created_at || new Date().toISOString(),
         }));
 
-        const { data: existingOrders } = await maniAdmin
-          .from('pos_orders')
-          .select('id, source_poj_id')
-          .eq('restaurant_id', restaurantId)
-          .in(
-            'source_poj_id',
-            orderRows.map((r: { source_poj_id: string }) => r.source_poj_id)
-          );
-
-        const existingMap = new Map<string, string>(
-          (existingOrders || []).map((row: { id: string; source_poj_id: string }) => [
-            String(row.source_poj_id),
-            String(row.id),
-          ])
-        );
+        const pojIds = orderRows.map((r) => r.source_poj_id);
+        const existingMap = new Map<string, string>();
+        for (let i = 0; i < pojIds.length; i += 200) {
+          const { data: existingOrders } = await maniAdmin
+            .from('pos_orders')
+            .select('id, source_poj_id')
+            .eq('restaurant_id', restaurantId)
+            .in('source_poj_id', pojIds.slice(i, i + 200));
+          for (const row of existingOrders || []) {
+            existingMap.set(String(row.source_poj_id), String(row.id));
+          }
+        }
 
         const toInsert = orderRows.filter((r) => !existingMap.has(r.source_poj_id));
         const toUpdate = orderRows.filter((r) => existingMap.has(r.source_poj_id));
 
         if (toInsert.length > 0) {
-          const { data: inserted } = await maniAdmin
+          const { data: inserted, error: insErr } = await maniAdmin
             .from('pos_orders')
             .insert(toInsert)
             .select('id, source_poj_id');
-          for (const row of inserted || []) {
-            existingMap.set(String(row.source_poj_id), String(row.id));
-            syncedCount++;
+          if (insErr) {
+            warnings.push(`pos_orders insert: ${insErr.message}`);
+          } else {
+            for (const row of inserted || []) {
+              existingMap.set(String(row.source_poj_id), String(row.id));
+              syncedCount++;
+            }
           }
         }
 
         for (const upd of toUpdate) {
           const maniId = existingMap.get(upd.source_poj_id);
           if (!maniId) continue;
-          await maniAdmin
+          const { error: updErr } = await maniAdmin
             .from('pos_orders')
             .update({
               status: upd.status,
@@ -210,7 +271,7 @@ serve(async (req) => {
               total_amount: upd.total_amount,
             })
             .eq('id', maniId);
-          syncedCount++;
+          if (!updErr) syncedCount++;
         }
 
         // Sync pos_order_items for each mapped order
@@ -223,60 +284,63 @@ serve(async (req) => {
         );
 
         const itemRows: Record<string, unknown>[] = [];
-        for (const pojOrder of orders as Record<string, unknown>[]) {
+        for (const pojOrder of orders) {
           const maniOrderId = existingMap.get(String(pojOrder.id));
           if (!maniOrderId || !Array.isArray(pojOrder.items)) continue;
           for (const it of pojOrder.items as Record<string, unknown>[]) {
             const itemName = String(it.item_name || it.name || 'Item');
             itemRows.push({
-              restaurant_id: restaurantId,
               order_id: maniOrderId,
               source_poj_id: String(it.id),
               menu_item_id: menuByName.get(normalizeName(itemName)) || null,
               item_name: itemName,
               quantity: Math.max(1, Number(it.quantity ?? 1)),
-              unit_price: Number(it.unit_price ?? it.price ?? 0),
-              total_price: Number(it.total_price ?? Number(it.unit_price ?? it.price ?? 0) * Math.max(1, Number(it.quantity ?? 1))),
-              modifiers: it.modifiers ?? null,
-              notes: it.notes ?? null,
+              price: Number(it.price ?? it.unit_price ?? 0),
+              instructions: it.instructions ? String(it.instructions) : null,
+              modifiers: Array.isArray(it.modifiers) ? it.modifiers : [],
+              notes: it.notes ? String(it.notes) : null,
             });
           }
         }
 
         if (itemRows.length > 0) {
-          const { data: existingItems } = await maniAdmin
-            .from('pos_order_items')
-            .select('id, source_poj_id')
-            .eq('restaurant_id', restaurantId)
-            .in(
-              'source_poj_id',
-              itemRows.map((r) => String(r.source_poj_id))
-            );
-          const seenItemIds = new Set(
-            (existingItems || []).map((row: { source_poj_id: string }) => String(row.source_poj_id))
-          );
+          const itemPojIds = itemRows.map((r) => String(r.source_poj_id));
+          const seenItemIds = new Set<string>();
+          for (let i = 0; i < itemPojIds.length; i += 200) {
+            const { data: existingItems } = await maniAdmin
+              .from('pos_order_items')
+              .select('id, source_poj_id')
+              .in('source_poj_id', itemPojIds.slice(i, i + 200));
+            for (const row of existingItems || []) {
+              seenItemIds.add(String(row.source_poj_id));
+            }
+          }
           const missingItems = itemRows.filter((r) => !seenItemIds.has(String(r.source_poj_id)));
           if (missingItems.length > 0) {
             const { error: itemInsertErr } = await maniAdmin
               .from('pos_order_items')
               .insert(missingItems);
-            if (!itemInsertErr) {
+            if (itemInsertErr) {
+              warnings.push(`pos_order_items insert: ${itemInsertErr.message}`);
+            } else {
               syncedItemsCount = missingItems.length;
             }
           }
         }
       } catch (dbErr) {
-        syncWarning = dbErr instanceof Error ? dbErr.message : String(dbErr);
+        warnings.push(dbErr instanceof Error ? dbErr.message : String(dbErr));
       }
     }
 
     return jsonResponse({
       ok: true,
+      keyRole,
+      itemsFallbackCount,
       orders,
       ...(catalog ? { catalog } : {}),
       syncedCount,
       syncedItemsCount,
-      ...(syncWarning ? { syncWarning } : {}),
+      ...(warnings.length > 0 ? { syncWarning: warnings.join('; ') } : {}),
     });
   } catch (err) {
     return jsonResponse({
