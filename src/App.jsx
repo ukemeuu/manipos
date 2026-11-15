@@ -304,10 +304,13 @@ function App() {
     fetchStoreStatus();
   }, [tenantInfo.tenantSlug, currentRoute, session]);
 
-  // Redirect generic pos.manipos.com sessions to the tenant's own <slug>.pos.manipos.com domain
+  // Redirect generic pos.manipos.com (or mismatched <other>.pos.manipos.com) sessions
+  // to the authenticated staff member's own <slug>.pos.manipos.com domain.
   const redirectToTenantPosIfGenericHost = async (staffUser, explicitRoute = null) => {
     if (typeof window === 'undefined' || !staffUser) return false;
-    if (window.location.hostname !== 'pos.manipos.com') return false;
+    const host = window.location.hostname;
+    const isPosFamilyHost = host === 'pos.manipos.com' || host.endsWith('.pos.manipos.com');
+    if (!isPosFamilyHost || window.Capacitor?.isNativePlatform?.()) return false;
 
     let slug = staffUser.tenantSlug;
     if (!slug && (staffUser.restaurantId || staffUser.restaurant_id)) {
@@ -321,7 +324,7 @@ function App() {
       } catch (_) {}
     }
 
-    if (!slug || slug === 'pos') return false;
+    if (!slug || slug === 'pos' || host === `${slug}.pos.manipos.com`) return false;
 
     const updatedStaffUser = { ...staffUser, tenantSlug: slug };
     const transferPayload = { staffUser: updatedStaffUser };
@@ -485,20 +488,20 @@ function App() {
     setCurrentRoute('home');
 
     // Leave via a real navigation (replace, not push) so the signed-in screens
-    // stay out of the browser history. Pushing '/' used to land on the
-    // marketing page while still on the tenant subdomain, and the browser Back
-    // button then bounced back into the session.
+    // stay out of the browser history. Always return to the neutral shared login
+    // domain (pos.manipos.com) rather than staying pinned on a tenant URL.
     const host = window.location.hostname;
-    if (host === 'manipos.com' || host === 'www.manipos.com') {
+    const isLocalOrNative =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      /^(127|10|192\.168)\./.test(host) ||
+      Boolean(window.Capacitor?.isNativePlatform?.());
+    if (isLocalOrNative) {
       window.location.replace('/?page=login');
       return;
     }
 
-    const slug = tenantInfo?.tenantSlug;
-    const loginUrl = slug
-      ? `https://${slug}.pos.manipos.com/`
-      : 'https://pos.manipos.com/';
-    window.location.replace(loginUrl);
+    window.location.replace('https://pos.manipos.com/');
   };
 
   const renderContent = () => {
