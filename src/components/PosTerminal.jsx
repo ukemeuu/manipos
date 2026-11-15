@@ -507,6 +507,8 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
         );
     };
 
+    const [micrositeTrayOpen, setMicrositeTrayOpen] = useState(false);
+
     // Screen lock
     const [isLocked, setIsLocked] = useState(false);
     const [lockPin, setLockPin] = useState(['', '', '', '']);
@@ -4244,59 +4246,145 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 </div>
             </header>
 
-            {/* Global Microsite Orders Banner — visible in every view, not just Dine-In Tables.
-                Microsite orders are created as Pending and must be accepted by staff before
-                the kitchen makes them. Without this, they were only shown on the Tables tab. */}
+            {/* Compact single-row Microsite Orders Strip + optional floating review tray.
+                Keeps menu items visible even when 10+ online orders await approval. */}
             {(() => {
                 const pendingMicrosite = openOrders.filter(isPendingMicrositeOrder);
                 if (pendingMicrosite.length === 0) return null;
                 return (
-                    <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 sm:px-6 shrink-0 relative z-10">
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-base">🔔</span>
-                                <span className="text-[11px] font-black uppercase tracking-wider text-amber-800">
-                                    {pendingMicrosite.length} Microsite Order{pendingMicrosite.length > 1 ? 's' : ''} Awaiting Approval
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
+                    <div className="bg-amber-50 border-b border-amber-200 px-3 py-1.5 sm:px-5 shrink-0 relative z-20">
+                        <div className="flex items-center gap-2.5">
+                            <button
+                                type="button"
+                                onClick={() => setMicrositeTrayOpen(v => !v)}
+                                className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 font-black text-[11px] uppercase tracking-wider cursor-pointer transition-colors"
+                            >
+                                <span>🔔</span>
+                                <span>{pendingMicrosite.length} Online</span>
+                            </button>
+
+                            <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto flex-nowrap custom-scrollbar py-0.5">
                                 {pendingMicrosite.map(order => (
-                                    <div key={order.id} className="flex items-center gap-2 bg-white border border-amber-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                                    <div key={order.id} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-lg px-2 py-1 shadow-xs shrink-0 whitespace-nowrap">
                                         <span className="text-[10px] font-black text-white bg-amber-600 px-1.5 py-0.5 rounded">
                                             #{obfuscateTicket(order.ticket_number)}
                                         </span>
-                                        <span className="text-[11px] font-bold text-gray-800">{order.customer_name}</span>
-                                        <span className="text-[10px] text-gray-500">({order.dining_option})</span>
+                                        <span className="text-[11px] font-bold text-gray-800 max-w-[115px] truncate">{order.customer_name}</span>
                                         <span className="font-mono text-[11px] font-black text-gray-900">KES {Number(order.total_amount || 0).toLocaleString()}</span>
                                         {(order.payment_status || '').toLowerCase() === 'paid' && (
-                                            <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                                M-Pesa Paid
+                                            <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 px-1 py-0.5 rounded uppercase">
+                                                Paid
                                             </span>
                                         )}
                                         {(order.payment_status || '').toLowerCase() === 'pending_verification' && (
                                             <span
-                                                title="The customer submitted an M-Pesa code. Verify it against your paybill before accepting."
-                                                className="text-[9px] font-black text-sky-700 bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded uppercase tracking-wider"
+                                                title="Verify customer M-Pesa code before accepting."
+                                                className="text-[9px] font-black text-sky-700 bg-sky-100 border border-sky-200 px-1 py-0.5 rounded uppercase"
                                             >
-                                                M-Pesa code
+                                                M-Pesa
                                             </span>
                                         )}
                                         <button
+                                            type="button"
                                             onClick={() => handleAcceptOrder(order)}
-                                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase rounded cursor-pointer transition-colors"
                                         >
                                             Accept
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => handleDeclineOrder(order)}
-                                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-red-100 transition-colors"
+                                            className="px-2 py-0.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] uppercase rounded border border-red-100 cursor-pointer transition-colors"
                                         >
                                             Decline
                                         </button>
                                     </div>
                                 ))}
                             </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setMicrositeTrayOpen(v => !v)}
+                                className="shrink-0 px-2.5 py-1 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 font-extrabold text-[10px] uppercase tracking-wider cursor-pointer transition-colors whitespace-nowrap"
+                            >
+                                {micrositeTrayOpen ? 'Hide All' : `Review All (${pendingMicrosite.length})`}
+                            </button>
                         </div>
+
+                        {micrositeTrayOpen && (
+                            <div className="absolute left-3 right-3 sm:left-5 sm:right-5 top-full mt-1.5 z-40 bg-white border border-amber-300 rounded-2xl shadow-2xl p-4 max-h-[65vh] overflow-y-auto custom-scrollbar">
+                                <div className="flex items-center justify-between gap-3 mb-3 pb-2 border-b border-amber-100">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-base">🔔</span>
+                                        <span className="text-xs font-black uppercase tracking-wider text-amber-900">
+                                            {pendingMicrosite.length} Microsite Order{pendingMicrosite.length > 1 ? 's' : ''} Awaiting Approval
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMicrositeTrayOpen(false)}
+                                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                                    {pendingMicrosite.map(order => (
+                                        <div key={order.id} className="flex flex-col justify-between gap-2 bg-amber-50/60 border border-amber-200 rounded-xl p-3">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="text-[10px] font-black text-white bg-amber-600 px-1.5 py-0.5 rounded">
+                                                            #{obfuscateTicket(order.ticket_number)}
+                                                        </span>
+                                                        <span className="text-xs font-bold text-gray-900 truncate">{order.customer_name}</span>
+                                                        <span className="text-[10px] text-gray-500">({order.dining_option || 'Online'})</span>
+                                                    </div>
+                                                    {Array.isArray(order.items) && order.items.length > 0 && (
+                                                        <p className="text-[11px] text-gray-600 mt-1 line-clamp-2">
+                                                            {order.items.map(it => `${it.quantity || 1}× ${it.item_name || it.name}`).join(', ')}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <span className="font-mono text-xs font-black text-gray-900 shrink-0">
+                                                    KES {Number(order.total_amount || 0).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 pt-1">
+                                                <div className="flex items-center gap-1">
+                                                    {(order.payment_status || '').toLowerCase() === 'paid' && (
+                                                        <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded uppercase">
+                                                            M-Pesa Paid
+                                                        </span>
+                                                    )}
+                                                    {(order.payment_status || '').toLowerCase() === 'pending_verification' && (
+                                                        <span className="text-[9px] font-black text-sky-700 bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded uppercase">
+                                                            M-Pesa Code
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAcceptOrder(order)}
+                                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase rounded-lg cursor-pointer"
+                                                    >
+                                                        Accept
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeclineOrder(order)}
+                                                        className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] uppercase rounded-lg border border-red-100 cursor-pointer"
+                                                    >
+                                                        Decline
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             })()}
