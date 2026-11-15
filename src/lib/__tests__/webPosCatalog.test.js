@@ -109,8 +109,28 @@ describe('webPosCatalog helpers', () => {
       options: [{ name: 'Coleslaw', price: 150 }],
     };
 
+    const colesLawBuggyGroup = {
+      id: 'mod-coleslaw',
+      name: 'COLESLAW',
+      is_required: true,
+      allow_multiple: true,
+      min_selected: 8,
+      max_selected: 250,
+      options: [
+        { name: 'Extra Plantain', price: 300 },
+        { name: 'Extra Fries', price: 250 },
+        { name: 'Extra Rice', price: 350 },
+        { name: 'Add Coleslaw', price: 100 },
+        { name: 'Add Egg', price: 150 },
+        { name: 'Premium', price: 100 },
+        { name: 'EXTRA 12PC', price: 490 },
+        { name: 'Regular', price: 10 },
+      ],
+    };
+
     expect(computeEffectiveMinSelected(dirtyRequiredGroup)).toBe(1);
     expect(computeEffectiveMinSelected(optionalGroup)).toBe(0);
+    expect(computeEffectiveMinSelected(colesLawBuggyGroup)).toBe(1);
   });
 
   it('merges ManiPOS and POJ menus & modifiers without resurrecting unavailable items', () => {

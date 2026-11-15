@@ -16,6 +16,7 @@ import {
     evaluatePromotionDiscount,
     awardLoyaltyPointsForOrder,
 } from '../lib/promoEngine';
+import { computeEffectiveMinSelected } from '../lib/webPosCatalog';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -54,7 +55,7 @@ function normaliseTenantMenu(tenant) {
                 min: g.min_selected || 0,
                 options: (g.options || []).map((o, i) => ({
                     id: `${g.id}-${i}`,
-                    name: o.name,
+                    name: o.name || o.label || '',
                     price: Number(o.price) || 0,
                     isAvailable: o.is_available !== false,
                 })),
@@ -1614,18 +1615,28 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         // Check required modifiers & min selection rules
         if (selectedItem.modifiers) {
             for (const mod of selectedItem.modifiers) {
+                const effectiveMin = computeEffectiveMinSelected({
+                    is_required: mod.required,
+                    allow_multiple: mod.allowMultiple,
+                    min_selected: mod.min,
+                    max_selected: mod.max,
+                    options: (mod.options || []).map((o) => ({
+                        name: o.name,
+                        is_available: o.isAvailable !== false,
+                    })),
+                });
                 if (mod.allowMultiple) {
                     const counts = modalModCounts[mod.id] || {};
                     const picked = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
-                    const minReq = mod.required ? Math.max(1, mod.min || 1) : (mod.min || 0);
-                    if (picked < minReq) {
-                        setValidationError(`Please select at least ${minReq} option(s) for "${mod.title}"`);
+                    if (picked < effectiveMin) {
+                        setValidationError(`Please select at least ${effectiveMin} option(s) for "${mod.title}"`);
                         return;
                     }
-                } else if (mod.required) {
+                } else {
                     const sel = modalSelections[mod.id];
-                    if (!sel || (Array.isArray(sel) && sel.length === 0)) {
-                        setValidationError(`Please make a selection for "${mod.title}"`);
+                    const picked = Array.isArray(sel) ? sel.length : (sel ? 1 : 0);
+                    if (picked < effectiveMin) {
+                        setValidationError(`Please select at least ${effectiveMin} option(s) for "${mod.title}"`);
                         return;
                     }
                 }
@@ -2476,6 +2487,16 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                     <div className="space-y-6 pt-2">
                                         {selectedItem.modifiers.map(mod => {
                                             const isMulti = mod.allowMultiple || (!mod.required && mod.max > 1);
+                                            const effectiveMin = computeEffectiveMinSelected({
+                                                is_required: mod.required,
+                                                allow_multiple: mod.allowMultiple,
+                                                min_selected: mod.min,
+                                                max_selected: mod.max,
+                                                options: (mod.options || []).map((o) => ({
+                                                    name: o.name,
+                                                    is_available: o.isAvailable !== false,
+                                                })),
+                                            });
                                             const groupCounts = modalModCounts[mod.id] || {};
                                             const totalPickedCount = mod.allowMultiple
                                                 ? Object.values(groupCounts).reduce((s, n) => s + Number(n || 0), 0)
@@ -2488,14 +2509,14 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                         <div>
                                                             <h4 className="font-bold text-sm text-black">{mod.title}</h4>
                                                             <p className="text-[11px] text-[#757575]">
-                                                                {mod.required
-                                                                    ? `Required • Choose ${mod.min > 0 ? `at least ${mod.min}` : 1}${mod.max > 1 ? ` (up to ${mod.max})` : ''}`
+                                                                {effectiveMin > 0
+                                                                    ? `Required • Choose at least ${effectiveMin}${mod.max > 1 ? ` (up to ${mod.max})` : ''}`
                                                                     : `Optional • Select up to ${mod.max}`}
                                                             </p>
                                                         </div>
-                                                        {mod.required && (
+                                                        {effectiveMin > 0 && (
                                                             <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded-full">
-                                                                {totalPickedCount >= Math.max(1, mod.min || 1) ? '✓ Done' : 'Required'}
+                                                                {totalPickedCount >= effectiveMin ? '✓ Done' : 'Required'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -2513,11 +2534,22 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                 return (
                                                                     <div
                                                                         key={opt.id}
+                                                                        onClick={() => {
+                                                                            if (opt.isAvailable === false) return;
+                                                                            if (optQty === 0 && !(mod.max > 0 && totalPickedCount >= mod.max)) {
+                                                                                setValidationError('');
+                                                                                setModalModCounts(prev => {
+                                                                                    const cur = { ...(prev[mod.id] || {}) };
+                                                                                    cur[opt.id] = 1;
+                                                                                    return { ...prev, [mod.id]: cur };
+                                                                                });
+                                                                            }
+                                                                        }}
                                                                         className={`flex items-center justify-between p-3 rounded-xl border transition-all ${opt.isAvailable === false
                                                                             ? 'opacity-50 bg-[#f3f3f3] border-transparent'
                                                                             : optQty > 0
-                                                                                ? 'bg-white border-black shadow-sm font-semibold'
-                                                                                : 'bg-white/60 border-transparent hover:border-[#d4d4d4]'
+                                                                                ? 'bg-white border-black shadow-sm font-semibold cursor-pointer'
+                                                                                : 'bg-white/60 border-transparent hover:border-[#d4d4d4] cursor-pointer'
                                                                             }`}
                                                                     >
                                                                         <div>
@@ -2530,7 +2562,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                             <button
                                                                                 type="button"
                                                                                 disabled={opt.isAvailable === false || optQty <= 0}
-                                                                                onClick={() => {
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setValidationError('');
                                                                                     setModalModCounts(prev => {
                                                                                         const cur = { ...(prev[mod.id] || {}) };
                                                                                         const nextQty = Math.max(0, Number(cur[opt.id] || 0) - 1);
@@ -2547,7 +2581,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                                             <button
                                                                                 type="button"
                                                                                 disabled={opt.isAvailable === false || (mod.max > 0 && totalPickedCount >= mod.max)}
-                                                                                onClick={() => {
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setValidationError('');
                                                                                     setModalModCounts(prev => {
                                                                                         const cur = { ...(prev[mod.id] || {}) };
                                                                                         cur[opt.id] = Number(cur[opt.id] || 0) + 1;
@@ -2676,6 +2712,15 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                     />
                                 </div>
                             </div>
+
+                            {validationError && (
+                                <div className="px-4 sm:px-5 pt-2.5 bg-white border-t border-red-200">
+                                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-3.5 py-2.5 rounded-xl">
+                                        <AlertCircle size={15} className="shrink-0" />
+                                        <span>{validationError}</span>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Modal Bottom Sticky Bar (UberEats Add Button) */}
                             <div className="p-4 sm:p-5 border-t border-[#e2e2e2] bg-white flex items-center gap-3">

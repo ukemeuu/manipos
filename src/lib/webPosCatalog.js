@@ -107,10 +107,15 @@ export function computeEffectiveMinSelected(group) {
     ? group.options.filter((o) => o && o.is_available !== false && String(o.name || o.label || '').trim() !== '')
     : [];
   if (opts.length === 0) return 0;
-  const rawMin = group?.is_required
+  let rawMin = group?.is_required
     ? Math.max(1, Number(group?.min_selected || 1))
     : Math.max(0, Number(group?.min_selected || 0));
   const rawMax = Number(group?.max_selected || 0);
+  // Guard against legacy POJ/Orda add-on exports that stamped min_selected = options.length
+  // with unlimited max_selected (e.g. min=8, max=250 on 8 optional extras like COLESLAW).
+  if (group?.allow_multiple && rawMax >= 50 && rawMin >= opts.length && opts.length > 2) {
+    rawMin = group?.is_required ? 1 : 0;
+  }
   const cap = rawMax > 0 ? Math.min(rawMax, opts.length) : opts.length;
   return Math.min(rawMin, cap);
 }

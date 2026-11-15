@@ -473,6 +473,9 @@ export function WebPosView({
       const minReq = computeEffectiveMinSelected(g);
       if (total < minReq) {
         setModalError(`"${g.name}" requires at least ${minReq} selection(s).`);
+        try {
+          document.querySelector(`[data-mod-group-id="${g.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (_) {}
         return;
       }
     }
@@ -1811,7 +1814,7 @@ export function WebPosView({
                   (opt) => opt && opt.is_available !== false && String(opt.name || opt.label || '').trim() !== ''
                 );
                 return (
-                  <div key={g.id} className="space-y-2">
+                  <div key={g.id} data-mod-group-id={g.id} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black uppercase tracking-wider text-slate-700">{g.name}</p>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
@@ -1825,12 +1828,18 @@ export function WebPosView({
                         return (
                           <div
                             key={optName}
-                            onClick={() => !g.allow_multiple && toggleModOption(g, optName)}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                            onClick={() => {
+                              if (!g.allow_multiple) {
+                                toggleModOption(g, optName);
+                              } else if (qty === 0) {
+                                toggleModOption(g, optName, 1);
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${
                               qty > 0
                                 ? 'border-emerald-600 bg-emerald-50/50'
                                 : 'border-slate-200 hover:bg-slate-50'
-                            } ${!g.allow_multiple ? 'cursor-pointer' : ''}`}
+                            }`}
                           >
                             <div>
                               <span className="font-bold text-slate-900">{optName}</span>
@@ -1844,7 +1853,10 @@ export function WebPosView({
                               <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => toggleModOption(g, optName, -1)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleModOption(g, optName, -1);
+                                  }}
                                   className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
                                 >
                                   <Minus className="w-3 h-3" />
@@ -1852,7 +1864,10 @@ export function WebPosView({
                                 <span className="w-4 text-center font-black">{qty}</span>
                                 <button
                                   type="button"
-                                  onClick={() => toggleModOption(g, optName, 1)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleModOption(g, optName, 1);
+                                  }}
                                   className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
                                 >
                                   <Plus className="w-3 h-3" />
@@ -1917,13 +1932,15 @@ export function WebPosView({
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
                 />
               </div>
+            </div>
 
-              {modalError && (
+            {modalError && (
+              <div className="px-5 pt-2.5 bg-slate-50 border-t border-rose-200">
                 <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-2.5">
                   {modalError}
                 </p>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">

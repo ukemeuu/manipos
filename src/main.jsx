@@ -44,9 +44,22 @@ createRoot(document.getElementById('root')).render(
 // registering the production service worker.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      try {
+        const key = 'manipos_sw_reloaded_at';
+        const last = Number(sessionStorage.getItem(key) || 0);
+        if (Date.now() - last < 15000) return;
+        sessionStorage.setItem(key, String(Date.now()));
+      } catch (_) { }
+      reloading = true;
+      window.location.reload();
+    });
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
-      .then((reg) => reg.update().catch(() => {}))
+      .then((reg) => reg.update().catch(() => { }))
       .catch((error) => {
         console.warn('[PWA] Service worker registration failed:', error);
       });
