@@ -200,7 +200,7 @@ export function RetailPosTerminal({
     // Look for exact match on barcode or SKU
     const matched = products.find(
       p => (p.barcode && p.barcode.toLowerCase() === cleanCode.toLowerCase()) ||
-           (p.sku && p.sku.toLowerCase() === cleanCode.toLowerCase())
+        (p.sku && p.sku.toLowerCase() === cleanCode.toLowerCase())
     );
 
     if (matched) {
@@ -285,7 +285,7 @@ export function RetailPosTerminal({
   // Filtered Products
   const filteredProducts = products.filter(p => {
     const matchesCategory = selectedCategory === 'All Products' || p.category === selectedCategory;
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.barcode && p.barcode.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -429,7 +429,7 @@ export function RetailPosTerminal({
 
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
-      
+
       {/* ── TOP TERMINAL BAR ── */}
       <header className="h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
@@ -450,9 +450,8 @@ export function RetailPosTerminal({
         {/* Scan Status & Connection Indicators */}
         <div className="flex items-center gap-4">
           {scanFeedback && (
-            <div className={`text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 animate-pulse ${
-              scanFeedback.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
-            }`}>
+            <div className={`text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 animate-pulse ${scanFeedback.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+              }`}>
               {scanFeedback.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
               <span>{scanFeedback.text}</span>
             </div>
@@ -493,10 +492,10 @@ export function RetailPosTerminal({
 
       {/* ── MAIN WORKSPACE ── */}
       <div className="flex-1 flex overflow-hidden">
-        
+
         {/* LEFT / CENTER: CATALOG & BARCODE SCANNER */}
         <div className="flex-1 flex flex-col min-w-0 bg-slate-950 p-5 space-y-4 overflow-hidden">
-          
+
           {/* BARCODE SCANNER & SEARCH INPUT BAR */}
           <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-lg">
             <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
@@ -543,11 +542,10 @@ export function RetailPosTerminal({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 shadow-md shadow-cyan-500/20'
-                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
-                }`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${selectedCategory === cat
+                  ? 'bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 shadow-md shadow-cyan-500/20'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+                  }`}
               >
                 {cat}
               </button>
@@ -565,24 +563,22 @@ export function RetailPosTerminal({
                 <div
                   key={product.id}
                   onClick={() => addToCart(product)}
-                  className={`p-3.5 rounded-2xl bg-slate-900/80 border transition-all cursor-pointer hover:scale-[1.02] flex flex-col justify-between group shadow-sm ${
-                    product.stock_quantity <= 0
-                      ? 'border-red-500/30 opacity-60'
-                      : 'border-slate-800 hover:border-cyan-500/40 hover:bg-slate-800/90'
-                  }`}
+                  className={`p-3.5 rounded-2xl bg-slate-900/80 border transition-all cursor-pointer hover:scale-[1.02] flex flex-col justify-between group shadow-sm ${product.stock_quantity <= 0
+                    ? 'border-red-500/30 opacity-60'
+                    : 'border-slate-800 hover:border-cyan-500/40 hover:bg-slate-800/90'
+                    }`}
                 >
                   <div>
                     <div className="flex justify-between items-start mb-1.5">
                       <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
                         <Barcode className="w-3 h-3 text-slate-400" /> {product.sku}
                       </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        product.stock_quantity <= 0
-                          ? 'bg-red-500/20 text-red-400'
-                          : product.stock_quantity <= 5
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${product.stock_quantity <= 0
+                        ? 'bg-red-500/20 text-red-400'
+                        : product.stock_quantity <= 5
                           ? 'bg-amber-500/20 text-amber-400'
                           : 'bg-emerald-500/10 text-emerald-400'
-                      }`}>
+                        }`}>
                         {product.stock_quantity <= 0 ? 'Out of Stock' : `${product.stock_quantity} left`}
                       </span>
                     </div>
@@ -608,7 +604,7 @@ export function RetailPosTerminal({
 
         {/* RIGHT: ACTIVE REGISTER CART */}
         <div className="w-96 bg-slate-900 border-l border-slate-800 flex flex-col shrink-0 shadow-2xl">
-          
+
           {/* Cart Header */}
           <div className="p-4 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -752,11 +748,10 @@ export function RetailPosTerminal({
                 <button
                   key={m.id}
                   onClick={() => setPaymentMethod(m.id)}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                    paymentMethod === m.id
-                      ? 'bg-slate-800 border-cyan-500 text-white shadow-lg'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${paymentMethod === m.id
+                    ? 'bg-slate-800 border-cyan-500 text-white shadow-lg'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
                 >
                   <m.icon className={`w-5 h-5 ${m.color}`} />
                   <span className="text-xs font-bold">{m.label}</span>
@@ -777,7 +772,7 @@ export function RetailPosTerminal({
                   onChange={(e) => setAmountTendered(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-lg font-mono text-center font-black text-cyan-400 focus:outline-none focus:border-cyan-500"
                 />
-                
+
                 <div className="grid grid-cols-4 gap-2 pt-1">
                   {Array.from(new Set([Math.ceil(totalAmount), 500, 1000, 2000, 5000].filter(v => v >= Math.ceil(totalAmount)))).slice(0, 4).map(amt => (
                     <button

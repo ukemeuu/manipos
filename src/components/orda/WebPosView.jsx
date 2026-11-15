@@ -60,34 +60,63 @@ function makeUuid() {
   return `pos_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function safeInsertOrder(payload) {
+const OPTIONAL_ORDER_COLS = [
+  'idempotency_key',
+  'sales_channel',
+  'order_channel',
+  'branch_id',
+  'delivery_fee',
+  'delivery_provider',
+  'tax_amount',
+  'charges_amount',
+  'charges_breakdown',
+  'table_number',
+  'mpesa_receipt_number',
+  'guest_id',
+  'discount',
+];
+
+function findMissingOrderColumn(attempt, error) {
+  const msg = String(error?.message || error?.details || '');
+  const schemaCacheMatch = msg.match(/could not find the ['"]([a-z0-9_]+)['"] column/i)
+    || msg.match(/column\s+["']?([a-z0-9_]+)["']?\s+of/i);
+  if (schemaCacheMatch?.[1] && schemaCacheMatch[1] in attempt) {
+    return schemaCacheMatch[1];
+  }
+  return OPTIONAL_ORDER_COLS.find((col) => col in attempt && msg.toLowerCase().includes(col)) || null;
+}
+
+async function runOrderMutationWithFallback(payload, execute) {
   let attempt = { ...payload };
-  const optionalCols = [
-    'idempotency_key',
-    'sales_channel',
-    'branch_id',
-    'delivery_fee',
-    'delivery_provider',
-    'tax_amount',
-    'charges_amount',
-    'charges_breakdown',
-    'table_number',
-  ];
-  for (let i = 0; i <= optionalCols.length; i += 1) {
-    const res = await supabase
-      .from('pos_orders')
-      .insert([attempt])
-      .select('id, ticket_number')
-      .single();
+  for (let i = 0; i <= OPTIONAL_ORDER_COLS.length + 3; i += 1) {
+    const res = await execute(attempt);
     if (!res.error) return res;
-    const msg = String(res.error?.message || res.error?.details || '');
-    const missing = optionalCols.find((col) => col in attempt && msg.toLowerCase().includes(col));
+    const missing = findMissingOrderColumn(attempt, res.error);
     if (!missing) return res;
     const next = { ...attempt };
     delete next[missing];
     attempt = next;
   }
-  return supabase.from('pos_orders').insert([payload]).select('id, ticket_number').single();
+  return execute(attempt);
+}
+
+async function safeInsertOrder(payload) {
+  return runOrderMutationWithFallback(payload, (attempt) => (
+    supabase
+      .from('pos_orders')
+      .insert([attempt])
+      .select('id, ticket_number')
+      .single()
+  ));
+}
+
+async function safeUpdateOrder(orderId, payload) {
+  return runOrderMutationWithFallback(payload, (attempt) => (
+    supabase
+      .from('pos_orders')
+      .update(attempt)
+      .eq('id', orderId)
+  ));
 }
 
 export function WebPosView({
@@ -149,7 +178,9 @@ export function WebPosView({
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [promoError, setPromoError] = useState('');
   const [paymentTender, setPaymentTender] = useState('Cash');
-  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentReference, setPaymentReference] = useState(
+    String(initialOrder?.mpesa_receipt_number || initialOrder?.mpesa_receipt || '')
+  );
   const [splitBreakdown, setSplitBreakdown] = useState('');
   const [splitCash, setSplitCash] = useState('');
   const [splitMpesa, setSplitMpesa] = useState('');
@@ -632,20 +663,17 @@ export function WebPosView({
 
       if (initialOrder?.id) {
         // Settle or update an existing Open order
-        const { error: updErr } = await supabase
-          .from('pos_orders')
-          .update({
-            customer_name: customerName.trim() || 'Guest Customer',
-            dining_option: diningVal,
-            payment_method: saveAsOpen ? 'Cash' : paymentTender,
-            payment_status: saveAsOpen ? 'Pending' : isSettledNow ? 'Paid' : 'Pending',
-            status: saveAsOpen ? 'Open' : 'Completed',
-            total_amount: grandTotal,
-            discount: discountAmount,
-            mpesa_receipt: paymentReference.trim() || initialOrder.mpesa_receipt || null,
-            notes: noteParts.join(' | ') || initialOrder.notes || null,
-          })
-          .eq('id', initialOrder.id);
+        const { error: updErr } = await safeUpdateOrder(initialOrder.id, {
+          customer_name: customerName.trim() || 'Guest Customer',
+          dining_option: diningVal,
+          payment_method: saveAsOpen ? 'Cash' : paymentTender,
+          payment_status: saveAsOpen ? 'Pending' : isSettledNow ? 'Paid' : 'Pending',
+          status: saveAsOpen ? 'Open' : 'Completed',
+          total_amount: grandTotal,
+          discount: discountAmount,
+          mpesa_receipt_number: paymentReference.trim() || initialOrder.mpesa_receipt_number || initialOrder.mpesa_receipt || null,
+          notes: noteParts.join(' | ') || initialOrder.notes || null,
+        });
         if (updErr) throw updErr;
 
         const receiptSnap = {
@@ -701,7 +729,7 @@ export function WebPosView({
         tax_amount: chargesComputation.taxTotal,
         charges_amount: chargesComputation.otherChargesTotal,
         charges_breakdown: chargesComputation.lines,
-        mpesa_receipt: paymentReference.trim() || null,
+        mpesa_receipt_number: paymentReference.trim() || null,
         notes: noteParts.join(' | ') || null,
         guest_id: selectedGuest?.id || null,
         idempotency_key: makeUuid(),
