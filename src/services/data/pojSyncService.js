@@ -25,14 +25,14 @@ export function savePojSession(authData, pojUrl = POJ_DEFAULT_URL) {
         poj_url: cleanUrl,
       })
     );
-  } catch (_) {}
+  } catch (_) { }
 }
 
 export function clearPojSession() {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(POJ_SESSION_STORAGE_KEY);
-  } catch (_) {}
+  } catch (_) { }
 }
 
 export async function getValidPojAccessToken(pojUrl = POJ_DEFAULT_URL) {
@@ -69,7 +69,7 @@ export async function getValidPojAccessToken(pojUrl = POJ_DEFAULT_URL) {
         }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
   return POJ_ANON_KEY;
 }
 
@@ -782,9 +782,9 @@ export async function importPojSnapshotToManiPos({
       const rawStatus = String(r.approval_status || r.status || 'ordered').toLowerCase();
       const normalizedStatus =
         rawStatus === 'received' ? 'received' :
-        rawStatus === 'partial' ? 'partial' :
-        rawStatus === 'cancelled' || rawStatus === 'rejected' ? 'cancelled' :
-        rawStatus === 'draft' ? 'draft' : 'ordered';
+          rawStatus === 'partial' ? 'partial' :
+            rawStatus === 'cancelled' || rawStatus === 'rejected' ? 'cancelled' :
+              rawStatus === 'draft' ? 'draft' : 'ordered';
       return {
         restaurant_id: restaurantId,
         source_poj_id: String(r.id),
@@ -912,7 +912,7 @@ export async function importPojSnapshotToManiPos({
       },
       { onConflict: 'restaurant_id' }
     );
-  } catch (_) {}
+  } catch (_) { }
 
   return summary;
 }
@@ -941,7 +941,7 @@ export async function pushPojRequestStatus({
       .from(table)
       .update({ status })
       .eq('id', sourcePojId);
-    await client.auth.signOut().catch(() => {});
+    await client.auth.signOut().catch(() => { });
     return { ok: !updErr, error: updErr?.message };
   } catch (err) {
     return { ok: false, error: err?.message };
@@ -962,7 +962,7 @@ async function resolvePojBridgeUrl(tenantSlug, restaurantId) {
         if (linkRow.link_auth_enabled === false) return null;
         return String(linkRow.poj_supabase_url || POJ_DEFAULT_URL).replace(/\/+$/, '');
       }
-    } catch (_) {}
+    } catch (_) { }
   }
   return cleanSlug === 'potofjollof' ? POJ_DEFAULT_URL : null;
 }
@@ -1098,10 +1098,58 @@ function orderHasLineItems(order) {
   );
 }
 
+function orderTicketSignature(order) {
+  const ticket = String(order?.ticket_number || '').trim().toUpperCase();
+  if (!ticket) return '';
+  const total = Math.round(Number(order?.total_amount || 0));
+  return `${ticket}::${total}`;
+}
+
+/**
+ * Applies an optimistic order update event (e.g. immediately after Accept/Decline
+ * or Ready/Complete) into the in-memory orders array so the UI moves the order
+ * immediately without requiring a browser refresh.
+ */
+export function applyOrderStatusUpdate(orders = [], detail = null) {
+  const list = Array.isArray(orders) ? orders : [];
+  const updated = detail?.updatedOrder;
+  const targetId = detail?.orderId ? String(detail.orderId) : (updated?.id ? String(updated.id) : '');
+  const targetPojId = detail?.sourcePojId
+    ? String(detail.sourcePojId)
+    : (updated?.source_poj_id ? String(updated.source_poj_id) : '');
+  if (!targetId && !targetPojId && !updated) return list;
+
+  let matched = false;
+  const nextList = list.map((o) => {
+    if (!o) return o;
+    const oid = o.id ? String(o.id) : '';
+    const opoj = o.source_poj_id ? String(o.source_poj_id) : '';
+    const isMatch =
+      (targetId && (oid === targetId || opoj === targetId)) ||
+      (targetPojId && (opoj === targetPojId || oid === targetPojId));
+    if (!isMatch) return o;
+    matched = true;
+    return {
+      ...o,
+      ...(updated || {}),
+      id: o.id,
+      items: orderHasLineItems(o) ? o.items : (updated?.items || o.items || []),
+      pos_order_items: Array.isArray(o.pos_order_items) && o.pos_order_items.length > 0
+        ? o.pos_order_items
+        : (updated?.pos_order_items || o.pos_order_items || []),
+    };
+  });
+
+  if (!matched && updated?.id) {
+    return [updated, ...nextList];
+  }
+  return nextList;
+}
+
 /**
  * Merges ManiPOS pos_orders with linked POJ Management orders without duplicating
- * rows that already carry a matching source_poj_id or id, while preserving non-empty
- * line items if one side has them and the other side lacks them.
+ * rows that already carry a matching source_poj_id, id, or ticket signature, while
+ * preserving non-empty line items and flagging POJ-origin orders cleanly.
  */
 export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
   const maniList = Array.isArray(maniOrders) ? maniOrders : [];
@@ -1110,27 +1158,36 @@ export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
 
   const indexById = new Map();
   const indexByPojId = new Map();
+  const indexBySig = new Map();
   const merged = maniList.map((o, idx) => {
     if (o?.id) indexById.set(String(o.id), idx);
     if (o?.source_poj_id) indexByPojId.set(String(o.source_poj_id), idx);
+    const sig = orderTicketSignature(o);
+    if (sig && !indexBySig.has(sig)) indexBySig.set(sig, idx);
     return o;
   });
 
   for (const po of pojList) {
     const poId = po?.id ? String(po.id) : '';
     const srcId = po?.source_poj_id ? String(po.source_poj_id) : poId;
+    const sig = orderTicketSignature(po);
     const matchIdx =
       (poId && indexById.has(poId) ? indexById.get(poId) : undefined) ??
-      (srcId && indexByPojId.has(srcId) ? indexByPojId.get(srcId) : undefined);
+      (srcId && indexByPojId.has(srcId) ? indexByPojId.get(srcId) : undefined) ??
+      (sig && indexBySig.has(sig) ? indexBySig.get(sig) : undefined);
 
     if (matchIdx !== undefined) {
       const existing = merged[matchIdx];
-      if (!orderHasLineItems(existing) && orderHasLineItems(po)) {
-        merged[matchIdx] = {
-          ...existing,
-          items: Array.isArray(po.items) && po.items.length > 0 ? po.items : po.pos_order_items || [],
-        };
-      }
+      const nextItems =
+        !orderHasLineItems(existing) && orderHasLineItems(po)
+          ? (Array.isArray(po.items) && po.items.length > 0 ? po.items : po.pos_order_items || [])
+          : existing.items;
+      merged[matchIdx] = {
+        ...existing,
+        source_poj_id: existing.source_poj_id || srcId || poId || null,
+        _fromPoj: Boolean(existing._fromPoj || po._fromPoj),
+        ...(nextItems !== existing.items ? { items: nextItems } : {}),
+      };
       continue;
     }
 
@@ -1138,6 +1195,7 @@ export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
     merged.push(po);
     if (poId) indexById.set(poId, newIdx);
     if (srcId) indexByPojId.set(srcId, newIdx);
+    if (sig && !indexBySig.has(sig)) indexBySig.set(sig, newIdx);
   }
 
   merged.sort((a, b) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime());

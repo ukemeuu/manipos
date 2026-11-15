@@ -85,15 +85,25 @@ describe('Interface B (Orda) Routing & RBAC', () => {
     }
   });
 
-  it('hides Admin modules (dashboard, wallet, account, settings, menu) from cashiers on the Orda icon rail', () => {
+  it('exposes Orders and Menu to floor staff while hiding Admin modules (dashboard, wallet, account, settings, inventory, customers)', () => {
     const cashier = { id: 'u1', name: 'Ronaldo', role: 'cashier' };
     const cashierRail = getVisibleOrdaRailIds({ staffUser: cashier, permissions: ['view_orders'] });
-    expect(cashierRail).toEqual(['orders']);
+    expect(cashierRail).toEqual(['orders', 'menu']);
     expect(cashierRail).not.toContain('wallet');
     expect(cashierRail).not.toContain('account');
     expect(cashierRail).not.toContain('dashboard');
     expect(cashierRail).not.toContain('settings');
-    expect(cashierRail).not.toContain('menu');
+    expect(cashierRail).not.toContain('inventory');
+
+    const accountant = { id: 'u3', name: 'Mary', role: 'accountant' };
+    expect(getVisibleOrdaRailIds({ staffUser: accountant, permissions: ['view_orders'] })).toEqual(['orders']);
+
+    expect(resolveOrdaEntryState({ staffUser: cashier, requestedRoute: 'pos', tabParam: 'menu' })).toEqual({
+      isAdmin: false,
+      activeModule: 'menu',
+      activeTab: 'menu',
+      initialWebPos: false,
+    });
 
     const admin = { id: 'a1', name: 'Owner', role: 'admin' };
     const adminRail = getVisibleOrdaRailIds({ staffUser: admin, permissions: [] });

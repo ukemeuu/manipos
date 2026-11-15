@@ -32,6 +32,8 @@ import {
 import { authenticateStaffLogin } from '../services/data/staffService';
 import { provisionTenant, slugify } from '../services/tenantProvisioning';
 import { getMicrositeUrl, getTenantPosUrl } from '../lib/tenantConfig';
+import { readActivePortalCookie, writeActivePortalCookie } from '../lib/crossTabSession';
+import { isAdminAccount } from '../lib/posRouting';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
@@ -71,6 +73,22 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
   const [signInPassword, setSignInPassword] = useState('');
   const [signInLoading, setSignInLoading] = useState(false);
   const [signInError, setSignInError] = useState('');
+  const [activePortal, setActivePortal] = useState(() => readActivePortalCookie());
+
+  useEffect(() => {
+    const refreshPortalCookie = () => setActivePortal(readActivePortalCookie());
+    window.addEventListener('focus', refreshPortalCookie);
+    return () => window.removeEventListener('focus', refreshPortalCookie);
+  }, []);
+
+  const resumePortalUrl = (portal) => {
+    if (!portal?.tenantSlug) return 'https://pos.manipos.com/';
+    const page = portal.isAdmin ? 'dashboard' : 'pos';
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return `/?page=${page}&tenant=${encodeURIComponent(portal.tenantSlug)}`;
+    }
+    return `https://${portal.tenantSlug}.pos.manipos.com/?page=${page}`;
+  };
   const [onboardData, setOnboardData] = useState({ 
     name: '', 
     slug: '', 
@@ -291,12 +309,22 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
             >
               <Utensils size={14} /> Order food
             </button>
-            <button
-              onClick={() => setShowSignInModal(true)}
-              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
-            >
-              <span>Sign In</span>
-            </button>
+            {activePortal?.tenantSlug ? (
+              <a
+                href={resumePortalUrl(activePortal)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Open POS · {activePortal.restaurantName || activePortal.tenantSlug}</span>
+                <ArrowRight size={13} />
+              </a>
+            ) : (
+              <button
+                onClick={() => setShowSignInModal(true)}
+                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Sign In</span>
+              </button>
+            )}
             <button
               onClick={() => setShowOnboardModal(true)}
               className="hidden sm:flex bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer items-center gap-1.5 border border-white/10"
@@ -328,6 +356,11 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                 <a href="#integrations" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">Integrations</a>
                 <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="hover:text-amber-400 transition-colors">FAQ</a>
                 <button onClick={() => { setMobileMenuOpen(false); onBrowseRestaurants?.(); }} className="text-left text-amber-400 font-bold">Order food →</button>
+                {activePortal?.tenantSlug && (
+                  <a href={resumePortalUrl(activePortal)} className="text-left text-emerald-400 font-bold">
+                    Open POS · {activePortal.restaurantName || activePortal.tenantSlug} →
+                  </a>
+                )}
                 <button onClick={() => { setMobileMenuOpen(false); setShowSignInModal(true); }} className="text-left text-white font-bold">Sign In (Staff / Admin / CRM) →</button>
                 <button onClick={() => { setMobileMenuOpen(false); setShowOnboardModal(true); }} className="text-left text-white/80 font-bold">Create restaurant →</button>
               </div>
@@ -1292,6 +1325,28 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                 </p>
               </div>
 
+              {activePortal?.tenantSlug && (
+                <a
+                  href={resumePortalUrl(activePortal)}
+                  className="block w-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 rounded-2xl p-4 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
+                        Already Signed In in This Browser
+                      </p>
+                      <p className="text-sm font-bold text-white mt-0.5">
+                        {activePortal.staffName ? `${activePortal.staffName} · ` : ''}
+                        {activePortal.restaurantName || activePortal.tenantSlug}
+                      </p>
+                    </div>
+                    <span className="px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs shrink-0 inline-flex items-center gap-1">
+                      Open POS <ArrowRight size={13} />
+                    </span>
+                  </div>
+                </a>
+              )}
+
               {signInError && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold p-3.5 rounded-xl">
                   {signInError}
@@ -1309,8 +1364,40 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                     const res = await authenticateStaffLogin(signInEmail, signInPassword);
                     if (res.success) {
                       localStorage.setItem('pin_staff_user', JSON.stringify(res.staffUser));
+                      const slug = res.staffUser?.tenantSlug;
+                      const staffIsAdmin = isAdminAccount(res.staffUser);
+                      if (slug) {
+                        writeActivePortalCookie({
+                          tenantSlug: slug,
+                          restaurantName: res.staffUser.restaurantName,
+                          staffName: res.staffUser.name,
+                          role: res.staffUser.role,
+                          isAdmin: staffIsAdmin,
+                        });
+                      }
                       setShowSignInModal(false);
-                      window.location.href = '/app';
+                      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                      if (!isLocal && slug) {
+                        const transferPayload = { staffUser: res.staffUser };
+                        try {
+                          const pojRaw = localStorage.getItem('manipos_poj_session_v1');
+                          if (pojRaw) transferPayload.pojSession = JSON.parse(pojRaw);
+                        } catch (_) {}
+                        try {
+                          const { data: { session: supaSess } } = await supabase.auth.getSession();
+                          if (supaSess?.access_token && supaSess?.refresh_token) {
+                            transferPayload.supabaseSession = {
+                              access_token: supaSess.access_token,
+                              refresh_token: supaSess.refresh_token,
+                            };
+                          }
+                        } catch (_) {}
+                        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(transferPayload))));
+                        const targetPage = staffIsAdmin ? 'dashboard' : 'pos';
+                        window.location.href = `https://${slug}.pos.manipos.com/?page=${targetPage}#session=${encodeURIComponent(encoded)}`;
+                      } else {
+                        window.location.href = staffIsAdmin ? '/?page=dashboard' : '/?page=pos';
+                      }
                     } else {
                       setSignInError(res.error || 'Authentication error. Please check your credentials.');
                     }

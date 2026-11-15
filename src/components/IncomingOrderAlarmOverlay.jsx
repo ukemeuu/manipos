@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BellRing, Check, XCircle, Volume2, VolumeX, Clock, ChefHat, Phone } from 'lucide-react';
 import { supabase, setTenantContext } from '../lib/supabase';
 import { logAuditEvent } from '../lib/auditLogger';
+import { isMicrositeOrder } from '../lib/orderChannel';
 import { fetchPojOrdersForRange, mergeOrdersWithPoj, updatePojOrderStatus } from '../services/data/pojSyncService';
 import {
   startContinuousOrderAlarm,
@@ -15,40 +16,15 @@ import {
 } from '../lib/orderAlarm';
 
 /**
- * Determines whether a pending pos_orders row came from an online/microsite/table
+ * Determines whether a pending pos_orders row came from a guest microsite/self-service
  * ordering channel that staff must explicitly Accept or Decline with an audible alarm.
+ * Normal orders rung by cashiers/waiters on POS do NOT require acceptance.
  */
 export function isOnlineIncomingOrder(order) {
   if (!order) return false;
   const status = String(order.status || '').toLowerCase().trim();
   if (status !== 'pending' && status !== 'new' && status !== 'verifying') return false;
-
-  // Combine all channel indicators so default `sales_channel = 'pos'` never shadows `order_channel = 'Online'`.
-  const channel = [
-    order.sales_channel,
-    order.order_channel,
-    order.channel,
-    order.order_source,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  const dining = String(order.dining_option || '').toLowerCase();
-  const cashier = String(order.cashier_name || '').toLowerCase();
-
-  return (
-    channel.includes('microsite') ||
-    channel.includes('online') ||
-    channel.includes('self') ||
-    channel.includes('uber') ||
-    channel.includes('glovo') ||
-    channel.includes('bolt') ||
-    channel.includes('whatsapp') ||
-    channel.includes('skg') ||
-    dining.includes('self') ||
-    cashier.includes('microsite') ||
-    cashier.includes('self-service')
-  );
+  return isMicrositeOrder(order);
 }
 
 function extractDeliveryAddress(order) {
@@ -280,7 +256,18 @@ export function IncomingOrderAlarmOverlay({ restaurantId, tenantSlug = '', staff
       });
 
       setPendingOrders((prev) => prev.filter((o) => o.id !== order.id));
-      window.dispatchEvent(new CustomEvent('manipos:orders-updated'));
+      window.dispatchEvent(
+        new CustomEvent('manipos:orders-updated', {
+          detail: {
+            orderId: order.id,
+            sourcePojId: order.source_poj_id || null,
+            updatedOrder: {
+              ...order,
+              ...patch,
+            },
+          },
+        })
+      );
     } catch (err) {
       alert(`Could not update order #${order.ticket_number}: ${err?.message || err}`);
     } finally {

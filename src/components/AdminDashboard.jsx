@@ -96,7 +96,7 @@ import { GuestCRMView } from './GuestCRMView';
 import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
-import { fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
+import { applyOrderStatusUpdate, fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 import { authenticateStaffQuickPin } from '../services/data/staffService';
 import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
 import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, printZReport } from '../lib/posPrintService';
@@ -168,12 +168,12 @@ export function AdminDashboard({
     }
   });
   const [activeTab, setActiveTab] = useState(() => {
-    if (!isAdmin) return 'orders';
+    if (!isAdmin) return initialEntry.activeTab || 'orders';
     if (initialEntry.activeTab && initialEntry.activeTab !== 'orders') return initialEntry.activeTab;
     return setupCompleted ? 'orders' : 'onboarding';
   });
   const [activeModule, setActiveModule] = useState(() => {
-    if (!isAdmin) return 'orders';
+    if (!isAdmin) return initialEntry.activeModule || 'orders';
     if (initialEntry.activeModule && initialEntry.activeModule !== 'orders') return initialEntry.activeModule;
     return setupCompleted ? 'orders' : 'dashboard';
   });
@@ -276,23 +276,48 @@ export function AdminDashboard({
     if (restId) setTenantContext(restId);
     fetchDashboardData();
     if (!restId) return undefined;
-    const refreshOrdersOnly = () => {
+    const refreshOrdersOnly = (evt) => {
+      const eventDetail = evt && evt.detail ? evt.detail : null;
+      if (eventDetail?.updatedOrder || eventDetail?.orderId || eventDetail?.sourcePojId) {
+        setOrders((prev) => applyOrderStatusUpdate(prev, eventDetail));
+      }
+
       setTenantContext(restId);
-      supabase
-        .from('pos_orders')
-        .select('*, items:pos_order_items(*)')
-        .eq('restaurant_id', restId)
-        .order('created_at', { ascending: false })
-        .then(({ data }) => {
-          if (data) {
-            setOrders((prev) =>
-              mergeOrdersWithPoj(
-                data,
-                prev.filter((o) => o?._fromPoj)
-              )
-            );
+      const pinUser = (() => {
+        try {
+          return JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+        } catch (_) {
+          return {};
+        }
+      })();
+      const resolvedSlug = pinUser.tenantSlug || tenantSlug;
+
+      Promise.allSettled([
+        supabase
+          .from('pos_orders')
+          .select('*, items:pos_order_items(*)')
+          .eq('restaurant_id', restId)
+          .order('created_at', { ascending: false }),
+        fetchPojOrdersForRange({
+          tenantSlug: resolvedSlug,
+          restaurantId: restId,
+          limit: 1000,
+        }),
+      ]).then(([mpRes, pojRes]) => {
+        const hasMp = mpRes?.status === 'fulfilled' && Array.isArray(mpRes.value?.data);
+        const hasPoj = pojRes?.status === 'fulfilled' && Array.isArray(pojRes.value);
+        if (!hasMp && !hasPoj) return;
+
+        setOrders((prev) => {
+          const maniRows = hasMp ? mpRes.value.data : prev.filter((o) => !o?._fromPoj);
+          const pojRows = hasPoj ? pojRes.value : prev.filter((o) => o?._fromPoj);
+          let merged = mergeOrdersWithPoj(maniRows, pojRows);
+          if (eventDetail?.updatedOrder) {
+            merged = applyOrderStatusUpdate(merged, eventDetail);
           }
+          return merged;
         });
+      });
     };
     // Poll every 8s as fallback because Supabase Realtime websockets cannot carry the custom x-tenant-id header under RLS
     const pollTimer = setInterval(refreshOrdersOnly, 8000);
@@ -331,9 +356,16 @@ export function AdminDashboard({
     if (typeof window === 'undefined') return;
     try {
       const url = new URL(window.location.href);
-      if (!isAdmin || isWebPos) {
+      if (isWebPos) {
         url.searchParams.set('page', 'pos');
         url.searchParams.delete('tab');
+      } else if (!isAdmin) {
+        url.searchParams.set('page', 'pos');
+        if (nextTab === 'menu' || nextModule === 'menu') {
+          url.searchParams.set('tab', 'menu');
+        } else {
+          url.searchParams.delete('tab');
+        }
       } else {
         url.searchParams.set('page', 'dashboard');
         url.searchParams.set('tab', nextTab || nextModule || 'orders');
@@ -1270,7 +1302,7 @@ export function AdminDashboard({
   );
 
   const selectModule = (mod, tab) => {
-    if (!isAdmin && mod !== 'orders') return;
+    if (!isAdmin && !visibleRailIds.includes(mod)) return;
     const nextTab = tab || mod || 'orders';
     setShowWebPos(false);
     setSettleTargetOrder(null);
@@ -1335,7 +1367,7 @@ export function AdminDashboard({
             { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
             { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
-            { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) },
+            { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu') },
             { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
             { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
             { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
@@ -2113,7 +2145,7 @@ export function AdminDashboard({
               }}
               onOrderPlaced={() => fetchDashboardData({ silent: true })}
             />
-          ) : (activeTab === 'orders' || !isAdmin) ? (
+          ) : (activeTab === 'orders' || (!isAdmin && activeTab !== 'menu')) ? (
             <LiveOrdersView
               orders={orders}
               restaurantId={activeRestaurantId}
@@ -2580,7 +2612,7 @@ export function AdminDashboard({
                 )}
 
                 {/* MENU PANEL */}
-                {activeTab === 'menu' && !showWebPos && canDo(TAB_PERMISSION.menu) && (
+                {activeTab === 'menu' && !showWebPos && (canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu')) && (
                   <motion.div
                     key="menu"
                     initial={{ opacity: 0, y: 12 }}
@@ -2591,6 +2623,7 @@ export function AdminDashboard({
                       restaurantId={activeRestaurantId}
                       branches={branches}
                       onCatalogChanged={fetchDashboardData}
+                      canDelete={isAdmin}
                     />
                   </motion.div>
                 )}

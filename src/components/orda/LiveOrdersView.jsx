@@ -12,6 +12,9 @@ import {
 import { printCashierSlips, printKitchenSlips } from '../../lib/posPrintService';
 import { getBusinessDayStartIso } from '../../lib/posShiftService';
 import { updatePojOrderStatus } from '../../services/data/pojSyncService';
+import { normalizeChannelLabel, isMicrositeOrder } from '../../lib/orderChannel';
+
+export { normalizeChannelLabel };
 
 const CHANNEL_OPTIONS = [
   'All Channels',
@@ -38,9 +41,41 @@ function classifyOrderBucket(order) {
   if (status === 'shipped' || status === 'dispatched') return 'shipped';
   if (status === 'ready') return 'ready';
   if (status === 'preparing' || status === 'in progress' || status === 'in_progress' || status === 'processing' || status === 'accepted') return 'processing';
-  if (status === 'verifying') return 'verifying';
-  if (status === 'pending' || status === 'new') return 'new';
+  if (status === 'verifying') return isMicrositeOrder(order) ? 'verifying' : 'processing';
+  if (status === 'pending' || status === 'new') return isMicrositeOrder(order) ? 'new' : 'processing';
   return 'unknown';
+}
+
+export function summarizeOrdersCumulativeTotals(orders = [], statusFilter = 'active') {
+  const list = Array.isArray(orders) ? orders : [];
+  const excludedBuckets = new Set(['voided', 'cancelled', 'declined', 'failed']);
+  const includeExcluded = excludedBuckets.has(String(statusFilter || '').toLowerCase());
+
+  let countedOrdersCount = 0;
+  let cumulativeTotal = 0;
+  let paidTotal = 0;
+
+  for (const o of list) {
+    if (!o) continue;
+    const b = classifyOrderBucket(o);
+    if (!includeExcluded && excludedBuckets.has(b)) continue;
+    const amt = Number(o.total_amount || 0);
+    countedOrdersCount += 1;
+    cumulativeTotal += amt;
+    const pay = String(o.payment_status || '').toLowerCase().trim();
+    const st = String(o.status || '').toLowerCase().trim();
+    if (pay === 'paid' || pay === 'settled' || pay === 'completed' || st === 'completed' || st === 'settled') {
+      paidTotal += amt;
+    }
+  }
+
+  return {
+    totalCount: list.length,
+    countedOrdersCount,
+    cumulativeTotal,
+    paidTotal,
+    pendingTotal: Math.max(0, cumulativeTotal - paidTotal),
+  };
 }
 
 export function computeOrderBucketCounts(orders = []) {
@@ -69,6 +104,8 @@ export function computeOrderBucketCounts(orders = []) {
   return counts;
 }
 
+export { classifyOrderBucket };
+
 function relativeTimeLabel(iso) {
   if (!iso) return '—';
   const ts = new Date(iso).getTime();
@@ -85,38 +122,6 @@ function relativeTimeLabel(iso) {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-export function normalizeChannelLabel(order) {
-  const sc = String(order?.sales_channel || '').trim();
-  const oc = String(order?.order_channel || '').trim();
-  const ch = String(order?.channel || '').trim();
-  const raw = (sc && sc.toLowerCase() !== 'pos' ? sc : (oc || ch || sc || 'POS')).trim();
-  const rawLower = raw.toLowerCase();
-
-  if (rawLower.includes('whatsapp')) return 'WHATSAPP';
-  if (rawLower.includes('glovo')) return 'GLOVO';
-  if (rawLower.includes('bolt')) return 'BOLT';
-  if (rawLower.includes('uber')) return 'UBER EATS';
-  if (rawLower.includes('call')) return 'CALL CENTER';
-  if (rawLower.includes('web')) return 'WEB POS';
-
-  const combined = [sc, oc, ch, order?.order_source, order?.cashier_name]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  if (
-    combined.includes('microsite') ||
-    combined.includes('online') ||
-    combined.includes('self-service') ||
-    oc.toLowerCase() === 'skg' ||
-    sc.toLowerCase() === 'skg' ||
-    ch.toLowerCase() === 'skg'
-  ) {
-    return 'MICROSITE';
-  }
-  return raw.toUpperCase();
 }
 
 function channelBadgeStyle(label) {
@@ -305,6 +310,10 @@ export function LiveOrdersView({
   }, [orders, activeBranch, datePreset, customStart, customEnd, statusFilter, channelFilter, searchQuery, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const cumulativeTotals = useMemo(
+    () => summarizeOrdersCumulativeTotals(filteredOrders, statusFilter),
+    [filteredOrders, statusFilter]
+  );
   const pagedOrders = useMemo(() => {
     const safePage = Math.min(page, totalPages);
     const start = (safePage - 1) * PAGE_SIZE;
@@ -386,7 +395,15 @@ export function LiveOrdersView({
         setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : null));
       }
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('manipos:orders-updated'));
+        window.dispatchEvent(
+          new CustomEvent('manipos:orders-updated', {
+            detail: {
+              orderId: order.id,
+              sourcePojId: order.source_poj_id || null,
+              updatedOrder: { ...order, ...patch },
+            },
+          })
+        );
       }
       await onRefresh?.();
     } catch (err) {
@@ -665,6 +682,37 @@ export function LiveOrdersView({
         </div>
       </div>
 
+      {/* Cumulative Orders Totals Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="orders-cumulative-totals">
+        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Cumulative Orders</span>
+            <span className="text-lg font-black text-slate-900 font-mono">{cumulativeTotals.countedOrdersCount.toLocaleString()}</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-600">
+            {cumulativeTotals.totalCount} shown
+          </span>
+        </div>
+        <div className="bg-white border border-emerald-200 rounded-2xl px-4 py-3">
+          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">Cumulative Total</span>
+          <span className="text-lg font-black text-emerald-700 font-mono">
+            KES {Math.round(cumulativeTotals.cumulativeTotal).toLocaleString()}
+          </span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Paid / Settled</span>
+          <span className="text-lg font-black text-slate-900 font-mono">
+            KES {Math.round(cumulativeTotals.paidTotal).toLocaleString()}
+          </span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3">
+          <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 block">Pending / Unpaid</span>
+          <span className="text-lg font-black text-amber-700 font-mono">
+            KES {Math.round(cumulativeTotals.pendingTotal).toLocaleString()}
+          </span>
+        </div>
+      </div>
+
       {/* Empty State */}
       {pagedOrders.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
@@ -766,6 +814,13 @@ export function LiveOrdersView({
                         >
                           Items in POJ
                         </span>
+                      ) : lines.length === 0 && Number(order.total_amount || 0) > 0 ? (
+                        <span
+                          className="font-bold text-amber-700 block mt-0.5"
+                          title="Order synced without individual line items"
+                        >
+                          Unitemized Order
+                        </span>
                       ) : (
                         <span className="font-bold text-slate-800 block mt-0.5">
                           {itemCount} {itemCount === 1 ? 'Item' : 'Items'}
@@ -814,7 +869,7 @@ export function LiveOrdersView({
                 </div>
 
                 {/* Orda-style Full-Height Action Buttons */}
-                {(bucket === 'new' || bucket === 'verifying') && (
+                {(bucket === 'new' || bucket === 'verifying') && isMicrositeOrder(order) && (
                   <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-32 shrink-0">
                     <button
                       type="button"
@@ -835,7 +890,7 @@ export function LiveOrdersView({
                   </div>
                 )}
 
-                {bucket === 'processing' && (
+                {(bucket === 'processing' || ((bucket === 'new' || bucket === 'verifying') && !isMicrositeOrder(order))) && (
                   <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-32 shrink-0">
                     <button
                       type="button"
@@ -954,7 +1009,7 @@ export function LiveOrdersView({
               </button>
             </div>
             <div className="flex items-center gap-2">
-              {(classifyOrderBucket(selectedOrder) === 'new' || classifyOrderBucket(selectedOrder) === 'verifying') && (
+              {(classifyOrderBucket(selectedOrder) === 'new' || classifyOrderBucket(selectedOrder) === 'verifying') && isMicrositeOrder(selectedOrder) && (
                 <>
                   <button
                     type="button"

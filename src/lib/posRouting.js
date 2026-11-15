@@ -66,14 +66,41 @@ export function resolveModuleForOrdaTab(tabParam = '') {
   return 'orders';
 }
 
-export function resolveOrdaEntryState({ staffUser, requestedRoute = '', tabParam = '' }) {
+const MENU_ENABLED_STAFF_ROLES = new Set([
+  'cashier',
+  'waiter',
+  'manager',
+  'supervisor',
+  'shift_supervisor',
+  'lead_cashier',
+  'front_desk',
+  'chef',
+]);
+
+export function canAccessMenuModule({ staffUser, permissions = [] } = {}) {
+  if (isAdminAccount(staffUser)) return true;
+  if (Array.isArray(permissions) && permissions.includes('manage_menu')) return true;
+  const role = String(staffUser?.role || '').toLowerCase().trim();
+  return MENU_ENABLED_STAFF_ROLES.has(role);
+}
+
+export function resolveOrdaEntryState({ staffUser, requestedRoute = '', tabParam = '', permissions = [] }) {
   const isAdmin = isAdminAccount(staffUser);
   const route = String(requestedRoute || '').toLowerCase().trim();
   const tab = String(tabParam || '').toLowerCase().trim();
 
   // Floor & cashier roles (or explicit ?page=pos / ?page=terminal) enter
-  // straight into the Orda Web POS order-taking register.
+  // straight into the Orda Web POS order-taking register, while permitting
+  // deep-link access to the operational Menu builder when ?tab=menu is open.
   if (!isAdmin) {
+    if (tab === 'menu' && canAccessMenuModule({ staffUser, permissions })) {
+      return {
+        isAdmin: false,
+        activeModule: 'menu',
+        activeTab: 'menu',
+        initialWebPos: false,
+      };
+    }
     return {
       isAdmin: false,
       activeModule: 'orders',
@@ -108,7 +135,7 @@ export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   const ids = ['orders'];
   if (has('view_analytics')) ids.push('dashboard');
   if (has('manage_offers') || has('manage_feedback') || has('manage_guests')) ids.push('customers');
-  if (has('manage_menu')) ids.push('menu');
+  if (canAccessMenuModule({ staffUser, permissions })) ids.push('menu');
   if (has('manage_settings') || has('manage_staff')) ids.push('settings');
   if (has('manage_inventory')) ids.push('inventory');
   return ids;

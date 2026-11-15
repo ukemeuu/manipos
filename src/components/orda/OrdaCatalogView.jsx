@@ -3,14 +3,14 @@ import {
   Plus, Search, Edit3, Trash2, Upload, Download, Image as ImageIcon,
   Check, Loader2, Layers, Sliders, Gift, Eye, EyeOff, Star, Globe, X
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, setTenantContext } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
 
 const inputCls =
   'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600';
 const labelCls = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1';
 
-export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged }) {
+export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged, canDelete = true }) {
   const [catalogTab, setCatalogTab] = useState('items'); // 'items' | 'modifiers' | 'combos'
   const [menuGroups, setMenuGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState('all');
@@ -39,6 +39,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
 
   const loadAll = async () => {
     if (!restaurantId) return;
+    setTenantContext(restaurantId);
     setLoading(true);
     try {
       const [catRes, menuRes, modRes, groupRes, comboRes] = await Promise.all([
@@ -232,6 +233,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
       };
 
       const runWrite = async (payload) => {
+        setTenantContext(restaurantId);
         if (itemDrawer.id) {
           return supabase.from('pos_menu').update(payload).eq('id', itemDrawer.id).eq('restaurant_id', restaurantId);
         }
@@ -298,11 +300,12 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
           })),
         menu_item_ids: modDrawer.menu_item_ids || [],
       };
-      const runModWrite = async (p) => (
-        modDrawer.id
+      const runModWrite = async (p) => {
+        setTenantContext(restaurantId);
+        return modDrawer.id
           ? supabase.from('menu_modifier_groups').update(p).eq('id', modDrawer.id).eq('restaurant_id', restaurantId)
-          : supabase.from('menu_modifier_groups').insert([p])
-      );
+          : supabase.from('menu_modifier_groups').insert([p]);
+      };
       let { error } = await runModWrite(payload);
       if (error && /allow_multiple/i.test(error.message || '')) {
         const { allow_multiple: _drop, ...compat } = payload;
@@ -311,6 +314,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
       if (error) throw error;
       setModDrawer(null);
       await loadAll();
+      onCatalogChanged?.();
     } catch (err) {
       alert('Failed to save modifier: ' + err.message);
     } finally {
@@ -575,9 +579,11 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
                     <button type="button" onClick={() => setEditingCat(cat)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
                       <Edit3 size={12} />
                     </button>
-                    <button type="button" onClick={() => handleDeleteCategory(cat)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer">
-                      <Trash2 size={12} />
-                    </button>
+                    {canDelete && (
+                      <button type="button" onClick={() => handleDeleteCategory(cat)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer">
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -703,14 +709,16 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
                           >
                             <Edit3 size={14} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteItem(item)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                            title="Delete item"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => deleteItem(item)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                              title="Delete item"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -771,7 +779,9 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
                   <td className="py-3 px-4 font-bold text-emerald-700">{(mod.menu_item_ids || []).length}</td>
                   <td className="py-3 px-4 text-right space-x-1">
                     <button type="button" onClick={() => setModDrawer({ ...mod })} className="p-1.5 text-slate-500 hover:text-slate-900 cursor-pointer"><Edit3 size={14} /></button>
-                    <button type="button" onClick={() => deleteModifier(mod)} className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"><Trash2 size={14} /></button>
+                    {canDelete && (
+                      <button type="button" onClick={() => deleteModifier(mod)} className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"><Trash2 size={14} /></button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -821,7 +831,9 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
                   <td className="py-3 px-4 text-slate-500">{c.time_limit_enabled ? 'Scheduled' : 'Always On'}</td>
                   <td className="py-3 px-4 text-right space-x-1">
                     <button type="button" onClick={() => setComboDrawer({ ...c })} className="p-1.5 text-slate-500 hover:text-slate-900 cursor-pointer"><Edit3 size={14} /></button>
-                    <button type="button" onClick={() => deleteCombo(c)} className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"><Trash2 size={14} /></button>
+                    {canDelete && (
+                      <button type="button" onClick={() => deleteCombo(c)} className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"><Trash2 size={14} /></button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -841,7 +853,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged 
         subtitle="Configure catalog pricing, variations, special price windows, modifiers & tax flags."
         footer={(
           <>
-            {itemDrawer?.id ? (
+            {canDelete && itemDrawer?.id ? (
               <button type="button" onClick={() => deleteItem(itemDrawer)} className="px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer">
                 Delete Item
               </button>

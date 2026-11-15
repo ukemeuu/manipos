@@ -15,6 +15,13 @@ import {
 import { loadTenant, getActiveTenantSlug, getMicrositeUrl } from './lib/tenantConfig';
 import { can } from './lib/permissions';
 import { isAdminAccount } from './lib/posRouting';
+import {
+  writeActivePortalCookie,
+  readActivePortalCookie,
+  clearActivePortalCookie,
+  broadcastAuthEvent,
+  subscribeAuthEvents,
+} from './lib/crossTabSession';
 
 const RetailPosTerminal = lazy(() => import('./components/RetailPosTerminal').then(m => ({ default: m.RetailPosTerminal })));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
@@ -126,6 +133,7 @@ function wipeLocalSessionStorage() {
   try {
     localStorage.removeItem('pin_staff_user');
     localStorage.removeItem('manipos_selected_brand');
+    localStorage.removeItem('manipos_poj_session_v1');
     sessionStorage.removeItem('manipos_pending_supa_session');
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
@@ -167,6 +175,16 @@ function App() {
               if (parsed.supabaseSession?.access_token && parsed.supabaseSession?.refresh_token) {
                 sessionStorage.setItem('manipos_pending_supa_session', JSON.stringify(parsed.supabaseSession));
               }
+              if (parsed.pojSession?.access_token) {
+                localStorage.setItem('manipos_poj_session_v1', JSON.stringify(parsed.pojSession));
+              }
+              writeActivePortalCookie({
+                tenantSlug: staffUser.tenantSlug || getActiveTenantSlug(),
+                restaurantName: staffUser.restaurantName,
+                staffName: staffUser.name,
+                role: staffUser.role,
+                isAdmin: isAdminAccount(staffUser),
+              });
               const url = new URL(window.location.href);
               url.searchParams.delete('session');
               if (url.hash && url.hash.includes('session=')) {
@@ -330,6 +348,14 @@ function App() {
     const transferPayload = { staffUser: updatedStaffUser };
 
     try {
+      const pojRaw = localStorage.getItem('manipos_poj_session_v1');
+      if (pojRaw) {
+        const parsedPoj = JSON.parse(pojRaw);
+        if (parsedPoj?.access_token) transferPayload.pojSession = parsedPoj;
+      }
+    } catch (_) {}
+
+    try {
       const { data: { session: supaSess } } = await supabase.auth.getSession();
       if (supaSess?.access_token && supaSess?.refresh_token) {
         transferPayload.supabaseSession = {
@@ -338,6 +364,15 @@ function App() {
         };
       }
     } catch (_) {}
+
+    writeActivePortalCookie({
+      tenantSlug: slug,
+      restaurantName: updatedStaffUser.restaurantName,
+      staffName: updatedStaffUser.name,
+      role: updatedStaffUser.role,
+      isAdmin: isAdminAccount(updatedStaffUser),
+    });
+    broadcastAuthEvent('login', { staffUser: updatedStaffUser });
 
     const encodedSession = btoa(unescape(encodeURIComponent(JSON.stringify(transferPayload))));
     const search = explicitRoute
@@ -357,11 +392,46 @@ function App() {
     }, 500);
 
     // On generic pos.manipos.com login host, keep the login portal clean instead
-    // of restoring any cached tenant session from another store.
+    // of restoring any cached tenant session from another store — EXCEPT when an
+    // active .manipos.com session cookie points directly to the user's open portal.
     if (isGenericPosHost()) {
       wipeLocalSessionStorage();
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('logout') === '1') {
+        clearActivePortalCookie();
+        setLoading(false);
+        return () => clearTimeout(timer);
+      }
+      if (params.get('switch') !== '1') {
+        const portal = readActivePortalCookie();
+        if (portal?.tenantSlug && portal.tenantSlug !== 'pos') {
+          const destPage = portal.isAdmin ? 'dashboard' : 'pos';
+          window.location.replace(`https://${portal.tenantSlug}.pos.manipos.com/?page=${destPage}`);
+          return () => clearTimeout(timer);
+        }
+      }
       setLoading(false);
       return () => clearTimeout(timer);
+    }
+
+    // If user lands on manipos.com/?page=login|dashboard|pos|app while already
+    // authenticated in another browser tab, jump straight into their open portal.
+    const hostLower = window.location.hostname.toLowerCase();
+    if ((hostLower === 'manipos.com' || hostLower === 'www.manipos.com')) {
+      const params = new URLSearchParams(window.location.search);
+      const qPage = (params.get('page') || '').toLowerCase();
+      if (
+        ['login', 'pos', 'terminal', 'dashboard', 'app'].includes(qPage) &&
+        params.get('logout') !== '1' &&
+        params.get('switch') !== '1'
+      ) {
+        const portal = readActivePortalCookie();
+        if (portal?.tenantSlug && portal.tenantSlug !== 'pos') {
+          const destPage = portal.isAdmin ? 'dashboard' : 'pos';
+          window.location.replace(`https://${portal.tenantSlug}.pos.manipos.com/?page=${destPage}`);
+          return () => clearTimeout(timer);
+        }
+      }
     }
 
     // Restore transferred Supabase Auth session if arriving from pos.manipos.com redirect
@@ -431,6 +501,67 @@ function App() {
     };
   }, []);
 
+  // Persist cross-subdomain portal cookie whenever an authenticated staff session
+  // is active on a tenant POS subdomain, and sync logins/logouts across open tabs.
+  useEffect(() => {
+    if (isGenericPosHost()) return undefined;
+    if (session?.staffUser) {
+      const slug = session.staffUser.tenantSlug || tenantInfo.tenantSlug || tenant?.slug;
+      if (slug && slug !== 'pos') {
+        writeActivePortalCookie({
+          tenantSlug: slug,
+          restaurantName: tenant?.name || session.staffUser.restaurantName,
+          staffName: session.staffUser.name,
+          role: session.staffUser.role,
+          isAdmin: isAdminAccount(session.staffUser),
+        });
+      }
+    } else if (!loading && tenantInfo.isPosDomain && tenantInfo.tenantSlug) {
+      const portal = readActivePortalCookie();
+      if (portal?.tenantSlug === tenantInfo.tenantSlug) {
+        clearActivePortalCookie();
+      }
+    }
+    return undefined;
+  }, [session?.staffUser, loading, tenantInfo.isPosDomain, tenantInfo.tenantSlug, tenant?.name, tenant?.slug]);
+
+  useEffect(() => {
+    const syncFromStorage = () => {
+      if (isGenericPosHost()) return;
+      try {
+        const raw = localStorage.getItem('pin_staff_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setSession((prev) => ({ ...(prev || {}), staffUser: parsed }));
+          if (parsed?.restaurantId || parsed?.restaurant_id) {
+            setTenantContext(parsed.restaurantId || parsed.restaurant_id);
+          }
+        } else {
+          setSession(null);
+        }
+      } catch (_) {}
+    };
+
+    const onStorage = (e) => {
+      if (!e || e.key === null || e.key === 'pin_staff_user') {
+        syncFromStorage();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    const unsub = subscribeAuthEvents((msg) => {
+      if (msg?.type === 'logout') {
+        wipeLocalSessionStorage();
+        setSession(null);
+      } else if (msg?.type === 'login') {
+        syncFromStorage();
+      }
+    });
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      unsub();
+    };
+  }, []);
+
   // Force migrated staff to set a new password on first sign-in.
   useEffect(() => {
     const staff = session?.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
@@ -483,13 +614,15 @@ function App() {
       await supabase.auth.signOut();
     } catch (e) {}
     setTenantContext(null);
+    clearActivePortalCookie();
+    broadcastAuthEvent('logout');
     wipeLocalSessionStorage();
     setSession(null);
     setCurrentRoute('home');
 
     // Leave via a real navigation (replace, not push) so the signed-in screens
     // stay out of the browser history. Always return to the neutral shared login
-    // domain (pos.manipos.com) rather than staying pinned on a tenant URL.
+    // domain (pos.manipos.com/?logout=1) rather than staying pinned on a tenant URL.
     const host = window.location.hostname;
     const isLocalOrNative =
       host === 'localhost' ||
@@ -497,11 +630,11 @@ function App() {
       /^(127|10|192\.168)\./.test(host) ||
       Boolean(window.Capacitor?.isNativePlatform?.());
     if (isLocalOrNative) {
-      window.location.replace('/?page=login');
+      window.location.replace('/?page=login&logout=1');
       return;
     }
 
-    window.location.replace('https://pos.manipos.com/');
+    window.location.replace('https://pos.manipos.com/?logout=1');
   };
 
   const renderContent = () => {
@@ -935,8 +1068,17 @@ function App() {
                 : (ROLE_HOME_ROUTE[staffRole] || 'terminal');
               const staffWithSlug = {
                 ...(userSession?.staffUser || {}),
-                tenantSlug: userSession?.staffUser?.tenantSlug || userTenantSlug || '',
+                tenantSlug: userSession?.staffUser?.tenantSlug || userTenantSlug || tenantInfo.tenantSlug || '',
               };
+
+              writeActivePortalCookie({
+                tenantSlug: staffWithSlug.tenantSlug,
+                restaurantName: tenant?.name || staffWithSlug.restaurantName,
+                staffName: staffWithSlug.name,
+                role: staffWithSlug.role,
+                isAdmin: isAdminAccount(staffWithSlug),
+              });
+              broadcastAuthEvent('login', { staffUser: staffWithSlug });
 
               const redirected = await redirectToTenantPosIfGenericHost(staffWithSlug, targetRoute);
               if (redirected) return;
