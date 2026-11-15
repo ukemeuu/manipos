@@ -13,6 +13,7 @@ import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { loadTenant } from '../lib/tenantConfig';
 import { can } from '../lib/permissions';
 import { logAuditEvent } from '../lib/auditLogger';
+import { fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 
 // ---------------------------------------------------------------------------
 // Receipt / print branding
@@ -2503,6 +2504,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
     };
 
     const fetchHistory = async (startDateVal = historyStartDate, endDateVal = historyEndDate) => {
+        if (!restaurantId) return;
         setLoadingHistory(true);
         try {
             const cleanDateStr = (val) => {
@@ -2530,17 +2532,25 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const end = new Date(`${eStr}T23:59:59.999+03:00`);
 
             // .limit(5000) overrides Supabase's default 1000-row cap for full week queries
-            const { data, error } = await supabase
-                .from('pos_orders')
-                .select('*, items:pos_order_items(*)')
-                .eq('restaurant_id', restaurantId)
-                .gte('created_at', start.toISOString())
-                .lte('created_at', end.toISOString())
-                .order('created_at', { ascending: false })
-                .limit(5000);
+            const [{ data, error }, pojOrders] = await Promise.all([
+                supabase
+                    .from('pos_orders')
+                    .select('*, items:pos_order_items(*)')
+                    .eq('restaurant_id', restaurantId)
+                    .gte('created_at', start.toISOString())
+                    .lte('created_at', end.toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(5000),
+                fetchPojOrdersForRange({
+                    tenantSlug: activeTenantSlug,
+                    restaurantId,
+                    startIso: start.toISOString(),
+                    endIso: end.toISOString(),
+                }),
+            ]);
 
             if (error) throw error;
-            let finalOrders = data || [];
+            let finalOrders = mergeOrdersWithPoj(data || [], pojOrders);
 
             // Waiter order visibility isolation
             if (staffRole === 'waiter') {
@@ -2557,15 +2567,23 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
             const prevStart = new Date(start.getTime() - periodDiffMs - 1);
             const prevEnd = new Date(start.getTime() - 1);
 
-            const { data: prevData, error: prevError } = await supabase
-                .from('pos_orders')
-                .select('total_amount, status, payment_status, cashier_name')
-                .eq('restaurant_id', restaurantId)
-                .gte('created_at', prevStart.toISOString())
-                .lte('created_at', prevEnd.toISOString());
+            const [{ data: prevData, error: prevError }, prevPojOrders] = await Promise.all([
+                supabase
+                    .from('pos_orders')
+                    .select('id, source_poj_id, total_amount, status, payment_status, cashier_name, created_at')
+                    .eq('restaurant_id', restaurantId)
+                    .gte('created_at', prevStart.toISOString())
+                    .lte('created_at', prevEnd.toISOString()),
+                fetchPojOrdersForRange({
+                    tenantSlug: activeTenantSlug,
+                    restaurantId,
+                    startIso: prevStart.toISOString(),
+                    endIso: prevEnd.toISOString(),
+                }),
+            ]);
 
             if (!prevError && prevData) {
-                let validPrevOrders = prevData.filter(o => 
+                let validPrevOrders = mergeOrdersWithPoj(prevData, prevPojOrders).filter(o => 
                     o.status !== 'Returned' && 
                     o.status !== 'Cancelled' && 
                     o.status !== 'Declined' && 

@@ -92,6 +92,7 @@ import { GuestCRMView } from './GuestCRMView';
 import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
+import { fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 
 // Setup progress is per restaurant. A shared flag would let a brand-new
 // tenant skip onboarding because a previous tenant on the same device had
@@ -266,11 +267,18 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
       setTenantContext(currentRestaurantId);
 
-      // 1. Fetch Orders
+      // 1. Fetch Orders (including live bridge for POJ-linked stores)
       let ordersQuery = supabase.from('pos_orders').select('*, items:pos_order_items(*)').order('created_at', { ascending: false });
       if (currentRestaurantId) ordersQuery = ordersQuery.eq('restaurant_id', currentRestaurantId);
-      const { data: fetchedOrders } = await ordersQuery;
-      setOrders(fetchedOrders || []);
+      const [{ data: fetchedOrders }, pojOrders] = await Promise.all([
+        ordersQuery,
+        fetchPojOrdersForRange({
+          tenantSlug: pinUser.tenantSlug || tenantSlug,
+          restaurantId: currentRestaurantId,
+          limit: 1000,
+        }),
+      ]);
+      setOrders(mergeOrdersWithPoj(fetchedOrders || [], pojOrders));
 
       // 2. Fetch Menu Items
       let menuQuery = supabase.from('pos_menu').select('*').order('name');

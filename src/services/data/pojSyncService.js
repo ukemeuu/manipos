@@ -168,6 +168,8 @@ export async function exportSnapshotFromPoj({
     'suppliers',
     'inventory_items',
     'purchase_orders',
+    'pos_orders',
+    'pos_order_items',
   ];
 
   const snapshot = {
@@ -709,6 +711,34 @@ export async function importPojSnapshotToManiPos({
     restaurantId
   );
 
+  // 11. POS Orders (when pos_orders.source_poj_id exists)
+  if ((t.pos_orders || []).length) {
+    onProgress?.('Importing POS order history…');
+    summary.pos_orders = await syncRowsByPojId(
+      'pos_orders',
+      (t.pos_orders || []).map((r) => ({
+        restaurant_id: restaurantId,
+        source_poj_id: String(r.id),
+        ticket_number: r.ticket_number != null ? String(r.ticket_number) : '',
+        customer_name: r.customer_name || 'Walk-in Guest',
+        dining_option: r.dining_option || 'Dine In',
+        payment_method: r.payment_method || 'Cash',
+        payment_status: r.payment_status || 'Paid',
+        status: r.status || 'Completed',
+        total_amount: Number(r.total_amount || 0),
+        discount: Number(r.discount || 0),
+        cashier_name: r.cashier_name || 'Staff',
+        notes: r.notes || null,
+        brand: r.brand || 'POT OF JOLLOF',
+        order_channel: r.order_channel || 'Walk-in',
+        delivery_address: r.delivery_address || null,
+        delivery_fee: Number(r.delivery_fee || 0),
+        created_at: r.created_at || new Date().toISOString(),
+      })),
+      restaurantId
+    );
+  }
+
   // Record sync timestamp in restaurant_poj_links
   try {
     await supabase.from('restaurant_poj_links').upsert(
@@ -756,4 +786,97 @@ export async function pushPojRequestStatus({
   } catch (err) {
     return { ok: false, error: err?.message };
   }
+}
+
+async function resolvePojBridgeUrl(tenantSlug, restaurantId) {
+  const cleanSlug = String(tenantSlug || '').toLowerCase().trim();
+  if (restaurantId) {
+    try {
+      const { data: linkRow } = await supabase
+        .from('restaurant_poj_links')
+        .select('poj_supabase_url, link_auth_enabled')
+        .eq('restaurant_id', restaurantId)
+        .limit(1)
+        .maybeSingle();
+      if (linkRow) {
+        if (linkRow.link_auth_enabled === false) return null;
+        return String(linkRow.poj_supabase_url || POJ_DEFAULT_URL).replace(/\/+$/, '');
+      }
+    } catch (_) {}
+  }
+  return cleanSlug === 'potofjollof' ? POJ_DEFAULT_URL : null;
+}
+
+/**
+ * Fetches live pos_orders from linked pojmanagement.com for a date range
+ * so Order History and Admin Dashboard show orders placed on either system.
+ */
+export async function fetchPojOrdersForRange({
+  tenantSlug,
+  restaurantId,
+  startIso = null,
+  endIso = null,
+  limit = 5000,
+}) {
+  if (!restaurantId) return [];
+  const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
+  if (!pojUrl) return [];
+
+  try {
+    const params = new URLSearchParams();
+    params.set('select', '*,items:pos_order_items(*)');
+    params.set('order', 'created_at.desc');
+    params.set('limit', String(limit));
+    if (startIso) params.append('created_at', `gte.${startIso}`);
+    if (endIso) params.append('created_at', `lte.${endIso}`);
+
+    const res = await fetch(`${pojUrl}/rest/v1/pos_orders?${params.toString()}`, {
+      headers: {
+        apikey: POJ_ANON_KEY,
+        Authorization: `Bearer ${POJ_ANON_KEY}`,
+      },
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+
+    return rows.map((o) => ({
+      ...o,
+      restaurant_id: restaurantId,
+      source_poj_id: String(o.id),
+      ticket_number: o.ticket_number != null ? String(o.ticket_number) : '',
+      items: Array.isArray(o.items) ? o.items : [],
+      _fromPoj: true,
+    }));
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Merges ManiPOS pos_orders with linked POJ Management orders without duplicating
+ * rows that already carry a matching source_poj_id or id.
+ */
+export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
+  const maniList = Array.isArray(maniOrders) ? maniOrders : [];
+  const pojList = Array.isArray(pojOrders) ? pojOrders : [];
+  if (!pojList.length) return maniList;
+
+  const seenIds = new Set();
+  const seenPojIds = new Set();
+  for (const o of maniList) {
+    if (o?.id) seenIds.add(String(o.id));
+    if (o?.source_poj_id) seenPojIds.add(String(o.source_poj_id));
+  }
+
+  const merged = [...maniList];
+  for (const po of pojList) {
+    const poId = po?.id ? String(po.id) : '';
+    const srcId = po?.source_poj_id ? String(po.source_poj_id) : poId;
+    if ((poId && seenIds.has(poId)) || (srcId && seenPojIds.has(srcId))) continue;
+    merged.push(po);
+  }
+
+  merged.sort((a, b) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime());
+  return merged;
 }
