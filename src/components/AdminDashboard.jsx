@@ -327,6 +327,54 @@ export function AdminDashboard({
     };
   }, []);
 
+  const syncUrlForOrdaState = (nextModule, nextTab, isWebPos = false, { replace = false } = {}) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      if (!isAdmin || isWebPos) {
+        url.searchParams.set('page', 'pos');
+        url.searchParams.delete('tab');
+      } else {
+        url.searchParams.set('page', 'dashboard');
+        url.searchParams.set('tab', nextTab || nextModule || 'orders');
+      }
+      const target = `${url.pathname}${url.search}`;
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (target !== current) {
+        if (replace) {
+          window.history.replaceState({}, '', target);
+        } else {
+          window.history.pushState({}, '', target);
+        }
+      }
+    } catch (_) { }
+  };
+
+  // Keep React state in sync when user navigates with browser Back/Forward buttons
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onPopState = () => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const nextEntry = resolveOrdaEntryState({
+          staffUser: effectiveStaffUser,
+          requestedRoute: sp.get('page') || '',
+          tabParam: sp.get('tab') || '',
+        });
+        setShowWebPos(Boolean(nextEntry.initialWebPos));
+        setActiveModule(nextEntry.activeModule || 'orders');
+        setActiveTab(nextEntry.activeTab || 'orders');
+      } catch (_) { }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [effectiveStaffUser]);
+
+  // Ensure initial URL query matches the resolved active module/POS view on entry
+  useEffect(() => {
+    syncUrlForOrdaState(activeModule, activeTab, showWebPos, { replace: true });
+  }, []);
+
   // Auto-accept pending microsite orders when Auto-Accept toggle is ON
   useEffect(() => {
     if (!autoAcceptOrders) return;
@@ -335,10 +383,11 @@ export function AdminDashboard({
     const pendingMicrosite = orders.filter((o) => {
       if (!o?.id || autoAcceptedIdsRef.current.has(o.id)) return false;
       const st = String(o.status || '').toLowerCase();
-      const ch = String(o.sales_channel || o.order_channel || o.channel || '').toLowerCase();
-      return (st === 'pending' || st === 'new') && (ch.includes('microsite') || ch === 'skg' || o.order_source === 'microsite');
+      const ch = [o.sales_channel, o.order_channel, o.channel, o.order_source].filter(Boolean).join(' ').toLowerCase();
+      return (st === 'pending' || st === 'new') && (ch.includes('microsite') || ch.includes('online') || ch.includes('skg'));
     });
     if (pendingMicrosite.length === 0) return;
+    setTenantContext(restId);
     pendingMicrosite.forEach((o) => autoAcceptedIdsRef.current.add(o.id));
     Promise.allSettled(
       pendingMicrosite.map((o) =>
@@ -447,12 +496,14 @@ export function AdminDashboard({
             if (activeTab === 'onboarding' && isAdmin) {
               setActiveTab('orders');
               setActiveModule('orders');
+              syncUrlForOrdaState('orders', 'orders', showWebPos, { replace: true });
             }
           } else if (isAdmin) {
             setSetupCompleted(false);
             localStorage.removeItem(setupCompletedKey());
             setActiveTab('onboarding');
             setActiveModule('dashboard');
+            syncUrlForOrdaState('dashboard', 'onboarding', false, { replace: true });
           }
         } else if (currentRestaurantId && isAdmin) {
           try {
@@ -474,6 +525,7 @@ export function AdminDashboard({
           localStorage.removeItem(setupCompletedKey());
           setActiveTab('onboarding');
           setActiveModule('dashboard');
+          syncUrlForOrdaState('dashboard', 'onboarding', false, { replace: true });
         }
       }
 
@@ -661,6 +713,7 @@ export function AdminDashboard({
         setActiveModule('orders');
         setActiveTab('orders');
         setShowWebPos(true);
+        syncUrlForOrdaState('orders', 'orders', true, { replace: true });
       }
     } catch (err) {
       setLockError(err.message || 'PIN verification failed.');
@@ -1218,10 +1271,12 @@ export function AdminDashboard({
 
   const selectModule = (mod, tab) => {
     if (!isAdmin && mod !== 'orders') return;
+    const nextTab = tab || mod || 'orders';
     setShowWebPos(false);
     setSettleTargetOrder(null);
     setActiveModule(mod);
     if (tab) setActiveTab(tab);
+    syncUrlForOrdaState(mod, nextTab, false);
   };
 
   const ORDER_BUCKETS = [
@@ -1384,6 +1439,7 @@ export function AdminDashboard({
                       setSettleTargetOrder(null);
                       setActiveTab('orders');
                       setOrderBucket(b.id);
+                      syncUrlForOrdaState('orders', 'orders', false);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition ${selected
                       ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
@@ -1910,7 +1966,11 @@ export function AdminDashboard({
               type="button"
               onClick={() => {
                 setSettleTargetOrder(null);
-                setShowWebPos((v) => !v);
+                setShowWebPos((v) => {
+                  const next = !v;
+                  syncUrlForOrdaState('orders', 'orders', next);
+                  return next;
+                });
               }}
               className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
@@ -2049,6 +2109,7 @@ export function AdminDashboard({
                 setSettleTargetOrder(null);
                 setActiveModule('orders');
                 setActiveTab('orders');
+                syncUrlForOrdaState('orders', 'orders', false);
               }}
               onOrderPlaced={() => fetchDashboardData({ silent: true })}
             />
@@ -2066,10 +2127,12 @@ export function AdminDashboard({
               onCreateOrder={() => {
                 setSettleTargetOrder(null);
                 setShowWebPos(true);
+                syncUrlForOrdaState('orders', 'orders', true);
               }}
               onResumeOpenOrder={(order) => {
                 setSettleTargetOrder(order);
                 setShowWebPos(true);
+                syncUrlForOrdaState('orders', 'orders', true);
               }}
             />
           ) : activeTab === 'reports' ? (
@@ -2257,7 +2320,7 @@ export function AdminDashboard({
                             <h4 className="font-bold text-white text-sm">2. Menu Catalog</h4>
                             <p className="text-xs text-slate-400">{menuItems.length} active menu items</p>
                           </div>
-                          <button onClick={() => setActiveTab('menu')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
+                          <button onClick={() => selectModule('menu', 'menu')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
                             Configure Menu &rarr;
                           </button>
                         </div>
@@ -2268,7 +2331,7 @@ export function AdminDashboard({
                             <h4 className="font-bold text-white text-sm">3. Staff & Cashier PINs</h4>
                             <p className="text-xs text-slate-400">{staffList.length} staff member accounts</p>
                           </div>
-                          <button onClick={() => setActiveTab('staff')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
+                          <button onClick={() => selectModule('settings', 'staff')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
                             Staff &rarr;
                           </button>
                         </div>
@@ -2279,7 +2342,7 @@ export function AdminDashboard({
                             <h4 className="font-bold text-white text-sm">4. Payment & Receipts</h4>
                             <p className="text-xs text-slate-400">M-Pesa & Cash settings</p>
                           </div>
-                          <button onClick={() => setActiveTab('settings')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
+                          <button onClick={() => selectModule('settings', 'settings')} className="px-3.5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-all">
                             Settings &rarr;
                           </button>
                         </div>
@@ -2323,6 +2386,7 @@ export function AdminDashboard({
                             setActiveModule('orders');
                             setActiveTab('orders');
                             setShowWebPos(true);
+                            syncUrlForOrdaState('orders', 'orders', true);
                           }}
                           className="px-6 py-3 bg-amber-400 text-slate-950 text-sm font-black rounded-xl hover:bg-amber-300 shadow-xl shadow-amber-400/10 flex items-center gap-2 transition-all cursor-pointer"
                         >

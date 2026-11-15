@@ -5,6 +5,7 @@ import {
   isOrderAlarmSnoozed,
 } from '../orderAlarm';
 import { isOnlineIncomingOrder } from '../../components/IncomingOrderAlarmOverlay';
+import { normalizeChannelLabel } from '../../components/orda/LiveOrdersView';
 import { syncExpenseToGoogleSheet, syncDailySalesToGoogleSheet } from '../googleSheetsSyncService';
 
 describe('orderAlarm & IncomingOrderAlarmOverlay detection', () => {
@@ -52,6 +53,33 @@ describe('orderAlarm & IncomingOrderAlarmOverlay detection', () => {
         order_channel: 'Walk-in',
         dining_option: 'Dine-in',
         cashier_name: 'Alice',
+      })
+    ).toBe(false);
+
+    // Regression: sales_channel defaults to 'pos' in SQL while order_channel = 'Online'
+    expect(
+      isOnlineIncomingOrder({
+        status: 'Pending',
+        sales_channel: 'pos',
+        order_channel: 'Online',
+        cashier_name: 'Self-Service Microsite',
+      })
+    ).toBe(true);
+
+    expect(
+      normalizeChannelLabel({
+        sales_channel: 'pos',
+        order_channel: 'Online',
+        cashier_name: 'Self-Service Microsite',
+      })
+    ).toBe('MICROSITE');
+
+    expect(
+      isOnlineIncomingOrder({
+        status: 'Pending',
+        sales_channel: 'pos',
+        order_channel: 'POS',
+        cashier_name: 'Ronaldo',
       })
     ).toBe(false);
   });

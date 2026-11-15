@@ -3,7 +3,7 @@ import {
   Search, Clock, User, Package, MapPin, Truck, Store, UtensilsCrossed,
   Check, X, CheckCircle2, Ban, Printer, RefreshCw, ExternalLink, AlertCircle, Calendar
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, setTenantContext } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
 import {
   processOrderInventoryDepletion,
@@ -11,6 +11,7 @@ import {
 } from '../../lib/inventoryErpEngine';
 import { printCashierSlips, printKitchenSlips } from '../../lib/posPrintService';
 import { getBusinessDayStartIso } from '../../lib/posShiftService';
+import { updatePojOrderStatus } from '../../services/data/pojSyncService';
 
 const CHANNEL_OPTIONS = [
   'All Channels',
@@ -86,16 +87,35 @@ function relativeTimeLabel(iso) {
   });
 }
 
-function normalizeChannelLabel(order) {
-  const raw = String(order?.sales_channel || order?.order_channel || order?.channel || 'POS').trim();
-  const lower = raw.toLowerCase();
-  if (lower.includes('microsite') || lower === 'skg') return 'MICROSITE';
-  if (lower.includes('web')) return 'WEB POS';
-  if (lower.includes('whatsapp')) return 'WHATSAPP';
-  if (lower.includes('glovo')) return 'GLOVO';
-  if (lower.includes('bolt')) return 'BOLT';
-  if (lower.includes('uber')) return 'UBER EATS';
-  if (lower.includes('call')) return 'CALL CENTER';
+export function normalizeChannelLabel(order) {
+  const sc = String(order?.sales_channel || '').trim();
+  const oc = String(order?.order_channel || '').trim();
+  const ch = String(order?.channel || '').trim();
+  const raw = (sc && sc.toLowerCase() !== 'pos' ? sc : (oc || ch || sc || 'POS')).trim();
+  const rawLower = raw.toLowerCase();
+
+  if (rawLower.includes('whatsapp')) return 'WHATSAPP';
+  if (rawLower.includes('glovo')) return 'GLOVO';
+  if (rawLower.includes('bolt')) return 'BOLT';
+  if (rawLower.includes('uber')) return 'UBER EATS';
+  if (rawLower.includes('call')) return 'CALL CENTER';
+  if (rawLower.includes('web')) return 'WEB POS';
+
+  const combined = [sc, oc, ch, order?.order_source, order?.cashier_name]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (
+    combined.includes('microsite') ||
+    combined.includes('online') ||
+    combined.includes('self-service') ||
+    oc.toLowerCase() === 'skg' ||
+    sc.toLowerCase() === 'skg' ||
+    ch.toLowerCase() === 'skg'
+  ) {
+    return 'MICROSITE';
+  }
   return raw.toUpperCase();
 }
 
@@ -293,9 +313,13 @@ export function LiveOrdersView({
 
   const updateOrderStatus = async (order, nextStatus, extraPatch = {}) => {
     if (!order?.id || !restaurantId) return;
+    setTenantContext(restaurantId);
     setUpdatingId(order.id);
     try {
       const patch = { status: nextStatus, ...extraPatch };
+      if (nextStatus === 'Declined' && patch.payment_status === undefined && String(order.payment_status || '').toLowerCase() !== 'paid') {
+        patch.payment_status = 'Voided';
+      }
       if (nextStatus === 'Preparing' && !order.accepted_at) {
         patch.accepted_at = new Date().toISOString();
       }
@@ -308,12 +332,49 @@ export function LiveOrdersView({
       if (nextStatus === 'Completed' && !order.completed_at) {
         patch.completed_at = new Date().toISOString();
       }
-      const { error } = await supabase
-        .from('pos_orders')
-        .update(patch)
-        .eq('id', order.id)
-        .eq('restaurant_id', restaurantId);
-      if (error) throw error;
+
+      let updatedLocally = false;
+      if (!order._fromPoj) {
+        const optionalCols = ['accepted_at', 'kitchen_started_at', 'kitchen_ready_at', 'completed_at', 'payment_status'];
+        let workingPatch = { ...patch };
+        let res = null;
+        for (let i = 0; i <= optionalCols.length; i += 1) {
+          res = await supabase
+            .from('pos_orders')
+            .update(workingPatch)
+            .eq('id', order.id)
+            .eq('restaurant_id', restaurantId)
+            .select('id, status');
+          if (!res.error) break;
+          const msg = String(res.error.message || '').toLowerCase();
+          const missingCol = optionalCols.find((col) => col in workingPatch && msg.includes(col));
+          if (!missingCol) break;
+          const next = { ...workingPatch };
+          delete next[missingCol];
+          workingPatch = next;
+        }
+        if (res?.error) throw res.error;
+        updatedLocally = Array.isArray(res?.data) && res.data.length > 0;
+      }
+
+      let updatedPoj = false;
+      if (order._fromPoj || order.source_poj_id || !updatedLocally) {
+        const pojId = order.source_poj_id || order.id;
+        const pojRes = await updatePojOrderStatus({
+          restaurantId,
+          pojOrderId: pojId,
+          patch,
+        });
+        updatedPoj = Boolean(pojRes?.ok);
+        if (order._fromPoj && !updatedPoj && pojRes?.error) {
+          throw new Error(pojRes.error);
+        }
+      }
+
+      if (!updatedLocally && !updatedPoj) {
+        throw new Error('Order update did not match an active order record. Please refresh and try again.');
+      }
+
       if (nextStatus === 'Completed') {
         processOrderInventoryDepletion({
           restaurantId,
@@ -323,6 +384,9 @@ export function LiveOrdersView({
       }
       if (selectedOrder?.id === order.id) {
         setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : null));
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('manipos:orders-updated'));
       }
       await onRefresh?.();
     } catch (err) {
@@ -368,6 +432,7 @@ export function LiveOrdersView({
       disposition: voidLineDisposition[line.id || idx] || 'return_to_stock',
     }));
 
+    setTenantContext(restaurantId);
     setVoidSubmitting(true);
     try {
       const fullPatch = {
@@ -375,28 +440,38 @@ export function LiveOrdersView({
         void_reason: finalReason,
         void_disposition: dispositionDetails,
       };
-      let res = await supabase
-        .from('pos_orders')
-        .update(fullPatch)
-        .eq('id', voidTarget.id)
-        .eq('restaurant_id', restaurantId);
+      let res = null;
+      if (!voidTarget._fromPoj) {
+        res = await supabase
+          .from('pos_orders')
+          .update(fullPatch)
+          .eq('id', voidTarget.id)
+          .eq('restaurant_id', restaurantId);
 
-      // Fail-safe fallback when Wave 2 migration columns have not been applied yet
-      if (res.error) {
-        const msg = String(res.error.message || '').toLowerCase();
-        if (msg.includes('void_disposition') || msg.includes('void_reason')) {
-          const fallbackPatch = {
-            status: 'Voided',
-            notes: [voidTarget.notes, `[VOID: ${finalReason}]`].filter(Boolean).join(' | '),
-          };
-          res = await supabase
-            .from('pos_orders')
-            .update(fallbackPatch)
-            .eq('id', voidTarget.id)
-            .eq('restaurant_id', restaurantId);
+        // Fail-safe fallback when Wave 2 migration columns have not been applied yet
+        if (res.error) {
+          const msg = String(res.error.message || '').toLowerCase();
+          if (msg.includes('void_disposition') || msg.includes('void_reason')) {
+            const fallbackPatch = {
+              status: 'Voided',
+              notes: [voidTarget.notes, `[VOID: ${finalReason}]`].filter(Boolean).join(' | '),
+            };
+            res = await supabase
+              .from('pos_orders')
+              .update(fallbackPatch)
+              .eq('id', voidTarget.id)
+              .eq('restaurant_id', restaurantId);
+          }
         }
+        if (res.error) throw res.error;
       }
-      if (res.error) throw res.error;
+      if (voidTarget._fromPoj || voidTarget.source_poj_id) {
+        await updatePojOrderStatus({
+          restaurantId,
+          pojOrderId: voidTarget.source_poj_id || voidTarget.id,
+          patch: fullPatch,
+        });
+      }
       processVoidOrderInventoryDisposition({
         restaurantId,
         order: voidTarget,
@@ -406,6 +481,9 @@ export function LiveOrdersView({
       });
       if (selectedOrder?.id === voidTarget.id) {
         setSelectedOrder((prev) => (prev ? { ...prev, ...fullPatch } : null));
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('manipos:orders-updated'));
       }
       setVoidTarget(null);
       await onRefresh?.();
@@ -859,6 +937,26 @@ export function LiveOrdersView({
               </button>
             </div>
             <div className="flex items-center gap-2">
+              {(classifyOrderBucket(selectedOrder) === 'new' || classifyOrderBucket(selectedOrder) === 'verifying') && (
+                <>
+                  <button
+                    type="button"
+                    disabled={updatingId === selectedOrder.id}
+                    onClick={() => updateOrderStatus(selectedOrder, 'Declined')}
+                    className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingId === selectedOrder.id}
+                    onClick={() => updateOrderStatus(selectedOrder, 'Preparing')}
+                    className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    Accept Order
+                  </button>
+                </>
+              )}
               {canVoidOrder(selectedOrder) && (
                 <button
                   type="button"

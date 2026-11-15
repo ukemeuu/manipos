@@ -889,3 +889,68 @@ export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
   merged.sort((a, b) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime());
   return merged;
 }
+
+/**
+ * Updates an order status on the linked pojmanagement.com database when staff
+ * Accept, Decline, Ready, Complete, or Void an order synced via the POJ bridge.
+ */
+export async function updatePojOrderStatus({
+  tenantSlug,
+  restaurantId,
+  pojOrderId,
+  patch = {},
+  timeoutMs = 8000,
+}) {
+  if (!restaurantId || !pojOrderId) return { ok: false, error: 'Missing order or restaurant ID' };
+  const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
+  if (!pojUrl) return { ok: false, error: 'No linked POJ bridge configured' };
+
+  const cleanPatch = { ...patch };
+  const optionalCols = ['accepted_at', 'kitchen_started_at', 'kitchen_ready_at', 'completed_at', 'void_reason', 'void_disposition', 'payment_status'];
+
+  const attemptPatch = async (payload) => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller && timeoutMs > 0
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+    try {
+      const res = await fetch(
+        `${pojUrl}/rest/v1/pos_orders?id=eq.${encodeURIComponent(String(pojOrderId))}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: POJ_ANON_KEY,
+            Authorization: `Bearer ${POJ_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation',
+          },
+          body: JSON.stringify(payload),
+          ...(controller ? { signal: controller.signal } : {}),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        return { ok: false, status: res.status, error: text || `HTTP ${res.status}` };
+      }
+      const rows = await res.json().catch(() => []);
+      return { ok: true, data: Array.isArray(rows) ? rows : [] };
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Network error' };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
+  let working = { ...cleanPatch };
+  let last = await attemptPatch(working);
+  for (let i = 0; i < optionalCols.length && !last.ok; i += 1) {
+    const msg = String(last.error || '').toLowerCase();
+    const missing = optionalCols.find((col) => col in working && msg.includes(col));
+    if (!missing) break;
+    const next = { ...working };
+    delete next[missing];
+    working = next;
+    last = await attemptPatch(working);
+  }
+  return last;
+}

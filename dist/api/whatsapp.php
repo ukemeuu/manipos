@@ -1,30 +1,47 @@
 <?php
 /**
- * Pot of Jollof - WhatsApp Cloud API Direct Webhook
- * Zero 3rd-party SaaS fees - Direct Meta Cloud API integration.
+ * ManiPOS - Multi-Tenant WhatsApp Cloud API Direct Webhook
+ * Routes incoming messages to the matching tenant store by phone_number_id.
  */
 
 header('Content-Type: application/json; charset=utf-8');
 
 // ─────────────────────────────────────────────────────────────
-// CONFIGURATION (prefer server environment variables in production)
+// CONFIGURATION (configure via server environment variables)
 // ─────────────────────────────────────────────────────────────
-// 1. Verify token: Set the same secret token in your Meta App Webhook settings
-define('VERIFY_TOKEN', getenv('WHATSAPP_VERIFY_TOKEN') ?: 'POJ_WHATSAPP_SECRET_2026');
-
-// 2. Meta App Secret (strongly recommended for X-Hub-Signature-256 verification)
+define('VERIFY_TOKEN', getenv('WHATSAPP_VERIFY_TOKEN') ?: '');
 define('APP_SECRET', getenv('WHATSAPP_APP_SECRET') ?: '');
+define('PHONE_NUMBER_ID', getenv('WHATSAPP_PHONE_NUMBER_ID') ?: '');
+define('ACCESS_TOKEN', getenv('WHATSAPP_ACCESS_TOKEN') ?: '');
+define('STORE_NAME', getenv('WHATSAPP_STORE_NAME') ?: 'ManiPOS Store');
+define('STORE_MENU_URL', getenv('WHATSAPP_STORE_MENU_URL') ?: 'https://manipos.com');
+define('SUPPORT_PHONE', getenv('WHATSAPP_SUPPORT_PHONE') ?: '');
 
-// 3. Phone Number ID: Available on Meta WhatsApp > API Setup screen
-define('PHONE_NUMBER_ID', getenv('WHATSAPP_PHONE_NUMBER_ID') ?: 'YOUR_PHONE_NUMBER_ID');
-
-// 4. Permanent Access Token: Generated from Meta Business System User
-define('ACCESS_TOKEN', getenv('WHATSAPP_ACCESS_TOKEN') ?: 'YOUR_META_PERMANENT_ACCESS_TOKEN');
-
-// 5. Tenant presentation overrides (defaulting to Pot of Jollof)
-define('STORE_NAME', getenv('WHATSAPP_STORE_NAME') ?: 'Pot of Jollof');
-define('STORE_MENU_URL', getenv('WHATSAPP_STORE_MENU_URL') ?: 'https://potofjollof.manipos.com');
-define('SUPPORT_PHONE', getenv('WHATSAPP_SUPPORT_PHONE') ?: '0795384140');
+/**
+ * Resolve tenant presentation & credentials by Meta phone_number_id.
+ * Set WHATSAPP_TENANTS_JSON='{"<phone_id>":{"store_name":"...","menu_url":"...","support_phone":"...","access_token":"..."}}'
+ */
+function resolveTenantWebhookConfig($phoneId) {
+    $rawMap = getenv('WHATSAPP_TENANTS_JSON');
+    if ($rawMap) {
+        $decoded = json_decode($rawMap, true);
+        if (is_array($decoded) && isset($decoded[$phoneId]) && is_array($decoded[$phoneId])) {
+            $cfg = $decoded[$phoneId];
+            return [
+                'store_name' => $cfg['store_name'] ?? STORE_NAME,
+                'menu_url' => $cfg['menu_url'] ?? STORE_MENU_URL,
+                'support_phone' => $cfg['support_phone'] ?? SUPPORT_PHONE,
+                'access_token' => $cfg['access_token'] ?? ACCESS_TOKEN,
+            ];
+        }
+    }
+    return [
+        'store_name' => STORE_NAME,
+        'menu_url' => STORE_MENU_URL,
+        'support_phone' => SUPPORT_PHONE,
+        'access_token' => ACCESS_TOKEN,
+    ];
+}
 
 // ─────────────────────────────────────────────────────────────
 // 1. WEBHOOK VERIFICATION (GET request from Meta)
@@ -35,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $token = $_GET['hub_verify_token'] ?? ($_GET['hub.verify_token'] ?? '');
     $challenge = $_GET['hub_challenge'] ?? ($_GET['hub.challenge'] ?? '');
 
-    if ($mode === 'subscribe' && $token === VERIFY_TOKEN) {
+    if (VERIFY_TOKEN !== '' && $mode === 'subscribe' && hash_equals(VERIFY_TOKEN, (string)$token)) {
         http_response_code(200);
         echo $challenge;
         exit;
@@ -113,33 +130,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ─────────────────────────────────────────────────────────────
 function handleUserSelection($recipientPhone, $input, $customerName, $phoneId) {
     if (empty($recipientPhone)) return;
+    $tenantCfg = resolveTenantWebhookConfig($phoneId);
 
     // OPTION 1: Place New Order
     if ($input === '1' || $input === 'opt_new_order' || strpos($input, 'order') !== false || strpos($input, 'menu') !== false) {
-        $msg = "🍲 *Order from " . STORE_NAME . "*\n\n"
+        $msg = "🍲 *Order from " . $tenantCfg['store_name'] . "*\n\n"
              . "You can view our live digital menu, customize your dishes, and place your order directly here:\n\n"
-             . "👉 *" . STORE_MENU_URL . "*\n\n"
+             . "👉 *" . $tenantCfg['menu_url'] . "*\n\n"
              . "⚡ Fast delivery & takeaway available!\n\n"
              . "_(Reply with *2* if you are following up on an existing order)_";
         
-        sendWhatsAppText($recipientPhone, $msg, $phoneId);
+        sendWhatsAppText($recipientPhone, $msg, $phoneId, $tenantCfg['access_token']);
         return;
     }
 
     // OPTION 2: Follow Up on Existing Order
     if ($input === '2' || $input === 'opt_existing_order' || strpos($input, 'status') !== false || strpos($input, 'follow up') !== false || strpos($input, 'existing') !== false) {
+        $supportLine = $tenantCfg['support_phone'] ? ("☎️ *" . $tenantCfg['support_phone'] . "*\n\n") : "";
         $msg = "📞 *Following Up on an Existing Order*\n\n"
-             . "For live updates on your preparation or rider dispatch, please call our kitchen directly:\n\n"
-             . "☎️ *" . SUPPORT_PHONE . "*\n\n"
+             . "For live updates on your preparation or rider dispatch, please contact our team:\n\n"
+             . $supportLine
              . "Our dispatch team is on standby to assist you!\n\n"
              . "_(Reply with *1* to place a new order)_";
 
-        sendWhatsAppText($recipientPhone, $msg, $phoneId);
+        sendWhatsAppText($recipientPhone, $msg, $phoneId, $tenantCfg['access_token']);
         return;
     }
 
     // DEFAULT GREETING: Send Interactive 1-tap Buttons
-    sendInteractiveMenu($recipientPhone, $customerName, $phoneId);
+    sendInteractiveMenu($recipientPhone, $customerName, $phoneId, $tenantCfg);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -149,7 +168,8 @@ function handleUserSelection($recipientPhone, $input, $customerName, $phoneId) {
 /**
  * Sends welcome message with 2 native 1-tap buttons
  */
-function sendInteractiveMenu($to, $name, $phoneId) {
+function sendInteractiveMenu($to, $name, $phoneId, $tenantCfg = null) {
+    if (!$tenantCfg) $tenantCfg = resolveTenantWebhookConfig($phoneId);
     $payload = [
         'messaging_product' => 'whatsapp',
         'recipient_type' => 'individual',
@@ -159,10 +179,10 @@ function sendInteractiveMenu($to, $name, $phoneId) {
             'type' => 'button',
             'header' => [
                 'type' => 'text',
-                'text' => STORE_NAME . ' Kitchen 🍲'
+                'text' => $tenantCfg['store_name']
             ],
             'body' => [
-                'text' => "Hello {$name}! Welcome to " . STORE_NAME . ".\n\nHow can we help you today? Tap an option below:"
+                'text' => "Hello {$name}! Welcome to " . $tenantCfg['store_name'] . ".\n\nHow can we help you today? Tap an option below:"
             ],
             'footer' => [
                 'text' => 'Or reply with 1 or 2'
@@ -188,13 +208,13 @@ function sendInteractiveMenu($to, $name, $phoneId) {
         ]
     ];
 
-    callMetaApi($payload, $phoneId);
+    callMetaApi($payload, $phoneId, $tenantCfg['access_token']);
 }
 
 /**
  * Sends plain text WhatsApp message
  */
-function sendWhatsAppText($to, $text, $phoneId) {
+function sendWhatsAppText($to, $text, $phoneId, $accessToken = ACCESS_TOKEN) {
     $payload = [
         'messaging_product' => 'whatsapp',
         'recipient_type' => 'individual',
@@ -206,20 +226,23 @@ function sendWhatsAppText($to, $text, $phoneId) {
         ]
     ];
 
-    callMetaApi($payload, $phoneId);
+    callMetaApi($payload, $phoneId, $accessToken);
 }
 
 /**
  * Sends cURL POST request to Meta Graph API
  */
-function callMetaApi($payload, $phoneId) {
+function callMetaApi($payload, $phoneId, $accessToken = ACCESS_TOKEN) {
+    if (empty($accessToken) || empty($phoneId)) {
+        return ['code' => 400, 'response' => 'Missing WhatsApp access token or phone ID'];
+    }
     $url = "https://graph.facebook.com/v20.0/{$phoneId}/messages";
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Authorization: Bearer ' . ACCESS_TOKEN,
+        'Authorization: Bearer ' . $accessToken,
         'Content-Type: application/json'
     ]);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

@@ -1566,6 +1566,8 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             const orderPayload = {
                 customer_name: finalCustomerName,
                 dining_option: diningOption,
+                order_channel: "Online",
+                sales_channel: "Microsite",
                 payment_method: "I&M - PAYBILL No",
                 payment_status: "Pending",
                 status: "Pending",

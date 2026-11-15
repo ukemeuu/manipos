@@ -52,6 +52,39 @@ describe('Interface B (Orda) Routing & RBAC', () => {
     });
   });
 
+  it('resolves every Orda module tab deterministically so URL deep links and refreshes match clicked buttons', () => {
+    const admin = { id: 'a1', name: 'Owner', role: 'admin' };
+    const cases = [
+      ['wallet', 'wallet'],
+      ['subscriptions', 'wallet'],
+      ['paystack', 'wallet'],
+      ['menu', 'menu'],
+      ['reports', 'dashboard'],
+      ['analytics', 'dashboard'],
+      ['fpa-expenses', 'dashboard'],
+      ['customers', 'customers'],
+      ['promotions', 'customers'],
+      ['feedback', 'customers'],
+      ['settings', 'settings'],
+      ['locations', 'settings'],
+      ['staff', 'settings'],
+      ['inventory', 'inventory'],
+      ['receiving', 'inventory'],
+      ['account', 'account'],
+      ['staff-portal', 'account'],
+      ['orders', 'orders'],
+    ];
+
+    for (const [tabParam, expectedModule] of cases) {
+      expect(resolveOrdaEntryState({ staffUser: admin, requestedRoute: 'dashboard', tabParam })).toEqual({
+        isAdmin: true,
+        activeModule: expectedModule,
+        activeTab: tabParam,
+        initialWebPos: false,
+      });
+    }
+  });
+
   it('hides Admin modules (dashboard, wallet, account, settings, menu) from cashiers on the Orda icon rail', () => {
     const cashier = { id: 'u1', name: 'Ronaldo', role: 'cashier' };
     const cashierRail = getVisibleOrdaRailIds({ staffUser: cashier, permissions: ['view_orders'] });

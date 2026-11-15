@@ -122,31 +122,97 @@ export async function triggerNativeOrderAlert(order) {
   if (typeof window === 'undefined') return;
   try {
     const { Capacitor } = await import('@capacitor/core');
-    if (!Capacitor.isNativePlatform()) return;
-    await ensureAndroidAlarmChannel();
-    const { LocalNotifications } = await import('@capacitor/local-notifications');
-    const { Haptics } = await import('@capacitor/haptics');
+    if (Capacitor.isNativePlatform()) {
+      await ensureAndroidAlarmChannel();
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const { Haptics } = await import('@capacitor/haptics');
 
-    await Haptics.vibrate({ duration: 750 }).catch(() => {});
-    const numericId = Math.abs(
-      Array.from(String(order?.id || Date.now())).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) | 0, 7)
-    ) % 2147483000;
+      await Haptics.vibrate({ duration: 900 }).catch(() => {});
+      const numericId = Math.abs(
+        Array.from(String(order?.id || Date.now())).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) | 0, 7)
+      ) % 2147483000;
 
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          id: numericId || 1001,
-          title: `NEW ORDER #${order?.ticket_number || 'LIVE'} — KES ${Number(order?.total_amount || 0).toLocaleString()}`,
-          body: `${order?.customer_name || 'Guest'} (${order?.dining_option || order?.order_channel || 'Microsite'}) — Tap to Accept or Decline`,
-          channelId: 'manipos_orders_alarm',
-          sound: 'default',
-          extra: { orderId: order?.id || null },
-        },
-      ],
-    });
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: numericId || 1001,
+            title: `NEW ORDER #${order?.ticket_number || 'LIVE'} — KES ${Number(order?.total_amount || 0).toLocaleString()}`,
+            body: `${order?.customer_name || 'Guest'} (${order?.dining_option || order?.order_channel || 'Microsite'}) — Tap to Accept or Decline`,
+            channelId: 'manipos_orders_alarm',
+            sound: 'default',
+            autoCancel: true,
+            extra: { orderId: order?.id || null },
+          },
+        ],
+      });
+      return;
+    }
   } catch {
-    // Non-native fallback
+    // Fall back to Web Notification API below
   }
+
+  // Browser / Android Chrome PWA fallback popup notification
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      const notif = new Notification(
+        `NEW ORDER #${order?.ticket_number || 'LIVE'} — KES ${Number(order?.total_amount || 0).toLocaleString()}`,
+        {
+          body: `${order?.customer_name || 'Guest'} (${order?.dining_option || order?.order_channel || 'Microsite'}) — Tap to Accept or Decline`,
+          tag: `manipos-order-${order?.id || 'live'}`,
+          requireInteraction: true,
+          renotify: true,
+        }
+      );
+      notif.onclick = () => {
+        try {
+          window.focus();
+          notif.close();
+        } catch {
+          // ignore
+        }
+      };
+    }
+  } catch {
+    // Notification blocked or unsupported
+  }
+}
+
+export async function registerOrderAlarmNotificationListeners(onResumeOrTap) {
+  if (typeof window === 'undefined') return () => {};
+  const cleanups = [];
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return () => {};
+    const [{ LocalNotifications }, { App: CapacitorApp }] = await Promise.all([
+      import('@capacitor/local-notifications'),
+      import('@capacitor/app'),
+    ]);
+
+    const tapListener = await LocalNotifications.addListener('localNotificationActionPerformed', async () => {
+      await unlockOrderAlarmAudio().catch(() => {});
+      onResumeOrTap?.();
+    });
+    cleanups.push(() => tapListener?.remove?.());
+
+    const stateListener = await CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+      if (isActive) {
+        await unlockOrderAlarmAudio().catch(() => {});
+        onResumeOrTap?.();
+      }
+    });
+    cleanups.push(() => stateListener?.remove?.());
+  } catch {
+    // Web / non-Capacitor browser runtime
+  }
+  return () => {
+    cleanups.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        // ignore
+      }
+    });
+  };
 }
 
 export function playSingleOrderRing() {
@@ -210,10 +276,21 @@ export function playSingleOrderRing() {
 
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
     try {
-      navigator.vibrate([350, 120, 350]);
+      navigator.vibrate([400, 120, 400, 120, 400]);
     } catch {
       // Ignore vibration errors
     }
+  }
+
+  // Native Android haptic pulse alongside audio bell cadence
+  if (typeof window !== 'undefined') {
+    import('@capacitor/core')
+      .then(async ({ Capacitor }) => {
+        if (!Capacitor.isNativePlatform()) return;
+        const { Haptics } = await import('@capacitor/haptics');
+        await Haptics.vibrate({ duration: 450 }).catch(() => {});
+      })
+      .catch(() => {});
   }
 }
 

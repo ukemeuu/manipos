@@ -988,6 +988,7 @@ function App() {
       {alarmRestaurantId && (
         <IncomingOrderAlarmOverlay
           restaurantId={alarmRestaurantId}
+          tenantSlug={tenant?.slug || activeStaff?.tenantSlug || tenantInfo?.slug || ''}
           staffName={activeStaff?.name || 'Staff'}
           staffRole={activeStaff?.role || 'cashier'}
         />
