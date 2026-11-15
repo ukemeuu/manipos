@@ -1118,8 +1118,16 @@ export function remapPojModifierGroupForManiPos({
     pushManiId(maniIdByName.get(normalizeMenuText(normName)));
   }
 
+  const hasExistingGroup = Boolean(
+    existingGroup && (existingGroup.id || typeof existingGroup.is_required === 'boolean')
+  );
+  const resolvedIsRequired = hasExistingGroup
+    ? Boolean(existingGroup.is_required)
+    : Boolean(pojGroup?.is_required);
   const effectiveMin = computeEffectiveMinSelected({
     ...pojGroup,
+    is_required: resolvedIsRequired,
+    min_selected: hasExistingGroup ? Number(existingGroup.min_selected ?? 0) : pojGroup?.min_selected,
     options: finalOptions,
   });
   const rawMax = Number(pojGroup?.max_selected);
@@ -1127,7 +1135,7 @@ export function remapPojModifierGroupForManiPos({
 
   return {
     name: String(pojGroup?.name || existingGroup?.name || 'Modifiers').trim(),
-    is_required: Boolean(pojGroup?.is_required),
+    is_required: resolvedIsRequired,
     min_selected: effectiveMin,
     max_selected: effectiveMax,
     allow_multiple: Boolean(pojGroup?.allow_multiple ?? (effectiveMax > 1)),

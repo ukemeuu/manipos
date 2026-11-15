@@ -242,3 +242,40 @@ export function mergeModifierGroupsWithPoj(maniGroups = [], pojGroups = []) {
 
   return Array.from(byNormName.values());
 }
+
+/**
+ * Computes an adjusted unit price from a base price + flat markup (KES).
+ * Guards against negative or non-numeric inputs cleanly.
+ */
+export function applyFlatMarkupToPrice(basePrice, markupKes) {
+  const base = Math.max(0, Number(basePrice) || 0);
+  const delta = Number(markupKes);
+  if (!Number.isFinite(delta)) return base;
+  return Math.max(0, Math.round(base + delta));
+}
+
+/**
+ * Computes an adjusted unit price from a base price + percentage markup (e.g. 25 for +25%).
+ */
+export function applyPercentMarkupToPrice(basePrice, markupPercent) {
+  const base = Math.max(0, Number(basePrice) || 0);
+  const pct = Number(markupPercent);
+  if (!Number.isFinite(pct)) return base;
+  return Math.max(0, Math.round(base * (1 + pct / 100)));
+}
+
+/**
+ * Applies a uniform percentage markup (or resets to baseUnitPrice when 0)
+ * across editable WebPOS cart lines, preserving `baseUnitPrice` on each line.
+ */
+export function applyBulkMarkupToCartItems(cart = [], markupPercent = 0) {
+  return (Array.isArray(cart) ? cart : []).map((item) => {
+    if (!item || item.isExisting) return item;
+    const base = Math.max(0, Number(item.baseUnitPrice ?? item.unitPrice ?? 0));
+    return {
+      ...item,
+      baseUnitPrice: base,
+      unitPrice: applyPercentMarkupToPrice(base, markupPercent),
+    };
+  });
+}

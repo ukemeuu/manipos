@@ -269,6 +269,31 @@ describe('Microsite-only acceptance, immediate Accept update, POJ ticket merge, 
     expect(dirtyLarge.max_selected).toBe(1);
     expect(dirtyLarge.is_required).toBe(true);
     expect(dirtyLarge.menu_item_ids).toEqual(['mani-uuid-1']);
+
+    const preservedOptional = remapPojModifierGroupForManiPos({
+      pojGroup: {
+        name: 'Starters & Bites',
+        is_required: true,
+        min_selected: 1,
+        max_selected: 1,
+        options: [
+          { name: 'Small', price: 0 },
+          { name: 'Large', price: 655 },
+        ],
+        menu_item_ids: ['poj-item-1'],
+      },
+      pojNameById,
+      maniIdByName,
+      existingGroup: {
+        id: 'existing-starters',
+        name: 'Starters & Bites',
+        is_required: false,
+        min_selected: 0,
+        menu_item_ids: ['mani-uuid-1'],
+      },
+    });
+    expect(preservedOptional.is_required).toBe(false);
+    expect(preservedOptional.min_selected).toBe(0);
   });
 
   it('uses poj-orders-sync Edge Function for PIN-only sessions and falls back cleanly on missingSecret/404', async () => {

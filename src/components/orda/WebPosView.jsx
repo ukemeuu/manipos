@@ -16,9 +16,11 @@ import {
   itemMatchesBrand,
   resolveBrandItemPrice,
   getLinkedModifierGroupsForItem,
-  computeEffectiveMinSelected,
   mergeMenuItemsWithPoj,
   mergeModifierGroupsWithPoj,
+  applyFlatMarkupToPrice,
+  applyPercentMarkupToPrice,
+  applyBulkMarkupToCartItems,
 } from '../../lib/webPosCatalog';
 
 const SALES_CHANNELS = [
@@ -47,7 +49,7 @@ function makeUuid() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
-  } catch (_) {}
+  } catch (_) { }
   return `pos_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -158,6 +160,8 @@ export function WebPosView({
 
   // Cart & instructions
   const [cart, setCart] = useState([]);
+  const [editingMarkupKey, setEditingMarkupKey] = useState(null);
+  const [bulkMarkupPct, setBulkMarkupPct] = useState('');
   const [orderInstructions, setOrderInstructions] = useState(initialOrder?.notes || '');
   const [step, setStep] = useState(initialOrder ? 'settle' : 'build'); // 'build' | 'settle'
   const [mobilePane, setMobilePane] = useState(initialOrder ? 'cart' : 'catalog'); // 'catalog' | 'cart' on < lg viewports
@@ -210,6 +214,7 @@ export function WebPosView({
   const [selectedAdditions, setSelectedAdditions] = useState([]);
   const [itemQty, setItemQty] = useState(1);
   const [itemNote, setItemNote] = useState('');
+  const [modalPriceOverride, setModalPriceOverride] = useState('');
   const [modalError, setModalError] = useState('');
 
   useEffect(() => {
@@ -385,7 +390,14 @@ export function WebPosView({
     if (variations.length === 0 && linkedGroups.length === 0 && additions.length === 0) {
       const effective = resolveBrandItemPrice(item, selectedBrand, resolveEffectivePrice);
       setCart((prev) => {
-        const existingIdx = prev.findIndex((c) => c.id === item.id && c.unitPrice === effective && !c.summary);
+        const existingIdx = prev.findIndex(
+          (c) =>
+            c.id === item.id &&
+            !c.isExisting &&
+            c.unitPrice === effective &&
+            (c.baseUnitPrice ?? c.unitPrice) === effective &&
+            !c.summary
+        );
         if (existingIdx >= 0) {
           return prev.map((c, i) => (i === existingIdx ? { ...c, quantity: c.quantity + 1 } : c));
         }
@@ -395,6 +407,7 @@ export function WebPosView({
             key: `${item.id}_${Date.now()}`,
             id: item.id,
             title: item.name,
+            baseUnitPrice: effective,
             unitPrice: effective,
             quantity: 1,
             summary: '',
@@ -415,6 +428,7 @@ export function WebPosView({
     setSelectedAdditions([]);
     setItemQty(1);
     setItemNote('');
+    setModalPriceOverride('');
     setModalError('');
   };
 
@@ -475,22 +489,27 @@ export function WebPosView({
     return base + extras;
   }, [customizingItem, selectedVariation, modSelections, selectedAdditions, selectedBrand]);
 
+  const finalModalUnitPrice = useMemo(() => {
+    if (modalPriceOverride === '') return modalUnitPrice;
+    const parsed = Number(modalPriceOverride);
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : modalUnitPrice;
+  }, [modalPriceOverride, modalUnitPrice]);
+
+  const updateCartItemUnitPrice = (itemKey, nextUnitPrice) => {
+    const parsed = Math.max(0, Math.round(Number(nextUnitPrice) || 0));
+    setCart((prev) =>
+      prev.map((c) =>
+        c.key === itemKey
+          ? { ...c, baseUnitPrice: Number(c.baseUnitPrice ?? c.unitPrice ?? 0), unitPrice: parsed }
+          : c
+      )
+    );
+  };
+
   const confirmCustomItem = () => {
     if (!customizingItem) return;
     const { item, linkedGroups } = customizingItem;
-
-    for (const g of linkedGroups) {
-      const picks = modSelections[g.id] || {};
-      const total = Object.values(picks).reduce((s, n) => s + Number(n || 0), 0);
-      const minReq = computeEffectiveMinSelected(g);
-      if (total < minReq) {
-        setModalError(`"${g.name}" requires at least ${minReq} selection(s).`);
-        try {
-          document.querySelector(`[data-mod-group-id="${g.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } catch (_) {}
-        return;
-      }
-    }
+    setModalError('');
 
     const parts = [];
     if (selectedVariation?.name) parts.push(`Variation: ${selectedVariation.name}`);
@@ -510,7 +529,8 @@ export function WebPosView({
         key: `${item.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         id: item.id,
         title: selectedVariation?.name ? `${item.name} (${selectedVariation.name})` : item.name,
-        unitPrice: modalUnitPrice,
+        baseUnitPrice: modalUnitPrice,
+        unitPrice: finalModalUnitPrice,
         quantity: itemQty,
         summary: parts.join(' | '),
         excludeFromTax: Boolean(item.exclude_from_tax),
@@ -531,6 +551,7 @@ export function WebPosView({
         key: `combo_${combo.id}_${Date.now()}`,
         id: null,
         title: combo.name,
+        baseUnitPrice: comboPrice,
         unitPrice: comboPrice,
         quantity: 1,
         summary: itemsSummary,
@@ -811,7 +832,7 @@ export function WebPosView({
               },
             ]);
             await supabase.from('guests').update({ store_credit_balance: nextBal }).eq('id', selectedGuest.id);
-          } catch (_) {}
+          } catch (_) { }
         }
         if (paymentTender === 'Voucher' && paymentReference.trim()) {
           try {
@@ -820,7 +841,7 @@ export function WebPosView({
               .update({ is_redeemed: true, remaining_amount: 0, redeemed_order_id: orderData.id })
               .eq('restaurant_id', restaurantId)
               .ilike('code', paymentReference.trim());
-          } catch (_) {}
+          } catch (_) { }
         }
         if (selectedGuest?.id) {
           awardLoyaltyPointsForOrder({
@@ -867,8 +888,8 @@ export function WebPosView({
         paymentMethod: saveAsOpen
           ? 'Pay Later (Open)'
           : paymentTender === 'Split Payment' && resolvedSplitText
-          ? `Split (${resolvedSplitText})`
-          : paymentTender,
+            ? `Split (${resolvedSplitText})`
+            : paymentTender,
         paymentStatus: saveAsOpen ? 'pending' : 'paid',
         cashier: staffName || 'POS Cashier',
         notes: [
@@ -1016,11 +1037,10 @@ export function WebPosView({
             <button
               type="button"
               onClick={() => setShowOpenTabsBar((v) => !v)}
-              className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${
-                showOpenTabsBar
-                  ? 'bg-amber-500 text-slate-950 border-amber-500'
-                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-              }`}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${showOpenTabsBar
+                ? 'bg-amber-500 text-slate-950 border-amber-500'
+                : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                }`}
             >
               <span>Open Tabs ({openOrders.length})</span>
             </button>
@@ -1082,11 +1102,10 @@ export function WebPosView({
                 key={cat}
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`shrink-0 lg:w-full text-left px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition ${
-                  selectedCategory === cat
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'bg-white lg:bg-transparent border border-slate-200 lg:border-0 text-slate-700 hover:bg-slate-200/70'
-                }`}
+                className={`shrink-0 lg:w-full text-left px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition ${selectedCategory === cat
+                  ? 'bg-emerald-700 text-white shadow-sm'
+                  : 'bg-white lg:bg-transparent border border-slate-200 lg:border-0 text-slate-700 hover:bg-slate-200/70'
+                  }`}
               >
                 {cat}
               </button>
@@ -1108,11 +1127,10 @@ export function WebPosView({
                         setSelectedBrand(brand.id);
                         setSelectedCategory('All');
                       }}
-                      className={`px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${
-                        selectedBrand === brand.id
-                          ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${selectedBrand === brand.id
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
                     >
                       {brand.name} <span className="opacity-70 text-[10px] ml-0.5">({brand.count})</span>
                     </button>
@@ -1318,45 +1336,91 @@ export function WebPosView({
                         key={ch}
                         type="button"
                         onClick={() => handleSelectChannel(ch)}
-                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                          active
-                            ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${active
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
                       >
                         {ch}
                       </button>
                     );
                   })}
                 </div>
+                {['Glovo', 'Ubereats', 'Bolt Food', 'Whatsapp'].includes(salesChannel) && cart.some((c) => !c.isExisting) && (
+                  <div className="mt-2.5 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[11px] font-bold text-amber-900">
+                      {salesChannel} Price Markup
+                      <span className="block font-normal text-amber-700">Apply % to all items or tap +Markup on individual items in Cart</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[15, 20, 30, 50].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => {
+                            setBulkMarkupPct(String(pct));
+                            setCart((prev) => applyBulkMarkupToCartItems(prev, pct));
+                          }}
+                          className="px-2 py-1 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 text-[11px] font-bold text-amber-900 cursor-pointer"
+                        >
+                          +{pct}%
+                        </button>
+                      ))}
+                      <input
+                        type="number"
+                        min="0"
+                        value={bulkMarkupPct}
+                        onChange={(e) => setBulkMarkupPct(e.target.value)}
+                        placeholder="% "
+                        className="w-14 bg-white border border-amber-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCart((prev) => applyBulkMarkupToCartItems(prev, Number(bulkMarkupPct) || 0))}
+                        className="px-2.5 py-1 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold cursor-pointer"
+                      >
+                        Apply %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkMarkupPct('');
+                          setCart((prev) => applyBulkMarkupToCartItems(prev, 0));
+                        }}
+                        className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600 cursor-pointer"
+                      >
+                        Reset Base
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1.5">Fulfillment Type</label>
                 <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'Dine In', icon: UtensilsCrossed },
-                  { id: 'Pickup', icon: Store },
-                  { id: 'Delivery', icon: Truck },
-                ].map((opt) => {
-                  const Icon = opt.icon;
-                  const active = diningMode === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setDiningMode(opt.id)}
-                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                        active
+                  {[
+                    { id: 'Dine In', icon: UtensilsCrossed },
+                    { id: 'Pickup', icon: Store },
+                    { id: 'Delivery', icon: Truck },
+                  ].map((opt) => {
+                    const Icon = opt.icon;
+                    const active = diningMode === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDiningMode(opt.id)}
+                        className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${active
                           ? 'bg-emerald-700 text-white border-emerald-700'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      {opt.id}
-                    </button>
-                  );
-                })}
+                          }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {opt.id}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1396,13 +1460,12 @@ export function WebPosView({
                             key={tbl.id || tLabel}
                             type="button"
                             onClick={() => setTableNumber(tLabel)}
-                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition ${
-                              active
-                                ? 'bg-emerald-700 text-white border-emerald-700'
-                                : tbl.status === 'occupied'
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition ${active
+                              ? 'bg-emerald-700 text-white border-emerald-700'
+                              : tbl.status === 'occupied'
                                 ? 'bg-amber-50 text-amber-800 border-amber-200 hover:border-amber-400'
                                 : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-600'
-                            }`}
+                              }`}
                           >
                             {tLabel}
                             {tbl.seats ? ` (${tbl.seats})` : ''}
@@ -1485,11 +1548,10 @@ export function WebPosView({
                         key={tender.id}
                         type="button"
                         onClick={() => setPaymentTender(tender.id)}
-                        className={`p-2.5 rounded-xl border text-left text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
-                          active
-                            ? 'bg-emerald-50 border-emerald-700 text-emerald-900 ring-1 ring-emerald-700'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
+                        className={`p-2.5 rounded-xl border text-left text-xs font-bold flex items-center gap-2 transition cursor-pointer ${active
+                          ? 'bg-emerald-50 border-emerald-700 text-emerald-900 ring-1 ring-emerald-700'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
                       >
                         <Icon className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{tender.label}</span>
@@ -1502,31 +1564,31 @@ export function WebPosView({
               {(paymentTender === 'Mpesa Paybill' ||
                 paymentTender === 'Card' ||
                 paymentTender === 'Paid to App') && (
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-bold uppercase text-slate-500">
-                    Transaction / Receipt Reference (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={paymentReference}
-                    onChange={(e) => setPaymentReference(e.target.value)}
-                    placeholder="e.g. UCD8K92LM0"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 font-mono uppercase"
-                  />
-                  {paymentTender === 'Mpesa Paybill' &&
-                    import.meta.env.VITE_MPESA_ENABLED !== 'false' && (
-                      <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={sendStk}
-                          onChange={(e) => setSendStk(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-700"
-                        />
-                        Send M-Pesa STK Push to customer phone on Place Order
-                      </label>
-                    )}
-                </div>
-              )}
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold uppercase text-slate-500">
+                      Transaction / Receipt Reference (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      placeholder="e.g. UCD8K92LM0"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 font-mono uppercase"
+                    />
+                    {paymentTender === 'Mpesa Paybill' &&
+                      import.meta.env.VITE_MPESA_ENABLED !== 'false' && (
+                        <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={sendStk}
+                            onChange={(e) => setSendStk(e.target.checked)}
+                            className="rounded border-slate-300 text-emerald-700"
+                          />
+                          Send M-Pesa STK Push to customer phone on Place Order
+                        </label>
+                      )}
+                  </div>
+                )}
 
               {paymentTender === 'Split Payment' && (
                 <div className="space-y-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
@@ -1540,15 +1602,14 @@ export function WebPosView({
                       const diff = grandTotal - entered;
                       return entered > 0 ? (
                         <span
-                          className={`text-[11px] font-bold ${
-                            diff === 0 ? 'text-emerald-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
-                          }`}
+                          className={`text-[11px] font-bold ${diff === 0 ? 'text-emerald-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
+                            }`}
                         >
                           {diff === 0
                             ? 'Matched exact total'
                             : diff > 0
-                            ? `Remaining: KES ${diff.toLocaleString()}`
-                            : `Over by: KES ${Math.abs(diff).toLocaleString()}`}
+                              ? `Remaining: KES ${diff.toLocaleString()}`
+                              : `Over by: KES ${Math.abs(diff).toLocaleString()}`}
                         </span>
                       ) : null;
                     })()}
@@ -1640,48 +1701,132 @@ export function WebPosView({
                   Click menu items on the left to build the order.
                 </div>
               ) : (
-                cart.map((item) => (
-                  <div key={item.key} className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-900 truncate">{item.title}</p>
-                      {item.summary && (
-                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{item.summary}</p>
-                      )}
-                      <p className="text-[11px] font-bold text-emerald-700 mt-1">
-                        KES {(item.unitPrice * item.quantity).toLocaleString()}
-                      </p>
-                    </div>
-                    {!item.isExisting && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCart((prev) =>
-                              prev
-                                .map((c) => (c.key === item.key ? { ...c, quantity: c.quantity - 1 } : c))
-                                .filter((c) => c.quantity > 0)
-                            )
-                          }
-                          className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-5 text-center text-xs font-black text-slate-900">{item.quantity}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCart((prev) =>
-                              prev.map((c) => (c.key === item.key ? { ...c, quantity: c.quantity + 1 } : c))
-                            )
-                          }
-                          className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+                cart.map((item) => {
+                  const baseUnit = Number(item.baseUnitPrice ?? item.unitPrice ?? 0);
+                  const unitDiff = Number(item.unitPrice || 0) - baseUnit;
+                  const isEditingPrice = editingMarkupKey === item.key;
+                  return (
+                    <div key={item.key} className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 truncate">{item.title}</p>
+                          {item.summary && (
+                            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{item.summary}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className="text-[11px] font-bold text-emerald-700">
+                              KES {(item.unitPrice * item.quantity).toLocaleString()}
+                            </span>
+                            {item.quantity > 1 && (
+                              <span className="text-[10px] text-slate-400">
+                                ({item.quantity} × KES {Number(item.unitPrice || 0).toLocaleString()})
+                              </span>
+                            )}
+                            {unitDiff !== 0 && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800">
+                                Base {baseUnit.toLocaleString()} ({unitDiff > 0 ? `+${unitDiff.toLocaleString()}` : unitDiff.toLocaleString()})
+                              </span>
+                            )}
+                            {!item.isExisting && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingMarkupKey(isEditingPrice ? null : item.key)}
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer transition ${isEditingPrice
+                                  ? 'bg-amber-700 text-white border-amber-700'
+                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-800 border-slate-200'
+                                  }`}
+                              >
+                                {isEditingPrice ? 'Done' : '+ Markup'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {!item.isExisting && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCart((prev) =>
+                                  prev
+                                    .map((c) => (c.key === item.key ? { ...c, quantity: c.quantity - 1 } : c))
+                                    .filter((c) => c.quantity > 0)
+                                )
+                              }
+                              className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-5 text-center text-xs font-black text-slate-900">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCart((prev) =>
+                                  prev.map((c) => (c.key === item.key ? { ...c, quantity: c.quantity + 1 } : c))
+                                )
+                              }
+                              className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))
+
+                      {isEditingPrice && !item.isExisting && (
+                        <div className="pt-2 border-t border-slate-100 space-y-2 bg-amber-50/40 -mx-2.5 -mb-2.5 p-2.5 rounded-b-xl">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">
+                                Unit Price (KES)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="10"
+                                value={item.unitPrice}
+                                onChange={(e) => updateCartItemUnitPrice(item.key, e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">
+                                + Markup (KES)
+                              </label>
+                              <input
+                                type="number"
+                                step="10"
+                                value={unitDiff}
+                                onChange={(e) =>
+                                  updateCartItemUnitPrice(item.key, applyFlatMarkupToPrice(baseUnit, e.target.value))
+                                }
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {[15, 20, 30, 50].map((pct) => (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => updateCartItemUnitPrice(item.key, applyPercentMarkupToPrice(baseUnit, pct))}
+                                className="px-2 py-0.5 rounded bg-white hover:bg-amber-100 border border-slate-200 text-[10px] font-bold text-slate-700 cursor-pointer"
+                              >
+                                +{pct}%
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => updateCartItemUnitPrice(item.key, baseUnit)}
+                              className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-600 cursor-pointer"
+                            >
+                              Reset (KES {baseUnit.toLocaleString()})
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
 
@@ -1834,11 +1979,10 @@ export function WebPosView({
                           key={v.name}
                           type="button"
                           onClick={() => setSelectedVariation(v)}
-                          className={`p-2.5 rounded-xl border text-left text-xs font-bold ${
-                            active
-                              ? 'border-emerald-700 bg-emerald-50 text-emerald-900'
-                              : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
+                          className={`p-2.5 rounded-xl border text-left text-xs font-bold ${active
+                            ? 'border-emerald-700 bg-emerald-50 text-emerald-900'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
                         >
                           <div>{v.name}</div>
                           <div className="text-[11px] text-emerald-700">KES {Number(v.price || 0).toLocaleString()}</div>
@@ -1851,7 +1995,6 @@ export function WebPosView({
 
               {customizingItem.linkedGroups.map((g) => {
                 const picks = modSelections[g.id] || {};
-                const minReq = computeEffectiveMinSelected(g);
                 const availableOpts = (g.options || []).filter(
                   (opt) => opt && opt.is_available !== false && String(opt.name || opt.label || '').trim() !== ''
                 );
@@ -1860,7 +2003,7 @@ export function WebPosView({
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black uppercase tracking-wider text-slate-700">{g.name}</p>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {minReq > 0 ? `Required · Min ${minReq}` : `Optional · Max ${g.max_selected || 1}`}
+                        {`Optional · Max ${g.max_selected || 1}`}
                       </span>
                     </div>
                     <div className="space-y-1.5">
@@ -1877,11 +2020,10 @@ export function WebPosView({
                                 toggleModOption(g, optName, 1);
                               }
                             }}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${
-                              qty > 0
-                                ? 'border-emerald-600 bg-emerald-50/50'
-                                : 'border-slate-200 hover:bg-slate-50'
-                            }`}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${qty > 0
+                              ? 'border-emerald-600 bg-emerald-50/50'
+                              : 'border-slate-200 hover:bg-slate-50'
+                              }`}
                           >
                             <div>
                               <span className="font-bold text-slate-900">{optName}</span>
@@ -1937,9 +2079,8 @@ export function WebPosView({
                       return (
                         <label
                           key={add.name}
-                          className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${
-                            checked ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200'
-                          }`}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${checked ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200'
+                            }`}
                         >
                           <span className="font-bold text-slate-900">
                             {add.name}{' '}
@@ -1963,6 +2104,47 @@ export function WebPosView({
                   </div>
                 </div>
               )}
+
+              <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-bold uppercase text-amber-900">
+                    Price Override / Platform Markup (Optional)
+                  </label>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    Base: KES {modalUnitPrice.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={modalPriceOverride}
+                    onChange={(e) => setModalPriceOverride(e.target.value)}
+                    placeholder={`Charge KES (e.g. ${modalUnitPrice})`}
+                    className="flex-1 min-w-[140px] bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                  />
+                  {[20, 30, 50].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setModalPriceOverride(String(applyPercentMarkupToPrice(modalUnitPrice, pct)))}
+                      className="px-2 py-1.5 rounded-lg bg-white hover:bg-amber-100 border border-amber-200 text-[11px] font-bold text-amber-900 cursor-pointer"
+                    >
+                      +{pct}%
+                    </button>
+                  ))}
+                  {modalPriceOverride !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setModalPriceOverride('')}
+                      className="px-2 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600 cursor-pointer"
+                    >
+                      Base
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Special Note</label>
@@ -2007,7 +2189,7 @@ export function WebPosView({
                 onClick={confirmCustomItem}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
               >
-                Add to Order · KES {(modalUnitPrice * itemQty).toLocaleString()}
+                Add to Order · KES {(finalModalUnitPrice * itemQty).toLocaleString()}
               </button>
             </div>
           </div>

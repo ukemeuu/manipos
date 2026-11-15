@@ -7,6 +7,9 @@ import {
   computeEffectiveMinSelected,
   mergeMenuItemsWithPoj,
   mergeModifierGroupsWithPoj,
+  applyFlatMarkupToPrice,
+  applyPercentMarkupToPrice,
+  applyBulkMarkupToCartItems,
 } from '../webPosCatalog';
 
 describe('webPosCatalog helpers', () => {
@@ -166,5 +169,25 @@ describe('webPosCatalog helpers', () => {
     expect(mergedMods).toHaveLength(2);
     expect(mergedMods[0]._matchedItemNames).toEqual(['SWAHILI PILAU']);
     expect(mergedMods[1].name).toBe('Sodas');
+  });
+
+  it('computes flat and percentage price markups for WebPOS platform orders cleanly', () => {
+    // Mixed Rice & Beans: 850 direct -> 1290 Glovo/Uber Eats (+440 flat markup)
+    expect(applyFlatMarkupToPrice(850, 440)).toBe(1290);
+    expect(applyFlatMarkupToPrice(850, 0)).toBe(850);
+    expect(applyPercentMarkupToPrice(850, 20)).toBe(1020);
+    expect(applyPercentMarkupToPrice(850, 0)).toBe(850);
+
+    const cart = [
+      { key: 'a', title: 'Mixed Rice & Beans', unitPrice: 850, quantity: 1 },
+      { key: 'b', title: 'Existing Tab Item', unitPrice: 500, quantity: 1, isExisting: true },
+    ];
+    const marked = applyBulkMarkupToCartItems(cart, 30);
+    expect(marked[0].baseUnitPrice).toBe(850);
+    expect(marked[0].unitPrice).toBe(1105);
+    expect(marked[1].unitPrice).toBe(500);
+
+    const reset = applyBulkMarkupToCartItems(marked, 0);
+    expect(reset[0].unitPrice).toBe(850);
   });
 });
