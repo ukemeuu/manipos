@@ -445,3 +445,9 @@ begin
         end loop;
     end if;
 end $$;
+
+-- 4. Keep Management Dashboard launcher exclusive to admin accounts
+delete from public.role_permissions
+where role in ('cashier', 'waiter')
+  and permission_key = 'view_dashboard';
+

@@ -3,7 +3,6 @@ import { Mail, Lock, ArrowRight, Loader2, KeyRound, CheckCircle2, Store, User, D
 import {
     authenticateStaffLogin,
     authenticateStaffQuickPin,
-    fetchTerminalStaffRoster,
 } from '../services/data/staffService';
 import { supabase } from '../lib/supabase';
 
@@ -11,8 +10,6 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
     const [loginTab, setLoginTab] = useState(initialTenantSlug ? 'pin' : 'password'); // 'pin' | 'password'
     const [storeSlug, setStoreSlug] = useState(initialTenantSlug || '');
     const [pin, setPin] = useState(['', '', '', '']);
-    const [staffRoster, setStaffRoster] = useState([]);
-    const [selectedStaffId, setSelectedStaffId] = useState('');
     const [manualStaffName, setManualStaffName] = useState('');
     const [showNameInput, setShowNameInput] = useState(false);
 
@@ -30,21 +27,6 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
             setStoreSlug(initialTenantSlug);
         }
     }, [initialTenantSlug]);
-
-    useEffect(() => {
-        const clean = String(storeSlug || '').toLowerCase().trim();
-        if (!clean || loginTab !== 'pin') {
-            setStaffRoster([]);
-            return;
-        }
-        let cancelled = false;
-        fetchTerminalStaffRoster(clean).then((rows) => {
-            if (!cancelled) {
-                setStaffRoster(Array.isArray(rows) ? rows : []);
-            }
-        });
-        return () => { cancelled = true; };
-    }, [storeSlug, loginTab]);
 
     const handleSendResetCode = async (e) => {
         e.preventDefault();
@@ -147,12 +129,10 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
         setError('');
         setNotice('');
         try {
-            const selectedMember = staffRoster.find((s) => s.id === selectedStaffId);
             const result = await authenticateStaffQuickPin({
                 tenantSlug: cleanSlug,
                 pin: enteredPin,
-                staffId: selectedStaffId || null,
-                staffName: selectedMember?.name || manualStaffName,
+                staffName: manualStaffName,
             });
 
             if (result.success) {
@@ -293,11 +273,10 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                 <button
                     type="button"
                     onClick={() => { setLoginTab('pin'); setError(''); setNotice(''); }}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        loginTab === 'pin'
-                            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-md'
-                            : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${loginTab === 'pin'
+                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                        }`}
                 >
                     <KeyRound size={14} />
                     <span>Staff PIN</span>
@@ -305,11 +284,10 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                 <button
                     type="button"
                     onClick={() => { setLoginTab('password'); setError(''); setNotice(''); }}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        loginTab === 'password'
-                            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-md'
-                            : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${loginTab === 'password'
+                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                        }`}
                 >
                     <Mail size={14} />
                     <span>Email &amp; Password</span>
@@ -351,43 +329,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                         </div>
                     </div>
 
-                    {staffRoster.length > 0 && (
-                        <div className="space-y-1.5">
-                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                <User size={13} className="text-orange-500" />
-                                <span>Staff Member (Optional)</span>
-                            </label>
-                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedStaffId('')}
-                                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
-                                        !selectedStaffId
-                                            ? 'bg-orange-500/20 border-orange-500 text-orange-300'
-                                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                                    }`}
-                                >
-                                    PIN Only
-                                </button>
-                                {staffRoster.map((member) => (
-                                    <button
-                                        key={member.id}
-                                        type="button"
-                                        onClick={() => setSelectedStaffId(member.id)}
-                                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
-                                            selectedStaffId === member.id
-                                                ? 'bg-orange-500/20 border-orange-500 text-orange-300'
-                                                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                                        }`}
-                                    >
-                                        {member.name}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {showNameInput && staffRoster.length === 0 && (
+                    {showNameInput && (
                         <div className="space-y-1.5">
                             <label htmlFor="pin-staff-name" className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                                 <User size={14} className="text-orange-500" />

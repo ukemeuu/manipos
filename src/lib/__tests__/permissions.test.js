@@ -6,11 +6,16 @@ describe('permissions & RBAC defaults', () => {
     localStorage.clear();
   });
 
-  it('denies void_orders from cashier default role permissions', () => {
+  it('denies void_orders and view_dashboard from cashier and waiter default role permissions', () => {
     const cashierPerms = roleDefaults('cashier');
     expect(cashierPerms).toContain('view_orders');
+    expect(cashierPerms).not.toContain('view_dashboard');
     expect(cashierPerms).not.toContain('void_orders');
     expect(cashierPerms).not.toContain('manage_staff');
+
+    const waiterPerms = roleDefaults('waiter');
+    expect(waiterPerms).toContain('view_orders');
+    expect(waiterPerms).not.toContain('view_dashboard');
   });
 
   it('grants full permission catalog to admin and restricts manage_staff for manager', () => {

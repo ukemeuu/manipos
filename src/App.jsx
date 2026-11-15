@@ -117,6 +117,10 @@ const ROLE_HOME_ROUTE = {
   issuer: 'store-ops',
 };
 
+function isAdminAccount(staffUser) {
+  return String(staffUser?.role || '').toLowerCase().trim() === 'admin';
+}
+
 function isGenericPosHost() {
   return typeof window !== 'undefined' && window.location.hostname === 'pos.manipos.com';
 }
@@ -650,8 +654,9 @@ function App() {
   // AUTHENTICATED SESSION ROUTING ENGINE
   if (session) {
     const staffUser = session.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-    // Dashboard access is a permission, not a hard-coded role pair.
-    const isAdmin = can('view_dashboard', staffUser);
+    // Management Dashboard / workspace launcher is strictly for admin accounts;
+    // all other staff go straight to the POS terminal or their operational station.
+    const isAdmin = isAdminAccount(staffUser);
 
     // If store is retail, route to retail terminal by default
     if (businessType === 'retail' && currentRoute === 'terminal') {
@@ -934,7 +939,7 @@ function App() {
             tenantSlug={tenantInfo.tenantSlug}
             onLoginSuccess={async (userSession, userTenantSlug) => {
               const staffRole = userSession?.staffUser?.role;
-              const targetRoute = can('view_dashboard', userSession?.staffUser)
+              const targetRoute = isAdminAccount(userSession?.staffUser)
                 ? 'app'
                 : (ROLE_HOME_ROUTE[staffRole] || 'terminal');
               const staffWithSlug = {

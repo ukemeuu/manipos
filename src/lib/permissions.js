@@ -47,9 +47,9 @@ export function roleDefaults(role) {
     case 'manager':
       return PERMISSION_KEYS.filter((k) => k !== 'manage_staff');
     case 'cashier':
-      return ['view_dashboard', 'view_orders'];
+      return ['view_orders'];
     case 'waiter':
-      return ['view_dashboard', 'view_orders'];
+      return ['view_orders'];
     case 'accountant':
       return ['view_analytics', 'view_orders'];
     case 'stock_controller':
