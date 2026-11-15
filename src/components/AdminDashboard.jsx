@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase, setTenantContext } from '../lib/supabase';
 import { loadTenant } from '../lib/tenantConfig';
 import {
@@ -66,7 +66,11 @@ import {
   KeyRound,
   QrCode,
   Calendar,
-  Thermometer
+  Thermometer,
+  Lock,
+  Printer,
+  Zap,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
@@ -93,6 +97,16 @@ import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
 import { getTenantInfo } from '../lib/tenant';
 import { FeedbackDashboardView } from './FeedbackDashboardView';
 import { fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
+import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
+import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, printZReport } from '../lib/posPrintService';
+import {
+  getBusinessDayStartIso,
+  fetchActiveShift,
+  openStaffShift,
+  summarizeShiftSales,
+  closeStaffShift,
+} from '../lib/posShiftService';
+import { connectQZ, isQZConnected, onQZStatusChange, listPrinters } from '../lib/qzPrint';
 
 // Setup progress is per restaurant. A shared flag would let a brand-new
 // tenant skip onboarding because a previous tenant on the same device had
@@ -108,7 +122,42 @@ function setupCompletedKey() {
   }
 }
 
-export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, onSignOut, tenantSlug, tenantId: propTenantId = null }) {
+export function AdminDashboard({
+  onOpenAppHome,
+  onOpenModule,
+  onSignOut,
+  tenantSlug,
+  tenantId: propTenantId = null,
+  staffUser: propStaffUser = null,
+  initialView = 'auto',
+}) {
+  const [sessionStaffUser, setSessionStaffUser] = useState(() => {
+    if (propStaffUser) return propStaffUser;
+    try {
+      return JSON.parse(localStorage.getItem('pin_staff_user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+  const effectiveStaffUser = propStaffUser || sessionStaffUser;
+  const isAdmin = useMemo(() => isAdminAccount(effectiveStaffUser), [effectiveStaffUser]);
+
+  const initialEntry = useMemo(() => {
+    let tabParam = '';
+    let pageParam = '';
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      tabParam = sp.get('tab') || '';
+      pageParam = sp.get('page') || '';
+    } catch (_) { }
+    const requestedRoute = initialView === 'pos' ? 'pos' : pageParam;
+    return resolveOrdaEntryState({
+      staffUser: effectiveStaffUser,
+      requestedRoute,
+      tabParam,
+    });
+  }, [effectiveStaffUser, initialView]);
+
   const [fallbackTenantId, setFallbackTenantId] = useState(propTenantId || null);
   const [setupCompleted, setSetupCompleted] = useState(() => {
     try {
@@ -118,21 +167,13 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     }
   });
   const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const requested = new URLSearchParams(window.location.search).get('tab');
-      if (requested) return requested;
-    } catch (_) { }
+    if (!isAdmin) return 'orders';
+    if (initialEntry.activeTab && initialEntry.activeTab !== 'orders') return initialEntry.activeTab;
     return setupCompleted ? 'orders' : 'onboarding';
   });
   const [activeModule, setActiveModule] = useState(() => {
-    try {
-      const requested = new URLSearchParams(window.location.search).get('tab');
-      if (requested === 'guest-crm' || requested === 'customer-retention' || requested === 'retention-crm' || requested === 'customers') return 'customers';
-      if (requested === 'hr-admin' || requested === 'qr-vault' || requested === 'poj-sync') return 'settings';
-      if (requested === 'staff-portal') return 'account';
-      if (requested === 'fpa-expenses') return 'dashboard';
-      if (requested === 'receiving' || requested === 'store-ops' || requested === 'waste' || requested === 'inv-receiving' || requested === 'inv-requisitions' || requested === 'inv-waste') return 'inventory';
-    } catch (_) { }
+    if (!isAdmin) return 'orders';
+    if (initialEntry.activeModule && initialEntry.activeModule !== 'orders') return initialEntry.activeModule;
     return setupCompleted ? 'orders' : 'dashboard';
   });
   const [reportSubTab, setReportSubTab] = useState('overview');
@@ -140,9 +181,31 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   const [orderBucket, setOrderBucket] = useState('active');
   const [branches, setBranches] = useState([]);
   const [activeBranchId, setActiveBranchId] = useState('all');
-  const [showWebPos, setShowWebPos] = useState(false);
+  const [showWebPos, setShowWebPos] = useState(() => Boolean(initialEntry.initialWebPos));
   const [settleTargetOrder, setSettleTargetOrder] = useState(null);
   const [closeStoreOpen, setCloseStoreOpen] = useState(false);
+
+  // Operational Interface B POS controls (Shift / PIN Lock / QZ Printers / Auto-Accept)
+  const [activeShift, setActiveShift] = useState(null);
+  const [shiftModalMode, setShiftModalMode] = useState(null); // 'open' | 'close' | null
+  const [shiftAmountInput, setShiftAmountInput] = useState('');
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [pinLocked, setPinLocked] = useState(false);
+  const [lockPinInput, setLockPinInput] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [lockBusy, setLockBusy] = useState(false);
+  const [qzConnected, setQzConnected] = useState(() => isQZConnected());
+  const [qzPrinters, setQzPrinters] = useState([]);
+  const [printerModalOpen, setPrinterModalOpen] = useState(false);
+  const [printerPrefs, setPrinterPrefsState] = useState(() => getPrinterPrefs());
+  const [autoAcceptOrders, setAutoAcceptOrders] = useState(() => {
+    try {
+      return localStorage.getItem('pos_auto_accept_orders') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const autoAcceptedIdsRef = useRef(new Set());
   const [showSettingsMenu, setShowSettingsMenu] = useState(() => {
     return ['onboarding', 'suppliers', 'feedback', 'linkhub', 'audit', 'settings', 'locations'].includes(activeTab);
   });
@@ -254,6 +317,49 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     if (restaurantName && !profileName) setProfileName(restaurantName);
   }, [restaurantName, profileName]);
 
+  useEffect(() => {
+    const unsubscribe = onQZStatusChange((connected) => {
+      setQzConnected(connected);
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
+  // Auto-accept pending microsite orders when Auto-Accept toggle is ON
+  useEffect(() => {
+    if (!autoAcceptOrders) return;
+    const restId = getActiveRestaurantId();
+    if (!restId) return;
+    const pendingMicrosite = orders.filter((o) => {
+      if (!o?.id || autoAcceptedIdsRef.current.has(o.id)) return false;
+      const st = String(o.status || '').toLowerCase();
+      const ch = String(o.sales_channel || o.order_channel || o.channel || '').toLowerCase();
+      return (st === 'pending' || st === 'new') && (ch.includes('microsite') || ch === 'skg' || o.order_source === 'microsite');
+    });
+    if (pendingMicrosite.length === 0) return;
+    pendingMicrosite.forEach((o) => autoAcceptedIdsRef.current.add(o.id));
+    Promise.allSettled(
+      pendingMicrosite.map((o) =>
+        supabase
+          .from('pos_orders')
+          .update({
+            status: 'Preparing',
+            accepted_at: o.accepted_at || new Date().toISOString(),
+            kitchen_started_at: o.kitchen_started_at || new Date().toISOString(),
+          })
+          .eq('id', o.id)
+          .eq('restaurant_id', restId)
+      )
+    ).then(() => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          pendingMicrosite.some((p) => p.id === o.id) ? { ...o, status: 'Preparing' } : o
+        )
+      );
+    });
+  }, [autoAcceptOrders, orders]);
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
@@ -275,207 +381,341 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
       setTenantContext(currentRestaurantId);
       setLoadingDiscounts(true);
 
-      // 1. Fetch Orders
-      const loadAllSections = Promise.allSettled([
-        // 0: ManiPOS Orders
+      const resolvedSlug = pinUser.tenantSlug || tenantSlug;
+      const staffNameForShift = pinUser.name || 'Staff';
+
+      // PHASE 1: Fast Cashier/POS Critical Path (Orders + Menu + Settings + Shift)
+      const phase1Promise = Promise.allSettled([
         supabase
           .from('pos_orders')
           .select('*, items:pos_order_items(*)')
           .eq('restaurant_id', currentRestaurantId)
-          .order('created_at', { ascending: false }),
-        // 1: Linked POJ Management Orders
-        fetchPojOrdersForRange({
-          tenantSlug: pinUser.tenantSlug || tenantSlug,
-          restaurantId: currentRestaurantId,
-          limit: 1000,
-        }),
-        // 2: Menu Items
+          .order('created_at', { ascending: false })
+          .limit(350),
         supabase
           .from('pos_menu')
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .order('name'),
-        // 3: Staff List (safe RPC: no PIN columns leave the database)
-        supabase.rpc('staff_list', {
-          p_actor_id: pinUser.id || null,
-        }),
-        // 4: Customer Feedback
-        supabase
-          .from('pos_feedback')
-          .select('*')
-          .eq('restaurant_id', currentRestaurantId)
-          .order('created_at', { ascending: false }),
-        // 5: Restaurant Links for Link Hub (keyed by tenant slug)
-        pinUser.tenantSlug || tenantSlug
-          ? supabase
-              .from('tenant_links')
-              .select('*')
-              .eq('tenant_id', pinUser.tenantSlug || tenantSlug)
-              .order('display_order', { ascending: true })
-          : Promise.resolve({ data: [] }),
-        // 6: Restaurant Settings
         supabase
           .from('restaurant_settings')
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .limit(1),
-        // 7: Suppliers
-        supabase
-          .from('suppliers')
-          .select('*')
-          .eq('restaurant_id', currentRestaurantId)
-          .order('name'),
-        // 8: Discounts / Offers
+      ]);
+
+      let timeoutId = null;
+      const phase1Results = await Promise.race([
+        phase1Promise,
+        new Promise((resolve) => {
+          timeoutId = setTimeout(() => resolve(null), 8000);
+        }),
+      ]);
+      if (timeoutId) clearTimeout(timeoutId);
+
+      if (phase1Results) {
+        const [ordersRes, menuRes, settingsRes] = phase1Results;
+        const fetchedOrders = ordersRes?.status === 'fulfilled' ? ordersRes.value?.data || [] : [];
+        setOrders((prev) =>
+          mergeOrdersWithPoj(
+            fetchedOrders,
+            prev.filter((o) => o?._fromPoj)
+          )
+        );
+
+        const fetchedMenu = menuRes?.status === 'fulfilled' ? menuRes.value?.data || [] : [];
+        setMenuItems(fetchedMenu);
+
+        const fetchedSettings = settingsRes?.status === 'fulfilled' ? settingsRes.value?.data : null;
+        if (fetchedSettings && fetchedSettings.length > 0) {
+          const currentSetting = fetchedSettings[0];
+          setSettings(currentSetting);
+          const hasOperationalData = fetchedOrders.length > 0 || fetchedMenu.length > 0;
+          if (currentSetting.setup_completed || hasOperationalData) {
+            setSetupCompleted(true);
+            localStorage.setItem(setupCompletedKey(), 'true');
+            if (!currentSetting.setup_completed && currentRestaurantId) {
+              supabase
+                .from('restaurant_settings')
+                .update({ setup_completed: true })
+                .eq('restaurant_id', currentRestaurantId)
+                .then(() => { })
+                .catch(() => { });
+            }
+            if (activeTab === 'onboarding' && isAdmin) {
+              setActiveTab('orders');
+              setActiveModule('orders');
+            }
+          } else if (isAdmin) {
+            setSetupCompleted(false);
+            localStorage.removeItem(setupCompletedKey());
+            setActiveTab('onboarding');
+            setActiveModule('dashboard');
+          }
+        } else if (currentRestaurantId && isAdmin) {
+          try {
+            const { data: newSettings } = await supabase
+              .from('restaurant_settings')
+              .insert([{
+                restaurant_id: currentRestaurantId,
+                address: '',
+                phone: '',
+                mpesa_paybill: '',
+                mpesa_account: '',
+                setup_completed: false
+              }])
+              .select()
+              .single();
+            if (newSettings) setSettings(newSettings);
+          } catch (_) { }
+          setSetupCompleted(false);
+          localStorage.removeItem(setupCompletedKey());
+          setActiveTab('onboarding');
+          setActiveModule('dashboard');
+        }
+      }
+
+      // Render workspace immediately once critical register data is ready
+      setLoading(false);
+
+      // Load printer receipt brand & active shift asynchronously
+      loadReceiptBrandForTenant(currentRestaurantId, profileName || restaurantName).catch(() => { });
+      fetchActiveShift(currentRestaurantId, staffNameForShift)
+        .then((sh) => setActiveShift(sh))
+        .catch(() => { });
+
+      // PHASE 2: Non-blocking POJ Sync Bridge + Discounts/Branches + Admin Back-Office Tables
+      const phase2Tasks = [
+        // 0: Linked POJ Management Orders (always merged for unified order history)
+        fetchPojOrdersForRange({
+          tenantSlug: resolvedSlug,
+          restaurantId: currentRestaurantId,
+          limit: 1000,
+        }),
+        // 1: Discounts / Promos (needed at POS settle)
         supabase
           .from('pos_discounts')
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .order('created_at', { ascending: false }),
-        // 9: Audit Logs
-        supabase
-          .from('audit_logs')
-          .select('*')
-          .eq('restaurant_id', currentRestaurantId)
-          .order('created_at', { ascending: false })
-          .limit(200),
-        // 10: Branches
+        // 2: Branches
         supabase
           .from('branches')
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .order('is_default', { ascending: false })
           .order('created_at', { ascending: true }),
-      ]);
+      ];
 
-      // Never allow an unresponsive network call to keep the dashboard stuck on a spinner.
-      let timeoutId = null;
-      const results = await Promise.race([
-        loadAllSections,
-        new Promise((resolve) => {
-          timeoutId = setTimeout(() => resolve(null), 10000);
-        }),
-      ]);
-      if (timeoutId) clearTimeout(timeoutId);
+      if (isAdmin) {
+        phase2Tasks.push(
+          supabase.rpc('staff_list', { p_actor_id: pinUser.id || null }),
+          supabase.from('pos_feedback').select('*').eq('restaurant_id', currentRestaurantId).order('created_at', { ascending: false }),
+          resolvedSlug
+            ? supabase.from('tenant_links').select('*').eq('tenant_id', resolvedSlug).order('display_order', { ascending: true })
+            : Promise.resolve({ data: [] }),
+          supabase.from('suppliers').select('*').eq('restaurant_id', currentRestaurantId).order('name'),
+          supabase.from('audit_logs').select('*').eq('restaurant_id', currentRestaurantId).order('created_at', { ascending: false }).limit(200)
+        );
+      }
 
-      if (!results) {
-        console.warn('AdminDashboard: dashboard data load timed out after 10s; rendering workspace.');
+      Promise.allSettled(phase2Tasks).then((p2) => {
+        const [pojRes, discountsRes, branchesRes, staffRes, feedbackRes, linksRes, suppliersRes, auditRes] = p2;
+
+        if (pojRes?.status === 'fulfilled' && Array.isArray(pojRes.value)) {
+          setOrders((prev) => mergeOrdersWithPoj(prev, pojRes.value));
+        }
+        if (discountsRes?.status === 'fulfilled' && !discountsRes.value?.error) {
+          setDiscounts(discountsRes.value?.data || []);
+        }
         setLoadingDiscounts(false);
-        return;
-      }
 
-      const [
-        ordersRes,
-        pojOrdersRes,
-        menuRes,
-        staffRes,
-        feedbackRes,
-        linksRes,
-        settingsRes,
-        suppliersRes,
-        discountsRes,
-        auditRes,
-        branchesRes,
-      ] = results;
-
-      const fetchedOrders = ordersRes?.status === 'fulfilled' ? ordersRes.value?.data || [] : [];
-      const pojOrders = pojOrdersRes?.status === 'fulfilled' ? pojOrdersRes.value || [] : [];
-      setOrders(mergeOrdersWithPoj(fetchedOrders, pojOrders));
-
-      const fetchedMenu = menuRes?.status === 'fulfilled' ? menuRes.value?.data || [] : [];
-      setMenuItems(fetchedMenu);
-
-      if (staffRes?.status === 'fulfilled' && !staffRes.value?.error) {
-        setStaffList(staffRes.value?.data || []);
-      } else {
-        if (staffRes?.status === 'fulfilled' && staffRes.value?.error) {
-          console.warn('Staff list notice:', staffRes.value.error.message || staffRes.value.error);
+        if (branchesRes?.status === 'fulfilled' && !branchesRes.value?.error && Array.isArray(branchesRes.value?.data)) {
+          setBranches(branchesRes.value.data);
         }
-        setStaffList([]);
-      }
 
-      if (feedbackRes?.status === 'fulfilled' && !feedbackRes.value?.error) {
-        setFeedbackList(feedbackRes.value?.data || []);
-      }
-
-      if (linksRes?.status === 'fulfilled' && !linksRes.value?.error) {
-        setTenantLinks(linksRes.value?.data || []);
-      }
-
-      const fetchedSettings = settingsRes?.status === 'fulfilled' ? settingsRes.value?.data : null;
-      if (fetchedSettings && fetchedSettings.length > 0) {
-        const currentSetting = fetchedSettings[0];
-        setSettings(currentSetting);
-        const hasOperationalData = fetchedOrders.length > 0 || fetchedMenu.length > 0;
-        if (currentSetting.setup_completed || hasOperationalData) {
-          setSetupCompleted(true);
-          localStorage.setItem(setupCompletedKey(), 'true');
-          if (!currentSetting.setup_completed && currentRestaurantId) {
-            supabase
-              .from('restaurant_settings')
-              .update({ setup_completed: true })
-              .eq('restaurant_id', currentRestaurantId)
-              .then(() => { })
-              .catch(() => { });
+        if (isAdmin) {
+          if (staffRes?.status === 'fulfilled' && !staffRes.value?.error) {
+            setStaffList(staffRes.value?.data || []);
+          } else {
+            setStaffList([]);
           }
-          if (activeTab === 'onboarding') {
-            setActiveTab('orders');
-            setActiveModule('orders');
+          if (feedbackRes?.status === 'fulfilled' && !feedbackRes.value?.error) {
+            setFeedbackList(feedbackRes.value?.data || []);
           }
-        } else {
-          setSetupCompleted(false);
-          localStorage.removeItem(setupCompletedKey());
-          setActiveTab('onboarding');
-          setActiveModule('dashboard');
+          if (linksRes?.status === 'fulfilled' && !linksRes.value?.error) {
+            setTenantLinks(linksRes.value?.data || []);
+          }
+          if (suppliersRes?.status === 'fulfilled' && !suppliersRes.value?.error) {
+            setSuppliers(suppliersRes.value?.data || []);
+          }
+          const localLogs = getLocalAuditLogs(currentRestaurantId);
+          if (auditRes?.status === 'fulfilled' && !auditRes.value?.error && Array.isArray(auditRes.value?.data)) {
+            const fetchedAudit = auditRes.value.data;
+            setAuditLogs(fetchedAudit.length > 0 ? fetchedAudit : localLogs);
+          } else {
+            setAuditLogs(localLogs);
+          }
         }
-      } else if (currentRestaurantId) {
-        try {
-          const { data: newSettings } = await supabase
-            .from('restaurant_settings')
-            .insert([{
-              restaurant_id: currentRestaurantId,
-              // Start blank: a new restaurant enters its own address and payment
-              // details. Pre-filling these with an existing tenant's paybill made
-              // every new store print another brand's M-Pesa number.
-              address: '',
-              phone: '',
-              mpesa_paybill: '',
-              mpesa_account: '',
-              setup_completed: false
-            }])
-            .select()
-            .single();
-          if (newSettings) setSettings(newSettings);
-        } catch (_) {}
-        setSetupCompleted(false);
-        localStorage.removeItem(setupCompletedKey());
-        setActiveTab('onboarding');
-        setActiveModule('dashboard');
-      }
-
-      if (suppliersRes?.status === 'fulfilled' && !suppliersRes.value?.error) {
-        setSuppliers(suppliersRes.value?.data || []);
-      }
-
-      if (discountsRes?.status === 'fulfilled' && !discountsRes.value?.error) {
-        setDiscounts(discountsRes.value?.data || []);
-      }
-      setLoadingDiscounts(false);
-
-      const localLogs = getLocalAuditLogs(currentRestaurantId);
-      if (auditRes?.status === 'fulfilled' && !auditRes.value?.error && Array.isArray(auditRes.value?.data)) {
-        const fetchedAudit = auditRes.value.data;
-        setAuditLogs(fetchedAudit.length > 0 ? fetchedAudit : localLogs);
-      } else {
-        setAuditLogs(localLogs);
-      }
-
-      if (branchesRes?.status === 'fulfilled' && !branchesRes.value?.error && Array.isArray(branchesRes.value?.data)) {
-        setBranches(branchesRes.value.data);
-      }
+      });
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
-    } finally {
       setLoading(false);
+      setLoadingDiscounts(false);
+    }
+  };
+
+  const handleFetchDateRange = async (startIso, endIso) => {
+    const restId = getActiveRestaurantId();
+    if (!restId) return;
+    try {
+      setTenantContext(restId);
+      const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
+      const [maniposRes, pojRes] = await Promise.allSettled([
+        supabase
+          .from('pos_orders')
+          .select('*, items:pos_order_items(*)')
+          .eq('restaurant_id', restId)
+          .gte('created_at', startIso)
+          .lt('created_at', endIso)
+          .order('created_at', { ascending: false })
+          .limit(1000),
+        fetchPojOrdersForRange({
+          tenantSlug: pinUser.tenantSlug || tenantSlug,
+          restaurantId: restId,
+          fromIso: startIso,
+          toIso: endIso,
+          limit: 1000,
+        }),
+      ]);
+      const mpRows = maniposRes?.status === 'fulfilled' ? maniposRes.value?.data || [] : [];
+      const pojRows = pojRes?.status === 'fulfilled' ? pojRes.value || [] : [];
+      setOrders((prev) => {
+        const existingMap = new Map(prev.map((o) => [String(o.id), o]));
+        mpRows.forEach((r) => existingMap.set(String(r.id), r));
+        return mergeOrdersWithPoj(Array.from(existingMap.values()), pojRows);
+      });
+    } catch (err) {
+      console.warn('Date range load note:', err);
+    }
+  };
+
+  const handleToggleAutoAccept = () => {
+    setAutoAcceptOrders((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pos_auto_accept_orders', String(next));
+      } catch (_) { }
+      return next;
+    });
+  };
+
+  const handleOpenPrinterModal = async () => {
+    setPrinterModalOpen(true);
+    try {
+      const ok = isQZConnected() ? true : await connectQZ();
+      setQzConnected(ok);
+      if (ok) {
+        const list = await listPrinters();
+        setQzPrinters(list);
+      }
+    } catch (_) { }
+  };
+
+  const handleUnlockPin = async (e) => {
+    if (e) e.preventDefault();
+    const cleanPin = String(lockPinInput || '').replace(/\D/g, '');
+    if (cleanPin.length < 4) {
+      setLockError('Enter your 4-digit staff PIN.');
+      return;
+    }
+    const restId = getActiveRestaurantId();
+    setLockBusy(true);
+    setLockError('');
+    try {
+      const { data, error } = await supabase.rpc('verify_staff_pin', {
+        p_restaurant_id: restId,
+        p_pin: cleanPin,
+        p_staff_name: null,
+      });
+      if (error) throw error;
+      if (!data?.success || !data?.staff) {
+        setLockError(data?.error || 'Incorrect PIN.');
+        setLockBusy(false);
+        return;
+      }
+      const nextStaff = {
+        ...(effectiveStaffUser || {}),
+        id: data.staff.id,
+        name: data.staff.name,
+        role: data.staff.role,
+        permissions: data.staff.permissions ?? null,
+        restaurantId: restId,
+        restaurantName: restaurantName || profileName,
+      };
+      localStorage.setItem('pin_staff_user', JSON.stringify(nextStaff));
+      setSessionStaffUser(nextStaff);
+      setPinLocked(false);
+      setLockPinInput('');
+      setLockError('');
+      // If unlocked by a non-admin staff member, enforce POS-only workspace view cleanly
+      if (!isAdminAccount(nextStaff)) {
+        setActiveModule('orders');
+        setActiveTab('orders');
+        setShowWebPos(true);
+      }
+    } catch (err) {
+      setLockError(err.message || 'PIN verification failed.');
+    } finally {
+      setLockBusy(false);
+    }
+  };
+
+  const handleOpenShiftSubmit = async (e) => {
+    e.preventDefault();
+    const restId = getActiveRestaurantId();
+    if (!restId) return;
+    setShiftBusy(true);
+    try {
+      const created = await openStaffShift({
+        restaurantId: restId,
+        staffName: pinStaffName,
+        staffRole: effectiveStaffUser?.role || 'cashier',
+        openingCash: Number(shiftAmountInput || 0),
+      });
+      setActiveShift(created);
+      setShiftModalMode(null);
+      setShiftAmountInput('');
+    } catch (err) {
+      alert(err.message || 'Failed to open shift.');
+    } finally {
+      setShiftBusy(false);
+    }
+  };
+
+  const handleCloseShiftSubmit = async (e, shouldPrintZReport = true) => {
+    e.preventDefault();
+    const restId = getActiveRestaurantId();
+    if (!restId || !activeShift) return;
+    setShiftBusy(true);
+    try {
+      const { zReport } = await closeStaffShift({
+        restaurantId: restId,
+        activeShift,
+        staffName: pinStaffName,
+        orders,
+        closingCash: Number(shiftAmountInput || 0),
+      });
+      if (shouldPrintZReport) {
+        await printZReport(zReport);
+      }
+      setActiveShift(null);
+      setShiftModalMode(null);
+      setShiftAmountInput('');
+    } catch (err) {
+      alert(err.message || 'Failed to close shift.');
+    } finally {
+      setShiftBusy(false);
     }
   };
 
@@ -930,6 +1170,10 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
   // checks on the RPCs that matter.
   const perms = currentPermissions();
   const canDo = (permission) => perms.includes(permission);
+  const visibleRailIds = useMemo(
+    () => getVisibleOrdaRailIds({ staffUser: effectiveStaffUser, permissions: perms }),
+    [effectiveStaffUser, perms]
+  );
 
   // Which permission (if any) unlocks each dashboard tab.
   const TAB_PERMISSION = {
@@ -950,16 +1194,32 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
     if (activeBranchId === 'all') return orders;
     return orders.filter((o) => !o.branch_id || o.branch_id === activeBranchId);
   }, [orders, activeBranchId]);
+  const openOrders = useMemo(
+    () => scopedOrders.filter((o) => ['open', 'saved'].includes(String(o?.status || '').toLowerCase().trim())),
+    [scopedOrders]
+  );
   const bucketCounts = useMemo(() => computeOrderBucketCounts(scopedOrders), [scopedOrders]);
-  const pinStaffName = useMemo(() => {
+  const pinStaffName = effectiveStaffUser?.name || (() => {
     try {
       return JSON.parse(localStorage.getItem('pin_staff_user') || '{}').name || 'Staff';
     } catch {
       return 'Staff';
     }
-  }, []);
+  })();
+
+  const shiftSummary = useMemo(
+    () =>
+      summarizeShiftSales({
+        orders: scopedOrders,
+        openingCash: Number(activeShift?.opening_cash || 0),
+        staffName: pinStaffName,
+        shiftStartIso: activeShift?.opened_at || getBusinessDayStartIso(),
+      }),
+    [scopedOrders, activeShift, pinStaffName]
+  );
 
   const selectModule = (mod, tab) => {
+    if (!isAdmin && mod !== 'orders') return;
     setShowWebPos(false);
     setSettleTargetOrder(null);
     setActiveModule(mod);
@@ -1028,7 +1288,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
             { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
             { id: 'account', label: 'Account', icon: Building2, tab: 'account' },
           ]
-            .filter((item) => item.visible !== false)
+            .filter((item) => item.visible !== false && visibleRailIds.includes(item.id))
             .map((item) => {
               const Icon = item.icon;
               const isActive = activeModule === item.id;
@@ -1056,20 +1316,22 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         </div>
 
         <div className="w-full flex flex-col items-center gap-2 pt-3 border-t border-emerald-900/80">
-          <button
-            type="button"
-            onClick={() => setCloseStoreOpen(true)}
-            title={settings.store_closed ? 'Store Closed — Click to Reopen' : 'Close Store (End of Day)'}
-            className={`w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 transition cursor-pointer ${settings.store_closed
-              ? 'bg-rose-600 text-white'
-              : 'text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white'
-              }`}
-          >
-            <Power size={17} />
-            <span className="text-[9px] font-bold leading-none">
-              {settings.store_closed ? 'Closed' : 'Store'}
-            </span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setCloseStoreOpen(true)}
+              title={settings.store_closed ? 'Store Closed — Click to Reopen' : 'Close Store (End of Day)'}
+              className={`w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 transition cursor-pointer ${settings.store_closed
+                ? 'bg-rose-600 text-white'
+                : 'text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white'
+                }`}
+            >
+              <Power size={17} />
+              <span className="text-[9px] font-bold leading-none">
+                {settings.store_closed ? 'Closed' : 'Store'}
+              </span>
+            </button>
+          )}
 
           {onSignOut && (
             <button
@@ -1097,7 +1359,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          {!setupCompleted && (
+          {isAdmin && !setupCompleted && (
             <button
               type="button"
               onClick={() => selectModule('dashboard', 'onboarding')}
@@ -1615,8 +1877,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                   {profileName || restaurantName}
                 </h1>
                 <span
-                  onClick={() => setCloseStoreOpen(true)}
-                  className={`cursor-pointer text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${settings.store_closed
+                  onClick={() => { if (isAdmin) setCloseStoreOpen(true); }}
+                  className={`${isAdmin ? 'cursor-pointer' : ''} text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${settings.store_closed
                     ? 'bg-rose-50 text-rose-700 border-rose-200'
                     : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     }`}
@@ -1660,14 +1922,61 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
             <button
               type="button"
-              onClick={onBackToTerminal}
-              className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              onClick={() => {
+                setShiftAmountInput(activeShift ? '' : '0');
+                setShiftModalMode(activeShift ? 'close' : 'open');
+              }}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${activeShift
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
+                }`}
+              title={activeShift ? `Active Shift opened ${new Date(activeShift.opened_at).toLocaleTimeString()}` : 'Open Cashier Shift'}
             >
-              <span>Open POS Register</span>
-              <ChevronRight size={14} />
+              <Clock size={14} />
+              <span>{activeShift ? 'Close Shift / Z-Report' : 'Open Shift'}</span>
             </button>
 
-            {onOpenAppHome && (
+            <button
+              type="button"
+              onClick={handleToggleAutoAccept}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${autoAcceptOrders
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              title="Automatically approve incoming digital menu orders"
+            >
+              <Zap size={13} />
+              <span className="hidden sm:inline">Auto-Accept: {autoAcceptOrders ? 'ON' : 'OFF'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenPrinterModal}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${qzConnected
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              title="Configure QZ Tray Receipt & Kitchen Printers"
+            >
+              <Printer size={13} />
+              <span className="hidden sm:inline">{qzConnected ? 'Printers Ready' : 'Printers'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLockPinInput('');
+                setLockError('');
+                setPinLocked(true);
+              }}
+              className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              title="Quick Lock Terminal (PIN)"
+            >
+              <Lock size={13} />
+              <span className="hidden sm:inline">Lock</span>
+            </button>
+
+            {isAdmin && onOpenAppHome && (
               <button
                 type="button"
                 onClick={onOpenAppHome}
@@ -1691,7 +2000,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
 
         {/* WORKSPACE MAIN */}
         <main className="flex-1 p-5 sm:p-6 overflow-y-auto bg-slate-50">
-          {(bucketCounts.new + bucketCounts.verifying) > 0 && activeTab !== 'orders' && (
+          {(bucketCounts.new + bucketCounts.verifying) > 0 && (activeTab !== 'orders' || showWebPos) && (
             <div className="mb-5 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-3">
                 <span className="w-8 h-8 rounded-xl bg-amber-500 text-white font-black flex items-center justify-center animate-pulse">!</span>
@@ -1713,7 +2022,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               </button>
             </div>
           )}
-          {!setupCompleted && activeTab !== 'onboarding' && (
+          {isAdmin && !setupCompleted && activeTab !== 'onboarding' && (
             <div className="mb-5">
               <button
                 onClick={() => selectModule('dashboard', 'onboarding')}
@@ -1733,6 +2042,8 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               activeBranch={activeBranchObj}
               staffName={pinStaffName}
               initialOrder={settleTargetOrder}
+              openOrders={openOrders}
+              onSelectOpenOrder={(order) => setSettleTargetOrder(order)}
               tendersConfig={settings.payment_tenders_config}
               allowNegativeStoreCredit={settings.allow_negative_store_credit === true}
               onBackToOrders={() => {
@@ -1743,7 +2054,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               }}
               onOrderPlaced={() => fetchDashboardData()}
             />
-          ) : activeTab === 'orders' ? (
+          ) : (activeTab === 'orders' || !isAdmin) ? (
             <LiveOrdersView
               orders={orders}
               restaurantId={activeRestaurantId}
@@ -1753,6 +2064,7 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
               voidCompletedAllowed={settings.void_completed_allowed !== false}
               voidWindowHours={settings.void_window_hours ?? 168}
               onRefresh={fetchDashboardData}
+              onFetchDateRange={handleFetchDateRange}
               onCreateOrder={() => {
                 setSettleTargetOrder(null);
                 setShowWebPos(true);
@@ -2009,7 +2321,10 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
                                 await supabase.from('restaurant_settings').update({ setup_completed: true }).eq('restaurant_id', tenant);
                               }
                             } catch (e) { }
-                            onBackToTerminal();
+                            setSettleTargetOrder(null);
+                            setActiveModule('orders');
+                            setActiveTab('orders');
+                            setShowWebPos(true);
                           }}
                           className="px-6 py-3 bg-amber-400 text-slate-950 text-sm font-black rounded-xl hover:bg-amber-300 shadow-xl shadow-amber-400/10 flex items-center gap-2 transition-all cursor-pointer"
                         >
@@ -3864,6 +4179,255 @@ export function AdminDashboard({ onBackToTerminal, onOpenAppHome, onOpenModule, 
         nextOpeningAt={settings.next_opening_at || ''}
         onUpdated={(patch) => setSettings((prev) => ({ ...prev, ...patch }))}
       />
+
+      {/* Shift Open / Close & Z-Report Modal */}
+      {shiftModalMode && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={(e) =>
+              shiftModalMode === 'open'
+                ? handleOpenShiftSubmit(e)
+                : handleCloseShiftSubmit(e, true)
+            }
+            className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">
+                  {shiftModalMode === 'open' ? 'Open Cashier Shift' : 'Close Shift & Z-Report'}
+                </h3>
+                <p className="text-xs text-slate-500">Operator: {pinStaffName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShiftModalMode(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {shiftModalMode === 'close' && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Opening Cash Float</span>
+                  <span className="font-bold text-slate-900">KES {Number(activeShift?.opening_cash || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Orders Processed ({shiftSummary.ordersCount})</span>
+                  <span className="font-bold text-slate-900">KES {shiftSummary.totalSales.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Cash Sales</span>
+                  <span className="font-bold text-emerald-700">KES {shiftSummary.cashSales.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">M-Pesa / Card / Other</span>
+                  <span className="font-bold text-slate-900">
+                    KES {(shiftSummary.mpesaSales + shiftSummary.cardSales + shiftSummary.otherSales).toLocaleString()}
+                  </span>
+                </div>
+                <div className="border-t border-slate-200 pt-2 flex justify-between font-black text-slate-900">
+                  <span>Expected Cash Drawer</span>
+                  <span>KES {shiftSummary.expectedCash.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                {shiftModalMode === 'open' ? 'Opening Cash Float (KES)' : 'Actual Counted Cash (KES)'}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={shiftAmountInput}
+                onChange={(e) => setShiftAmountInput(e.target.value)}
+                placeholder="0"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-900"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShiftModalMode(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={shiftBusy}
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer disabled:opacity-50"
+              >
+                {shiftBusy
+                  ? 'Saving...'
+                  : shiftModalMode === 'open'
+                  ? 'Start Shift'
+                  : 'Close Shift & Print Z-Report'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* QZ Tray Thermal & Kitchen Printer Setup Modal */}
+      {printerModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">QZ Tray Thermal Printers</h3>
+                <p className="text-xs text-slate-500">
+                  Status:{' '}
+                  <span className={qzConnected ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                    {qzConnected ? 'Connected to QZ Tray' : 'Offline — Using browser popup fallback'}
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPrinterModalOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Front Desk Receipt Printer</label>
+                {qzPrinters.length > 0 ? (
+                  <select
+                    value={printerPrefs.frontDeskPrinter}
+                    onChange={(e) => setPrinterPrefsState((p) => ({ ...p, frontDeskPrinter: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                  >
+                    <option value="">Default System Printer</option>
+                    {qzPrinters.map((pr) => (
+                      <option key={pr} value={pr}>{pr}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={printerPrefs.frontDeskPrinter}
+                    onChange={(e) => setPrinterPrefsState((p) => ({ ...p, frontDeskPrinter: e.target.value }))}
+                    placeholder="Printer name (optional)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Kitchen Docket (KOT) Printer</label>
+                {qzPrinters.length > 0 ? (
+                  <select
+                    value={printerPrefs.kitchenPrinter}
+                    onChange={(e) => setPrinterPrefsState((p) => ({ ...p, kitchenPrinter: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                  >
+                    <option value="">Same / Default Printer</option>
+                    {qzPrinters.map((pr) => (
+                      <option key={pr} value={pr}>{pr}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={printerPrefs.kitchenPrinter}
+                    onChange={(e) => setPrinterPrefsState((p) => ({ ...p, kitchenPrinter: e.target.value }))}
+                    placeholder="Kitchen printer name (optional)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={handleOpenPrinterModal}
+                className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Reconnect QZ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPrinterPrefs(printerPrefs);
+                  setPrinterModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+              >
+                Save Printers
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Staff PIN Lock Overlay */}
+      {pinLocked && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleUnlockPin}
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-7 text-center space-y-5 shadow-2xl"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+              <Lock size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-white">Terminal Locked</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                {profileName || restaurantName} · Enter your 4-digit staff PIN to unlock
+              </p>
+            </div>
+            {lockError && (
+              <p className="text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-xl py-2 px-3">
+                {lockError}
+              </p>
+            )}
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              autoFocus
+              value={lockPinInput}
+              onChange={(e) => setLockPinInput(e.target.value)}
+              placeholder="••••"
+              className="w-full text-center tracking-[0.6em] font-mono text-2xl bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-2xl py-3.5 text-white focus:outline-none"
+            />
+            <div className="grid grid-cols-3 gap-2">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Clear', '0', '⌫'].map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setLockError('');
+                    if (key === 'Clear') setLockPinInput('');
+                    else if (key === '⌫') setLockPinInput((p) => p.slice(0, -1));
+                    else if (lockPinInput.length < 6) setLockPinInput((p) => p + key);
+                  }}
+                  className="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm cursor-pointer"
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
+            <button
+              type="submit"
+              disabled={lockBusy}
+              className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm cursor-pointer disabled:opacity-50"
+            >
+              {lockBusy ? 'Verifying...' : 'Unlock POS'}
+            </button>
+          </form>
+        </div>
+      )}
 
     </div>
   );

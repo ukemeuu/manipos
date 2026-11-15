@@ -14,8 +14,8 @@ import {
 } from './lib/tenant';
 import { loadTenant, getActiveTenantSlug, getMicrositeUrl } from './lib/tenantConfig';
 import { can } from './lib/permissions';
+import { isAdminAccount } from './lib/posRouting';
 
-const PosTerminal = lazy(() => import('./components/PosTerminal').then(m => ({ default: m.PosTerminal })));
 const RetailPosTerminal = lazy(() => import('./components/RetailPosTerminal').then(m => ({ default: m.RetailPosTerminal })));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 const MenuMicrosite = lazy(() => import('./components/MenuMicrosite').then(m => ({ default: m.MenuMicrosite })));
@@ -116,10 +116,6 @@ const ROLE_HOME_ROUTE = {
   store_clerk: 'store-ops',
   issuer: 'store-ops',
 };
-
-function isAdminAccount(staffUser) {
-  return String(staffUser?.role || '').toLowerCase().trim() === 'admin';
-}
 
 function isGenericPosHost() {
   return typeof window !== 'undefined' && window.location.hostname === 'pos.manipos.com';
@@ -740,16 +736,15 @@ function App() {
         );
       }
       return (
-        <div className="min-h-screen bg-slate-50 relative">
-          <PosTerminal
-            staffName={staffUser.name}
-            staffRole={staffUser.role}
-            onSignOut={handleGlobalSignOut}
-            onBack={isAdmin ? () => setCurrentRoute('app') : null}
-            tenantSlug={tenantInfo.tenantSlug}
-            tenantId={resolvedRestId}
-          />
-        </div>
+        <AdminDashboard
+          initialView="pos"
+          staffUser={staffUser}
+          onOpenAppHome={null}
+          onOpenModule={openModule}
+          onSignOut={handleGlobalSignOut}
+          tenantSlug={tenantInfo.tenantSlug}
+          tenantId={resolvedRestId}
+        />
       );
     }
 
@@ -757,16 +752,15 @@ function App() {
     if (OPERATIONAL_ROUTES.has(currentRoute)) {
       if (!isAdmin) {
         return (
-          <div className="min-h-screen bg-slate-50 relative">
-            <PosTerminal 
-              staffName={staffUser.name} 
-              staffRole={staffUser.role} 
-              onSignOut={handleGlobalSignOut}
-            onBack={isAdmin ? () => setCurrentRoute('app') : null} 
-              tenantSlug={tenantInfo.tenantSlug}
-              tenantId={resolvedRestId}
-            />
-          </div>
+          <AdminDashboard
+            initialView="pos"
+            staffUser={staffUser}
+            onOpenAppHome={null}
+            onOpenModule={openModule}
+            onSignOut={handleGlobalSignOut}
+            tenantSlug={tenantInfo.tenantSlug}
+            tenantId={resolvedRestId}
+          />
         );
       }
       if (currentRoute === 'kds') {
@@ -808,7 +802,7 @@ function App() {
       if (!isSetupCompleted) {
         return (
           <AdminDashboard 
-            onBackToTerminal={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
+            staffUser={staffUser}
             onOpenAppHome={() => setCurrentRoute('app')}
             onOpenModule={openModule}
             onSignOut={handleGlobalSignOut}
@@ -836,7 +830,7 @@ function App() {
     if (currentRoute === 'dashboard' || currentRoute === 'onboarding') {
       return (
         <AdminDashboard 
-          onBackToTerminal={() => setCurrentRoute(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
+          staffUser={staffUser}
           onOpenAppHome={() => setCurrentRoute('app')}
           onOpenModule={openModule}
           onSignOut={handleGlobalSignOut}
@@ -899,18 +893,15 @@ function App() {
       }
 
       return (
-        <div className="min-h-screen bg-slate-50 relative">
-          <PosTerminal 
-            staffName={staffUser.name} 
-            staffRole={staffUser.role} 
-            onSignOut={handleGlobalSignOut}
-            onBack={isAdmin ? () => setCurrentRoute('app') : null} 
-            onOpenDashboard={isAdmin ? () => setCurrentRoute('dashboard') : null}
-            onOpenAppHome={() => setCurrentRoute('app')}
-            tenantSlug={tenantInfo.tenantSlug}
-            tenantId={resolvedRestId}
-          />
-        </div>
+        <AdminDashboard
+          initialView="pos"
+          staffUser={staffUser}
+          onOpenAppHome={isAdmin ? () => setCurrentRoute('app') : null}
+          onOpenModule={openModule}
+          onSignOut={handleGlobalSignOut}
+          tenantSlug={tenantInfo.tenantSlug}
+          tenantId={resolvedRestId}
+        />
       );
     }
   }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Search, Clock, User, Package, MapPin, Truck, Store, UtensilsCrossed,
-  Check, X, CheckCircle2, Ban, Printer, RefreshCw, ExternalLink, AlertCircle
+  Check, X, CheckCircle2, Ban, Printer, RefreshCw, ExternalLink, AlertCircle, Calendar
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
@@ -9,6 +9,8 @@ import {
   processOrderInventoryDepletion,
   processVoidOrderInventoryDisposition,
 } from '../../lib/inventoryErpEngine';
+import { printCashierSlips, printKitchenSlips } from '../../lib/posPrintService';
+import { getBusinessDayStartIso } from '../../lib/posShiftService';
 
 const CHANNEL_OPTIONS = [
   'All Channels',
@@ -140,6 +142,37 @@ function statusPillMeta(bucket, order) {
   }
 }
 
+function computeDateWindow(preset, customStart, customEnd) {
+  const now = new Date();
+  const todayStartIso = getBusinessDayStartIso(now);
+  const todayStartMs = new Date(todayStartIso).getTime();
+
+  if (preset === 'today') {
+    return { startIso: todayStartIso, endIso: now.toISOString() };
+  }
+  if (preset === 'yesterday') {
+    const yStart = new Date(todayStartMs - 24 * 3600 * 1000).toISOString();
+    return { startIso: yStart, endIso: todayStartIso };
+  }
+  if (preset === '7days') {
+    return {
+      startIso: new Date(todayStartMs - 6 * 24 * 3600 * 1000).toISOString(),
+      endIso: now.toISOString(),
+    };
+  }
+  if (preset === 'month') {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1, 7, 0, 0, 0);
+    return { startIso: first.toISOString(), endIso: now.toISOString() };
+  }
+  if (preset === 'custom' && customStart) {
+    const startDate = new Date(`${customStart}T07:00:00+03:00`);
+    const endBase = customEnd ? new Date(`${customEnd}T07:00:00+03:00`) : new Date(`${customStart}T07:00:00+03:00`);
+    const endDate = new Date(endBase.getTime() + 24 * 3600 * 1000);
+    return { startIso: startDate.toISOString(), endIso: endDate.toISOString() };
+  }
+  return { startIso: null, endIso: null };
+}
+
 export function LiveOrdersView({
   orders = [],
   restaurantId,
@@ -151,10 +184,15 @@ export function LiveOrdersView({
   onRefresh,
   onCreateOrder,
   onResumeOpenOrder,
+  onFetchDateRange,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState('All Channels');
   const [sortOrder, setSortOrder] = useState('newest');
+  const [datePreset, setDatePreset] = useState('all');
+  const [customStart, setCustomStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rangeLoading, setRangeLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [page, setPage] = useState(1);
@@ -167,10 +205,51 @@ export function LiveOrdersView({
   const [voidLineDisposition, setVoidLineDisposition] = useState({});
   const [voidSubmitting, setVoidSubmitting] = useState(false);
 
+  const handleSelectDatePreset = async (preset) => {
+    setDatePreset(preset);
+    setPage(1);
+    if (!onFetchDateRange || preset === 'all') return;
+    const { startIso, endIso } = computeDateWindow(preset, customStart, customEnd);
+    if (!startIso || !endIso) return;
+    setRangeLoading(true);
+    try {
+      await onFetchDateRange(startIso, endIso);
+    } finally {
+      setRangeLoading(false);
+    }
+  };
+
+  const applyCustomDateRange = async () => {
+    if (!customStart) return;
+    setDatePreset('custom');
+    setPage(1);
+    if (!onFetchDateRange) return;
+    const { startIso, endIso } = computeDateWindow('custom', customStart, customEnd);
+    if (!startIso || !endIso) return;
+    setRangeLoading(true);
+    try {
+      await onFetchDateRange(startIso, endIso);
+    } finally {
+      setRangeLoading(false);
+    }
+  };
+
   const filteredOrders = useMemo(() => {
     let list = orders;
     if (activeBranch?.id) {
       list = list.filter((o) => !o.branch_id || o.branch_id === activeBranch.id);
+    }
+
+    if (datePreset !== 'all') {
+      const { startIso, endIso } = computeDateWindow(datePreset, customStart, customEnd);
+      if (startIso && endIso) {
+        const startMs = new Date(startIso).getTime();
+        const endMs = new Date(endIso).getTime();
+        list = list.filter((o) => {
+          const ts = new Date(o.created_at || 0).getTime();
+          return !Number.isNaN(ts) && ts >= startMs && ts < endMs;
+        });
+      }
     }
 
     list = list.filter((o) => {
@@ -203,7 +282,7 @@ export function LiveOrdersView({
       const tb = new Date(b.created_at || 0).getTime();
       return sortOrder === 'newest' ? tb - ta : ta - tb;
     });
-  }, [orders, activeBranch, statusFilter, channelFilter, searchQuery, sortOrder]);
+  }, [orders, activeBranch, datePreset, customStart, customEnd, statusFilter, channelFilter, searchQuery, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
   const pagedOrders = useMemo(() => {
@@ -347,6 +426,33 @@ export function LiveOrdersView({
     return [];
   };
 
+  const buildPrintableReceipt = (order) => {
+    const lines = renderLines(order);
+    return {
+      ticketNumber: order.ticket_number || order.order_number || String(order.id || '').slice(0, 8),
+      customerName: order.customer_name || 'Walk-in Guest',
+      customerPhone: order.customer_phone || '',
+      diningOption: order.dining_option || 'Dine In',
+      tableNumber: order.table_number || '',
+      deliveryAddress: order.delivery_address || '',
+      deliveryFee: Number(order.delivery_fee || 0),
+      totalAmount: Number(order.total_amount || 0),
+      paymentMethod: order.payment_method || 'Cash',
+      paymentStatus: order.payment_status || 'pending',
+      cashier: order.cashier_name || order.staff_name || 'Staff',
+      notes: order.notes || '',
+      createdAt: order.created_at || new Date().toISOString(),
+      branch: activeBranch?.name || restaurantName || 'Main Branch',
+      items: lines.map((line) => ({
+        name: line.item_name || line.name || 'Item',
+        quantity: Number(line.quantity || 1),
+        price: Number(line.unit_price ?? line.price ?? 0),
+        note: line.note || line.modifiers || '',
+        brand: line.brand || '',
+      })),
+    };
+  };
+
   const titles = {
     active: 'Active Orders',
     new: 'New Orders',
@@ -420,6 +526,59 @@ export function LiveOrdersView({
         </div>
       </div>
 
+      {/* Business-Day & Historical Date Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">
+            <Calendar size={12} /> Window:
+          </span>
+          {[
+            { id: 'all', label: 'All Loaded' },
+            { id: 'today', label: 'Today' },
+            { id: 'yesterday', label: 'Yesterday' },
+            { id: '7days', label: '7 Days' },
+            { id: 'month', label: 'This Month' },
+          ].map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => handleSelectDatePreset(preset.id)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                datePreset === preset.id
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <input
+            type="date"
+            value={customStart}
+            onChange={(e) => setCustomStart(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700"
+          />
+          <span className="text-slate-400 font-bold">–</span>
+          <input
+            type="date"
+            value={customEnd}
+            onChange={(e) => setCustomEnd(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700"
+          />
+          <button
+            type="button"
+            onClick={applyCustomDateRange}
+            disabled={rangeLoading}
+            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+          >
+            {rangeLoading ? 'Loading…' : 'Apply'}
+          </button>
+        </div>
+      </div>
+
       {/* Empty State */}
       {pagedOrders.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
@@ -474,10 +633,34 @@ export function LiveOrdersView({
                         {chLabel}
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                      <Clock size={12} />
-                      {relativeTimeLabel(order.created_at)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          printCashierSlips(buildPrintableReceipt(order));
+                        }}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                        title="Print Thermal Receipt"
+                      >
+                        <Printer size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          printKitchenSlips(buildPrintableReceipt(order));
+                        }}
+                        className="px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold cursor-pointer"
+                        title="Print Kitchen KOT"
+                      >
+                        KOT
+                      </button>
+                      <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                        <Clock size={12} />
+                        {relativeTimeLabel(order.created_at)}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs pt-1">
@@ -659,13 +842,22 @@ export function LiveOrdersView({
         subtitle={selectedOrder ? `${normalizeChannelLabel(selectedOrder)} · ${new Date(selectedOrder.created_at).toLocaleString('en-KE')}` : ''}
         footer={selectedOrder && (
           <>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 cursor-pointer"
-            >
-              <Printer size={14} /> Print Receipt
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => printCashierSlips(buildPrintableReceipt(selectedOrder))}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 cursor-pointer"
+              >
+                <Printer size={14} /> Print Receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => printKitchenSlips(buildPrintableReceipt(selectedOrder))}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-900 cursor-pointer"
+              >
+                <Printer size={14} /> Print KOT
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               {canVoidOrder(selectedOrder) && (
                 <button

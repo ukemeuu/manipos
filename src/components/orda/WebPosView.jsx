@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, Search, ShoppingBag, Plus, Minus, Trash2, User, Phone,
   MapPin, Tag, CreditCard, Banknote, Smartphone, CheckCircle2, Loader2,
-  Gift, Layers, Store, UtensilsCrossed, Truck, Clock, X, Bookmark, Sparkles
+  Gift, Layers, Store, UtensilsCrossed, Truck, Clock, X, Bookmark, Sparkles, Printer
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { resolveEffectivePrice } from '../../lib/tenantConfig';
 import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
+import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
 
 const SALES_CHANNELS = [
   'Web POS',
@@ -60,6 +61,7 @@ async function safeInsertOrder(payload) {
     'tax_amount',
     'charges_amount',
     'charges_breakdown',
+    'table_number',
   ];
   for (let i = 0; i <= optionalCols.length; i += 1) {
     const res = await supabase
@@ -85,6 +87,8 @@ export function WebPosView({
   activeBranch = null,
   staffName = 'Web POS Staff',
   initialOrder = null,
+  openOrders = [],
+  onSelectOpenOrder = null,
   tendersConfig = null,
   allowNegativeStoreCredit = false,
   onBackToOrders,
@@ -96,11 +100,14 @@ export function WebPosView({
   const [modifierGroups, setModifierGroups] = useState([]);
   const [combos, setCombos] = useState([]);
   const [guests, setGuests] = useState([]);
+  const [floorTables, setFloorTables] = useState([]);
   const [activeCharges, setActiveCharges] = useState([]);
 
+  const [selectedBrand, setSelectedBrand] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [salesChannel, setSalesChannel] = useState('Web POS');
+  const [showOpenTabsBar, setShowOpenTabsBar] = useState(false);
 
   // Customer selection
   const [customerMode, setCustomerMode] = useState('guest'); // 'guest' | 'lookup'
@@ -121,7 +128,10 @@ export function WebPosView({
     if (d.includes('dine')) return 'Dine In';
     return 'Pickup';
   });
-  const [tableNumber, setTableNumber] = useState('');
+  const [tableNumber, setTableNumber] = useState(() => {
+    const match = String(initialOrder?.notes || '').match(/Table:\s*([^|\n]+)/i);
+    return initialOrder?.table_number || (match ? match[1].trim() : '');
+  });
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(Number(initialOrder?.delivery_fee || 0));
   const [promoCode, setPromoCode] = useState('');
@@ -130,6 +140,9 @@ export function WebPosView({
   const [paymentTender, setPaymentTender] = useState('Cash');
   const [paymentReference, setPaymentReference] = useState('');
   const [splitBreakdown, setSplitBreakdown] = useState('');
+  const [splitCash, setSplitCash] = useState('');
+  const [splitMpesa, setSplitMpesa] = useState('');
+  const [splitCard, setSplitCard] = useState('');
   const [sendStk, setSendStk] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -154,7 +167,7 @@ export function WebPosView({
       }
       setLoading(true);
       try {
-        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList] = await Promise.all([
+        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList, tableRes] = await Promise.all([
           supabase
             .from('pos_categories')
             .select('*')
@@ -181,6 +194,11 @@ export function WebPosView({
             .order('created_at', { ascending: false })
             .limit(80),
           fetchActiveOrderCharges(restaurantId),
+          supabase
+            .from('pos_tables')
+            .select('id, name, zone, seats, status')
+            .eq('restaurant_id', restaurantId)
+            .order('display_order', { ascending: true }),
         ]);
 
         if (!active) return;
@@ -190,6 +208,7 @@ export function WebPosView({
         if (!comboRes.error) setCombos(comboRes.data || []);
         if (!guestRes.error) setGuests(guestRes.data || []);
         setActiveCharges(Array.isArray(chargesList) ? chargesList : []);
+        if (!tableRes.error) setFloorTables(tableRes.data || []);
       } catch (err) {
         console.warn('WebPOS load error:', err);
       } finally {
@@ -231,6 +250,18 @@ export function WebPosView({
     return map;
   }, [modifierGroups]);
 
+  const brandTabs = useMemo(() => {
+    const counts = new Map();
+    menuItems.forEach((item) => {
+      const b = String(item?.brand || '').trim();
+      if (!b || b.toUpperCase() === 'MANIPOS' || b.toUpperCase() === 'ALL') return;
+      counts.set(b, (counts.get(b) || 0) + 1);
+    });
+    const list = Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
+    if (list.length <= 1) return [];
+    return [{ name: 'All', count: menuItems.length }, ...list];
+  }, [menuItems]);
+
   const categoryTabs = useMemo(() => {
     const set = new Set();
     categories.forEach((c) => c.name && set.add(c.name));
@@ -246,6 +277,15 @@ export function WebPosView({
     if (activeBranch?.id) {
       list = list.filter((i) => !i.branch_id || i.branch_id === activeBranch.id);
     }
+    if (selectedBrand !== 'All') {
+      const targetUpper = selectedBrand.toUpperCase();
+      list = list.filter((i) => {
+        const b = String(i.brand || '').toUpperCase();
+        const bs = Array.isArray(i.brands) ? i.brands.map((x) => String(x || '').toUpperCase()) : [];
+        if (!b && bs.length === 0) return true;
+        return b === targetUpper || b.includes(targetUpper) || bs.some((x) => x === targetUpper || x.includes(targetUpper));
+      });
+    }
     if (selectedCategory !== 'All') {
       list = list.filter((i) => (i.category || 'Uncategorized') === selectedCategory);
     }
@@ -259,7 +299,7 @@ export function WebPosView({
       );
     }
     return list;
-  }, [menuItems, selectedCategory, search, activeBranch]);
+  }, [menuItems, selectedBrand, selectedCategory, search, activeBranch]);
 
   const filteredCombos = useMemo(() => {
     if (selectedCategory !== 'All' && selectedCategory !== 'Combos') return [];
@@ -559,6 +599,12 @@ export function WebPosView({
     try {
       const diningVal = diningMode === 'Pickup' ? 'Takeaway' : diningMode;
       const isSettledNow = !saveAsOpen && paymentTender !== 'Paid to App';
+      const resolvedSplitText = splitBreakdown.trim() || [
+        Number(splitCash || 0) > 0 ? `Cash (KES ${Number(splitCash).toLocaleString()})` : '',
+        Number(splitMpesa || 0) > 0 ? `M-Pesa (KES ${Number(splitMpesa).toLocaleString()})` : '',
+        Number(splitCard || 0) > 0 ? `Card (KES ${Number(splitCard).toLocaleString()})` : '',
+      ].filter(Boolean).join(' + ');
+
       const noteParts = [
         orderInstructions.trim(),
         diningMode === 'Dine In' && tableNumber.trim() ? `Table: ${tableNumber.trim()}` : '',
@@ -566,7 +612,7 @@ export function WebPosView({
         customerPhone.trim() ? `Phone: ${customerPhone.trim()}` : '',
         appliedDiscount ? `Promo: ${appliedDiscount.code} (-KES ${discountAmount.toLocaleString()})` : '',
         paymentReference.trim() ? `Payment Ref: ${paymentReference.trim()}` : '',
-        paymentTender === 'Split Payment' && splitBreakdown.trim() ? `Split: ${splitBreakdown.trim()}` : '',
+        paymentTender === 'Split Payment' && resolvedSplitText ? `Split: ${resolvedSplitText}` : '',
       ].filter(Boolean);
 
       if (initialOrder?.id) {
@@ -587,11 +633,35 @@ export function WebPosView({
           .eq('id', initialOrder.id);
         if (updErr) throw updErr;
 
+        const receiptSnap = {
+          id: initialOrder.id,
+          ticket_number: initialOrder.ticket_number || 'UPDATED',
+          customer_name: customerName.trim() || 'Guest Customer',
+          dining_option: diningVal,
+          table_number: diningMode === 'Dine In' ? tableNumber.trim() : '',
+          delivery_address: diningMode === 'Delivery' ? deliveryAddress.trim() : '',
+          cashier_name: staffName,
+          brand: selectedBrand !== 'All' ? selectedBrand : restaurantName.toUpperCase(),
+          payment_method: saveAsOpen ? 'Open' : paymentTender,
+          payment_status: saveAsOpen ? 'Pending' : isSettledNow ? 'Paid' : 'Pending',
+          splitDetails: paymentTender === 'Split Payment' ? resolvedSplitText : '',
+          discount: discountAmount,
+          total_amount: grandTotal,
+          created_at: initialOrder.created_at || new Date().toISOString(),
+          items: cart.map((c) => ({
+            item_name: c.title,
+            quantity: c.quantity,
+            price: c.unitPrice,
+            instructions: c.summary || '',
+          })),
+        };
+
         setPlacedOrder({
           id: initialOrder.id,
           ticketNumber: initialOrder.ticket_number || 'UPDATED',
           total: grandTotal,
           status: saveAsOpen ? 'Open' : 'Completed',
+          receipt: receiptSnap,
         });
         if (onOrderPlaced) onOrderPlaced();
         return;
@@ -601,13 +671,14 @@ export function WebPosView({
         restaurant_id: restaurantId,
         customer_name: customerName.trim() || 'Guest Customer',
         dining_option: diningVal,
+        table_number: diningMode === 'Dine In' && tableNumber.trim() ? tableNumber.trim() : null,
         payment_method: saveAsOpen ? 'Cash' : paymentTender,
         payment_status: saveAsOpen ? 'Pending' : isSettledNow ? 'Paid' : 'Pending',
         status: saveAsOpen ? 'Open' : 'Processing',
         total_amount: grandTotal,
         discount: discountAmount,
         cashier_name: staffName,
-        brand: restaurantName.toUpperCase(),
+        brand: selectedBrand !== 'All' ? selectedBrand.toUpperCase() : restaurantName.toUpperCase(),
         order_channel: salesChannel === 'Web POS' ? 'POS' : salesChannel,
         sales_channel: salesChannel,
         branch_id: activeBranch?.id || null,
@@ -705,7 +776,7 @@ export function WebPosView({
         sendStk &&
         (paymentTender === 'MPESA Paybill' || paymentTender === 'MPESA TILL') &&
         customerPhone.trim() &&
-        import.meta.env.VITE_MPESA_ENABLED === 'true'
+        import.meta.env.VITE_MPESA_ENABLED !== 'false'
       ) {
         try {
           await initiateStkPush({
@@ -718,11 +789,45 @@ export function WebPosView({
         }
       }
 
+      const receiptSnapshot = {
+        ticketNumber: orderData.ticket_number,
+        customerName: customerName.trim() || 'Walk-in Guest',
+        customerPhone: customerPhone.trim() || '',
+        diningOption: diningMode,
+        tableNumber: diningMode === 'Dine In' ? tableNumber.trim() : '',
+        deliveryAddress: diningMode === 'Delivery' ? deliveryAddress.trim() : '',
+        deliveryFee: diningMode === 'Delivery' ? appliedDeliveryFee : 0,
+        totalAmount: grandTotal,
+        paymentMethod: saveAsOpen
+          ? 'Pay Later (Open)'
+          : paymentTender === 'Split Payment' && resolvedSplitText
+          ? `Split (${resolvedSplitText})`
+          : paymentTender,
+        paymentStatus: saveAsOpen ? 'pending' : 'paid',
+        cashier: staffName || 'POS Cashier',
+        notes: [
+          diningMode === 'Dine In' && tableNumber.trim() ? `Table ${tableNumber.trim()}` : '',
+          orderInstructions.trim(),
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        items: cart.map((c) => ({
+          name: c.title || c.name || 'Item',
+          quantity: Number(c.quantity || 1),
+          price: Number(c.unitPrice ?? c.price ?? 0),
+          note: c.summary || c.note || '',
+          brand: c.brand || '',
+        })),
+        createdAt: orderData.created_at || new Date().toISOString(),
+        branch: activeBranch?.name || 'Main Branch',
+      };
+
       setPlacedOrder({
         id: orderData.id,
         ticketNumber: orderData.ticket_number,
         total: grandTotal,
         status: saveAsOpen ? 'Open' : 'Processing',
+        receipt: receiptSnapshot,
       });
       setCart([]);
       if (onOrderPlaced) onOrderPlaced();
@@ -747,7 +852,36 @@ export function WebPosView({
           Ticket <span className="font-mono font-bold text-slate-900">#{placedOrder.ticketNumber}</span> · KES{' '}
           {Number(placedOrder.total).toLocaleString()}
         </p>
-        <div className="flex items-center justify-center gap-3 mt-6">
+
+        {placedOrder.receipt && (
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => printCashierSlips(placedOrder.receipt)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Print Customer Receipt
+            </button>
+            <button
+              type="button"
+              onClick={() => printKitchenSlips(placedOrder.receipt)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Print Kitchen KOT
+            </button>
+            <button
+              type="button"
+              onClick={() => printAllOrderSlips(placedOrder.receipt)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
+            >
+              Print Both
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-3 mt-5">
           <button
             type="button"
             onClick={() => {
@@ -755,10 +889,14 @@ export function WebPosView({
               setStep('build');
               setOrderInstructions('');
               setPaymentReference('');
+              setSplitCash('');
+              setSplitMpesa('');
+              setSplitCard('');
+              setSplitBreakdown('');
               setAppliedDiscount(null);
               setPromoCode('');
             }}
-            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold"
+            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer"
           >
             + Create Another Order
           </button>
@@ -766,7 +904,7 @@ export function WebPosView({
             <button
               type="button"
               onClick={onBackToOrders}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold cursor-pointer"
             >
               Back to Live Orders
             </button>
@@ -806,7 +944,20 @@ export function WebPosView({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {openOrders.length > 0 && onSelectOpenOrder && (
+            <button
+              type="button"
+              onClick={() => setShowOpenTabsBar((v) => !v)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${
+                showOpenTabsBar
+                  ? 'bg-amber-500 text-slate-950 border-amber-500'
+                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <span>Open Tabs ({openOrders.length})</span>
+            </button>
+          )}
           <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Channel</label>
           <select
             value={salesChannel}
@@ -821,6 +972,35 @@ export function WebPosView({
           </select>
         </div>
       </div>
+
+      {showOpenTabsBar && openOrders.length > 0 && onSelectOpenOrder && (
+        <div className="px-5 py-3 bg-amber-50/80 border-b border-amber-200 flex items-center gap-2 overflow-x-auto">
+          <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 shrink-0">
+            Resume Open Tab:
+          </span>
+          {openOrders.map((tabOrd) => {
+            const label =
+              tabOrd.table_number ||
+              tabOrd.customer_name ||
+              `#${tabOrd.ticket_number || String(tabOrd.id || '').slice(0, 6)}`;
+            return (
+              <button
+                key={tabOrd.id}
+                type="button"
+                onClick={() => {
+                  setShowOpenTabsBar(false);
+                  onSelectOpenOrder(tabOrd);
+                }}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-amber-200 hover:border-emerald-600 text-xs font-bold text-slate-800 flex items-center gap-2 cursor-pointer"
+              >
+                <span className="font-mono text-amber-700">#{tabOrd.ticket_number || tabOrd.id?.slice(0, 5)}</span>
+                <span>{label}</span>
+                <span className="text-emerald-700">KES {Number(tabOrd.total_amount || 0).toLocaleString()}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Main Split Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[640px]">
@@ -851,6 +1031,25 @@ export function WebPosView({
         <section className={`${step === 'build' ? 'lg:col-span-6' : 'lg:col-span-7'} p-4 border-r border-slate-200 max-h-[680px] overflow-y-auto`}>
           {step === 'build' ? (
             <>
+              {brandTabs.length > 1 && (
+                <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                  {brandTabs.map((brand) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => setSelectedBrand(brand)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${
+                        selectedBrand === brand
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {brand}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Search + Customer Picker */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <div className="relative">
@@ -1087,8 +1286,34 @@ export function WebPosView({
               </div>
 
               {diningMode === 'Dine In' && (
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Table Number / Name</label>
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold uppercase text-slate-500">Table Number / Name</label>
+                  {floorTables.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {floorTables.map((tbl) => {
+                        const tLabel = String(tbl.table_number || tbl.name || '').trim();
+                        if (!tLabel) return null;
+                        const active = tableNumber.trim().toLowerCase() === tLabel.toLowerCase();
+                        return (
+                          <button
+                            key={tbl.id || tLabel}
+                            type="button"
+                            onClick={() => setTableNumber(tLabel)}
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition ${
+                              active
+                                ? 'bg-emerald-700 text-white border-emerald-700'
+                                : tbl.status === 'occupied'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200 hover:border-amber-400'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-600'
+                            }`}
+                          >
+                            {tLabel}
+                            {tbl.seats ? ` (${tbl.seats})` : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   <input
                     type="text"
                     value={tableNumber}
@@ -1194,7 +1419,7 @@ export function WebPosView({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 font-mono uppercase"
                   />
                   {(paymentTender === 'MPESA Paybill' || paymentTender === 'MPESA TILL') &&
-                    import.meta.env.VITE_MPESA_ENABLED === 'true' && (
+                    import.meta.env.VITE_MPESA_ENABLED !== 'false' && (
                       <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
                         <input
                           type="checkbox"
@@ -1209,16 +1434,71 @@ export function WebPosView({
               )}
 
               {paymentTender === 'Split Payment' && (
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
-                    Split Breakdown Notes
-                  </label>
+                <div className="space-y-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold uppercase text-slate-500">
+                      Split Breakdown (KES)
+                    </label>
+                    {(() => {
+                      const entered =
+                        Number(splitCash || 0) + Number(splitMpesa || 0) + Number(splitCard || 0);
+                      const diff = grandTotal - entered;
+                      return entered > 0 ? (
+                        <span
+                          className={`text-[11px] font-bold ${
+                            diff === 0 ? 'text-emerald-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
+                          }`}
+                        >
+                          {diff === 0
+                            ? 'Matched exact total'
+                            : diff > 0
+                            ? `Remaining: KES ${diff.toLocaleString()}`
+                            : `Over by: KES ${Math.abs(diff).toLocaleString()}`}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-500 mb-1">Cash</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={splitCash}
+                        onChange={(e) => setSplitCash(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-500 mb-1">M-Pesa</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={splitMpesa}
+                        onChange={(e) => setSplitMpesa(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-500 mb-1">Card</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={splitCard}
+                        onChange={(e) => setSplitCard(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={splitBreakdown}
                     onChange={(e) => setSplitBreakdown(e.target.value)}
-                    placeholder="e.g. Cash KES 1,000 + MPESA KES 500"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
+                    placeholder="Optional notes (e.g. M-Pesa ref + Cash)"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
                   />
                 </div>
               )}
