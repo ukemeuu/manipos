@@ -9,6 +9,25 @@ import {
 import jsPDF from 'jspdf';
 import { supabase } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
+import {
+  getDatePresetRange,
+  isExcludedFromSales,
+  isCompletedOrderStatus,
+  getOrderItemsList,
+  computeExecDashboardMetrics,
+} from '../../lib/execDashboardMetrics';
+import {
+  normalizeChannelLabel,
+  formatChannelDisplayName,
+  normalizePaymentMethodLabel,
+} from '../../lib/orderChannel';
+
+const DATE_PRESETS = [
+  { id: 'today', label: 'Today' },
+  { id: 'yesterday', label: 'Yesterday' },
+  { id: '7d', label: '7 Days' },
+  { id: 'month', label: 'This Month' },
+];
 
 const EOD_SECTIONS = [
   'Report Summary',
@@ -47,30 +66,17 @@ function getBusinessDayBounds(dateStr) {
 }
 
 function defaultDateRange() {
-  const now = new Date();
-  const end = now.toISOString().slice(0, 10);
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  return { start: weekAgo, end };
+  return getDatePresetRange('today');
 }
 
-function orderItemsOf(order) {
-  if (Array.isArray(order?.pos_order_items) && order.pos_order_items.length > 0) return order.pos_order_items;
-  if (Array.isArray(order?.items) && order.items.length > 0) return order.items;
-  return [];
-}
-
-function isCompletedOrder(o) {
-  const s = String(o?.status || '').toLowerCase();
-  return ['completed', 'settled', 'delivered', 'approved'].includes(s);
-}
-
-function isVoidedOrder(o) {
-  return String(o?.status || '').toLowerCase().includes('void');
-}
+const orderItemsOf = getOrderItemsList;
+const isCompletedOrder = isCompletedOrderStatus;
+const isSalesValidOrder = (o) => !isExcludedFromSales(o);
 
 export function OrdaReportsView({
   reportKey = 'overview', // 'overview' | 'transactions' | 'sales' | 'tax' | 'eod' | 'discounts' | 'pos'
   onSelectReport,
+  onDateRangeChange,
   orders = [],
   menuItems = [],
   discounts = [],
@@ -80,9 +86,27 @@ export function OrdaReportsView({
   restaurantName = 'ManiPOS Store',
 }) {
   const initRange = defaultDateRange();
+  const [datePreset, setDatePreset] = useState('today');
   const [startDate, setStartDate] = useState(initRange.start);
   const [endDate, setEndDate] = useState(initRange.end);
   const [deliveryFilter, setDeliveryFilter] = useState('All');
+
+  const notifyDateRange = (sDate, eDate) => {
+    if (!onDateRangeChange || !sDate || !eDate) return;
+    try {
+      const startIso = new Date(`${sDate}T00:00:00`).toISOString();
+      const endIso = new Date(`${eDate}T23:59:59.999`).toISOString();
+      onDateRangeChange(startIso, endIso);
+    } catch (_) {}
+  };
+
+  const applyDatePreset = (presetId) => {
+    const next = getDatePresetRange(presetId);
+    setDatePreset(presetId);
+    setStartDate(next.start);
+    setEndDate(next.end);
+    notifyDateRange(next.start, next.end);
+  };
   const [paymentFilter, setPaymentFilter] = useState('All');
   const [channelFilter, setChannelFilter] = useState('All');
   const [clerkFilter, setClerkFilter] = useState('All');
@@ -149,8 +173,8 @@ export function OrdaReportsView({
     const clerks = new Set();
     const cats = new Set();
     orders.forEach((o) => {
-      if (o.payment_method) payments.add(o.payment_method);
-      channels.add(o.sales_channel || o.order_channel || 'POS');
+      payments.add(normalizePaymentMethodLabel(o));
+      channels.add(formatChannelDisplayName(normalizeChannelLabel(o)));
       if (o.cashier_name) clerks.add(o.cashier_name);
     });
     menuItems.forEach((m) => m.category && cats.add(m.category));
@@ -164,110 +188,24 @@ export function OrdaReportsView({
 
   const scopedOrders = useMemo(() => {
     const sTime = new Date(`${startDate}T00:00:00`).getTime();
-    const eTime = new Date(`${endDate}T23:59:59`).getTime();
+    const eTime = new Date(`${endDate}T23:59:59.999`).getTime();
     return orders.filter((o) => {
       if (activeBranch !== 'all' && o.branch_id && o.branch_id !== activeBranch) return false;
       const t = new Date(o.created_at || 0).getTime();
       if (t < sTime || t > eTime) return false;
       if (deliveryFilter !== 'All' && String(o.dining_option || '').toLowerCase() !== deliveryFilter.toLowerCase()) return false;
-      if (paymentFilter !== 'All' && o.payment_method !== paymentFilter) return false;
-      if (channelFilter !== 'All' && (o.sales_channel || o.order_channel || 'POS') !== channelFilter) return false;
+      if (paymentFilter !== 'All' && normalizePaymentMethodLabel(o) !== paymentFilter) return false;
+      if (channelFilter !== 'All' && formatChannelDisplayName(normalizeChannelLabel(o)) !== channelFilter) return false;
       if (clerkFilter !== 'All' && (o.cashier_name || '') !== clerkFilter) return false;
       return true;
     });
   }, [orders, activeBranch, startDate, endDate, deliveryFilter, paymentFilter, channelFilter, clerkFilter]);
 
-  // Executive Dashboard Metrics (12 Orda KPIs + Funnel + Bottom Tables)
-  const execMetrics = useMemo(() => {
-    const completed = scopedOrders.filter(isCompletedOrder);
-    const voided = scopedOrders.filter(isVoidedOrder);
-    const declined = scopedOrders.filter((o) => ['declined', 'cancelled'].includes(String(o.status || '').toLowerCase()));
-    const failed = scopedOrders.filter((o) => String(o.status || '').toLowerCase() === 'failed' || String(o.payment_status || '').toLowerCase() === 'failed');
-    const newCnt = scopedOrders.filter((o) => ['pending', 'new', 'verifying'].includes(String(o.status || '').toLowerCase())).length;
-    const procCnt = scopedOrders.filter((o) => ['preparing', 'processing', 'in progress', 'ready', 'shipped', 'accepted'].includes(String(o.status || '').toLowerCase())).length;
-
-    const totalSales = completed.reduce((s, o) => s + Number(o.total_amount || 0), 0);
-    const totalDiscount = completed.reduce((s, o) => s + Number(o.discount || 0), 0);
-    const totalTax = completed.reduce((s, o) => s + Number(o.tax_amount || 0), 0);
-    const totalCommission = completed.reduce((s, o) => s + Number(o.aggregator_commission || 0), 0);
-    const netSales = Math.max(0, totalSales - totalTax - totalCommission);
-    const avgOrder = completed.length > 0 ? Math.round(totalSales / completed.length) : 0;
-    const idealFoodCost = completed.reduce((s, o) => {
-      if (Number(o.ideal_food_cost || 0) > 0) return s + Number(o.ideal_food_cost);
-      return s + orderItemsOf(o).reduce((isum, it) => {
-        const meta = menuCostMap.get(String(it.item_name || '').toLowerCase());
-        return isum + (meta?.cost || 0) * Number(it.quantity || 1);
-      }, 0);
-    }, 0);
-    const voidAmount = voided.reduce((s, o) => s + Number(o.total_amount || 0), 0);
-
-    // Peak Day & Peak Meal Time
-    const dayCounts = {};
-    const hourBuckets = { 'Breakfast (6am–11am)': 0, 'Lunch (11am–4pm)': 0, 'Dinner (4pm–10pm)': 0, 'Late Night (10pm–6am)': 0 };
-    const dailyTrend = {};
-    const byPayment = {};
-    const byChannel = {};
-    const failureReasons = {};
-
-    completed.forEach((o) => {
-      const dt = new Date(o.created_at || Date.now());
-      const dayName = dt.toLocaleDateString('en-US', { weekday: 'long' });
-      dayCounts[dayName] = (dayCounts[dayName] || 0) + Number(o.total_amount || 0);
-      const hr = dt.getHours();
-      if (hr >= 6 && hr < 11) hourBuckets['Breakfast (6am–11am)'] += 1;
-      else if (hr >= 11 && hr < 16) hourBuckets['Lunch (11am–4pm)'] += 1;
-      else if (hr >= 16 && hr < 22) hourBuckets['Dinner (4pm–10pm)'] += 1;
-      else hourBuckets['Late Night (10pm–6am)'] += 1;
-
-      const dateKey = dt.toISOString().slice(0, 10);
-      if (!dailyTrend[dateKey]) dailyTrend[dateKey] = { date: dateKey, sales: 0, count: 0 };
-      dailyTrend[dateKey].sales += Number(o.total_amount || 0);
-      dailyTrend[dateKey].count += 1;
-
-      const pm = o.payment_method || 'Cash';
-      if (!byPayment[pm]) byPayment[pm] = { method: pm, count: 0, amount: 0 };
-      byPayment[pm].count += 1;
-      byPayment[pm].amount += Number(o.total_amount || 0);
-
-      const ch = o.sales_channel || o.order_channel || 'POS';
-      if (!byChannel[ch]) byChannel[ch] = { channel: ch, count: 0, amount: 0 };
-      byChannel[ch].count += 1;
-      byChannel[ch].amount += Number(o.total_amount || 0);
-    });
-
-    [...declined, ...failed].forEach((o) => {
-      const r = o.failure_reason || o.cancelled_reason || o.void_reason || 'Customer / Gateway Timeout';
-      failureReasons[r] = (failureReasons[r] || 0) + 1;
-    });
-
-    const topDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-    const topMealTime = Object.entries(hourBuckets).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-
-    return {
-      totalCount: scopedOrders.length,
-      completedCount: completed.length,
-      newCnt,
-      procCnt,
-      declinedCnt: declined.length,
-      failedCnt: failed.length,
-      totalSales,
-      netSales,
-      totalDiscount,
-      totalTax,
-      totalCommission,
-      taxAfterCommission: Math.max(0, totalTax - Math.round(totalCommission * 0.16)),
-      avgOrder,
-      idealFoodCost,
-      voidCount: voided.length,
-      voidAmount,
-      topDay,
-      topMealTime,
-      trend: Object.values(dailyTrend).sort((a, b) => a.date.localeCompare(b.date)),
-      byPayment: Object.values(byPayment).sort((a, b) => b.amount - a.amount),
-      byChannel: Object.values(byChannel).sort((a, b) => b.amount - a.amount),
-      failureReasons: Object.entries(failureReasons).map(([reason, count]) => ({ reason, count })),
-    };
-  }, [scopedOrders, menuCostMap]);
+  // Executive Dashboard Metrics (valid non-cancelled/voided/returned orders + Processing Stages + Channels + Payment Methods)
+  const execMetrics = useMemo(
+    () => computeExecDashboardMetrics(scopedOrders, menuCostMap),
+    [scopedOrders, menuCostMap]
+  );
 
   // Sales Report Aggregations (Items, Modifiers, Combos)
   const salesBreakdown = useMemo(() => {
@@ -275,7 +213,7 @@ export function OrdaReportsView({
     const modMap = {};
     const comboMap = {};
 
-    scopedOrders.filter(isCompletedOrder).forEach((o) => {
+    scopedOrders.filter(isSalesValidOrder).forEach((o) => {
       const loc = branchName(o.branch_id);
       orderItemsOf(o).forEach((it) => {
         const name = it.item_name || 'Item';
@@ -284,7 +222,8 @@ export function OrdaReportsView({
         if (categoryFilter !== 'All' && meta.category !== categoryFilter) return;
 
         const qty = Number(it.quantity || 1);
-        const lineTotal = Number(it.price || 0) * qty;
+        const unitP = Number(it.unit_price ?? it.price ?? 0);
+        const lineTotal = Number(it.total_price ?? unitP * qty);
         const lineCost = meta.cost * qty;
 
         const key = `${name}::${loc}`;
@@ -342,7 +281,7 @@ export function OrdaReportsView({
       });
     }
     const derived = [];
-    scopedOrders.filter(isCompletedOrder).forEach((o) => {
+    scopedOrders.filter(isSalesValidOrder).forEach((o) => {
       const b = Array.isArray(o.charges_breakdown) ? o.charges_breakdown : [];
       b.forEach((line, idx) => {
         derived.push({
@@ -354,7 +293,7 @@ export function OrdaReportsView({
           charge_percent: line.charge_percent,
           charge_value: line.amount,
           base_grand_total: o.total_amount,
-          source: o.sales_channel || o.order_channel || 'POS',
+          source: formatChannelDisplayName(normalizeChannelLabel(o)),
           created_at: o.created_at,
         });
       });
@@ -368,12 +307,12 @@ export function OrdaReportsView({
     setGeneratingPdf(true);
     try {
       const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-      const { start, end } = getBusinessDayBounds(startDate);
+      const { start } = getBusinessDayBounds(startDate);
       const dayOrders = orders.filter((o) => {
         const t = new Date(o.created_at || 0).getTime();
-        return t >= start.getTime() && t <= new Date(`${endDate}T23:59:59`).getTime();
+        return t >= start.getTime() && t <= new Date(`${endDate}T23:59:59.999`).getTime();
       });
-      const done = dayOrders.filter(isCompletedOrder);
+      const done = dayOrders.filter(isSalesValidOrder);
       const gross = done.reduce((s, o) => s + Number(o.total_amount || 0), 0);
       const disc = done.reduce((s, o) => s + Number(o.discount || 0), 0);
       const tax = done.reduce((s, o) => s + Number(o.tax_amount || 0), 0);
@@ -522,18 +461,44 @@ export function OrdaReportsView({
           ))}
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            {DATE_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyDatePreset(p.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  datePreset === p.id
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           <input
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => {
+              const nextStart = e.target.value;
+              setDatePreset('custom');
+              setStartDate(nextStart);
+              notifyDateRange(nextStart, endDate);
+            }}
             className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold"
           />
           <span className="text-slate-400">→</span>
           <input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => {
+              const nextEnd = e.target.value;
+              setDatePreset('custom');
+              setEndDate(nextEnd);
+              notifyDateRange(startDate, nextEnd);
+            }}
             className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold"
           />
         </div>
@@ -541,58 +506,106 @@ export function OrdaReportsView({
 
       {/* 1. EXECUTIVE DASHBOARD (/dashboard) */}
       {reportKey === 'overview' && (
-        <div className="space-y-5">
+        <div className="space-y-5" data-testid="executive-dashboard-overview">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Total Sales', value: `KES ${execMetrics.totalSales.toLocaleString()}`, accent: 'text-emerald-700' },
-              { label: 'Total Net Sales', value: `KES ${execMetrics.netSales.toLocaleString()}`, accent: 'text-slate-900' },
-              { label: 'Total Discount', value: `KES ${execMetrics.totalDiscount.toLocaleString()}`, accent: 'text-amber-700' },
-              { label: 'Total Tax', value: `KES ${execMetrics.totalTax.toLocaleString()}`, accent: 'text-slate-900' },
-              { label: 'Aggregator Commission', value: `KES ${execMetrics.totalCommission.toLocaleString()}`, accent: 'text-slate-700' },
-              { label: 'Tax After Commission', value: `KES ${execMetrics.taxAfterCommission.toLocaleString()}`, accent: 'text-slate-700' },
-              { label: 'Avg Order Value', value: `KES ${execMetrics.avgOrder.toLocaleString()}`, accent: 'text-emerald-700' },
-              { label: 'Ideal Food Cost', value: `KES ${execMetrics.idealFoodCost.toLocaleString()}`, accent: 'text-indigo-700' },
-              { label: 'Voided Orders & Amt', value: `${execMetrics.voidCount} · KES ${execMetrics.voidAmount.toLocaleString()}`, accent: 'text-rose-600' },
+              {
+                label: 'Total Sales',
+                value: `KES ${execMetrics.totalSales.toLocaleString()}`,
+                sub: `${execMetrics.validCount} active / valid orders`,
+                accent: 'text-emerald-700',
+              },
+              {
+                label: 'Collected / Paid',
+                value: `KES ${execMetrics.paidSales.toLocaleString()}`,
+                sub: `${execMetrics.paidCount} paid · Unpaid KES ${execMetrics.unpaidSales.toLocaleString()}`,
+                accent: 'text-emerald-800',
+              },
+              {
+                label: 'Total Net Sales',
+                value: `KES ${execMetrics.netSales.toLocaleString()}`,
+                sub: 'After tax & commission',
+                accent: 'text-slate-900',
+              },
+              {
+                label: 'Total Discount',
+                value: `KES ${execMetrics.totalDiscount.toLocaleString()}`,
+                sub: 'Promos & markdowns',
+                accent: 'text-amber-700',
+              },
+              {
+                label: 'Total Tax',
+                value: `KES ${execMetrics.totalTax.toLocaleString()}`,
+                sub: `After comm: KES ${execMetrics.taxAfterCommission.toLocaleString()}`,
+                accent: 'text-slate-900',
+              },
+              {
+                label: 'Aggregator Commission',
+                value: `KES ${execMetrics.totalCommission.toLocaleString()}`,
+                sub: '3rd-party delivery fees',
+                accent: 'text-slate-700',
+              },
+              {
+                label: 'Avg Order Value',
+                value: `KES ${execMetrics.avgOrder.toLocaleString()}`,
+                sub: 'Across valid orders',
+                accent: 'text-emerald-700',
+              },
+              {
+                label: 'Ideal Food Cost',
+                value: `KES ${execMetrics.idealFoodCost.toLocaleString()}`,
+                sub: 'Recipe / item COGS',
+                accent: 'text-indigo-700',
+              },
+              {
+                label: 'Cancelled / Returned / Void',
+                value: `${execMetrics.voidCount + execMetrics.cancelledCount + execMetrics.failedCnt} · KES ${(execMetrics.voidAmount + execMetrics.cancelledAmount).toLocaleString()}`,
+                sub: 'Excluded from Total Sales',
+                accent: 'text-rose-600',
+              },
               { label: 'Top Business Day', value: execMetrics.topDay, accent: 'text-slate-900' },
               { label: 'Top Meal Time', value: execMetrics.topMealTime, accent: 'text-slate-900' },
-              { label: 'Completed Rate', value: `${execMetrics.totalCount ? Math.round((execMetrics.completedCount / execMetrics.totalCount) * 100) : 0}%`, accent: 'text-emerald-700' },
+              {
+                label: 'Processed Rate',
+                value: `${execMetrics.totalCount ? Math.round((execMetrics.processedCount / execMetrics.totalCount) * 100) : 0}%`,
+                sub: `${execMetrics.processedCount} of ${execMetrics.totalCount} kitchen/done`,
+                accent: 'text-emerald-700',
+              },
             ].map((k) => (
               <div key={k.label} className="bg-white border border-slate-200 rounded-2xl p-4">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{k.label}</p>
                 <p className={`text-lg font-black mt-1 ${k.accent}`}>{k.value}</p>
+                {k.sub && <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{k.sub}</p>}
               </div>
             ))}
           </div>
 
-          {/* Order Funnel & Trend */}
+          {/* Order Processing Breakdown & Trend */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
-              <h3 className="text-sm font-black text-slate-900">Order Funnel</h3>
-              {[
-                { label: 'Total Orders', count: execMetrics.totalCount, color: 'bg-slate-800' },
-                { label: 'New / Verifying', count: execMetrics.newCnt, color: 'bg-amber-500' },
-                { label: 'In Progress / Ready', count: execMetrics.procCnt, color: 'bg-sky-600' },
-                { label: 'Completed', count: execMetrics.completedCount, color: 'bg-emerald-600' },
-                { label: 'Declined / Cancelled', count: execMetrics.declinedCnt, color: 'bg-rose-500' },
-                { label: 'Failed', count: execMetrics.failedCnt, color: 'bg-red-700' },
-              ].map((f) => {
-                const pct = execMetrics.totalCount ? Math.round((f.count / execMetrics.totalCount) * 100) : 0;
-                return (
-                  <div key={f.label} className="space-y-1">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span className="text-slate-600">{f.label}</span>
-                      <span className="text-slate-900">{f.count} ({pct}%)</span>
-                    </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div className={`h-full ${f.color}`} style={{ width: `${pct}%` }} />
-                    </div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3" data-testid="exec-processing-breakdown">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-slate-900">How Orders Were Processed</h3>
+                <span className="text-[11px] font-bold text-slate-500">{execMetrics.totalCount} total</span>
+              </div>
+              {execMetrics.processingBreakdown.map((f) => (
+                <div key={f.key} className="space-y-1">
+                  <div className="flex justify-between items-baseline text-xs font-bold gap-2">
+                    <span className="text-slate-700 truncate">{f.label}</span>
+                    <span className="text-slate-900 whitespace-nowrap">
+                      {f.count} ({f.pct}%) · <span className="font-black">KES {f.amount.toLocaleString()}</span>
+                    </span>
                   </div>
-                );
-              })}
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${f.color}`} style={{ width: `${f.pct}%` }} />
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5">
-              <h3 className="text-sm font-black text-slate-900 mb-3">Total Completed Sales (KES)</h3>
+              <h3 className="text-sm font-black text-slate-900 mb-3">
+                Total Valid Sales Trend (KES) · {startDate === endDate ? startDate : `${startDate} → ${endDate}`}
+              </h3>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={execMetrics.trend}>
@@ -608,32 +621,67 @@ export function OrdaReportsView({
 
           {/* 3 Bottom Breakdown Tables */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4">
-              <h4 className="text-xs font-black uppercase text-slate-500 mb-2">Payment Method(s)</h4>
-              <div className="space-y-2 text-xs">
-                {execMetrics.byPayment.map((p) => (
-                  <div key={p.method} className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="font-bold text-slate-700">{p.method} ({p.count})</span>
-                    <span className="font-black text-slate-900">KES {p.amount.toLocaleString()}</span>
-                  </div>
-                ))}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5" data-testid="exec-payment-breakdown">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase text-slate-500">Payment Method Breakdown</h4>
+                <span className="text-[11px] font-bold text-emerald-700">KES {execMetrics.totalSales.toLocaleString()}</span>
               </div>
+              {execMetrics.byPayment.length === 0 ? (
+                <p className="text-xs text-slate-400">No valid sales in selected range.</p>
+              ) : (
+                <div className="space-y-2.5 text-xs">
+                  {execMetrics.byPayment.map((p) => (
+                    <div key={p.method} className="space-y-1 pb-2 border-b border-slate-100 last:border-b-0 last:pb-0">
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-bold text-slate-800">
+                          {p.method} <span className="text-slate-400 font-semibold">({p.count} · {p.sharePct}%)</span>
+                        </span>
+                        <span className="font-black text-slate-900">KES {p.amount.toLocaleString()}</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-600" style={{ width: `${p.sharePct}%` }} />
+                      </div>
+                      {p.pendingAmount > 0 && (
+                        <p className="text-[10px] font-semibold text-amber-700">
+                          Paid: KES {p.paidAmount.toLocaleString()} · Pending: KES {p.pendingAmount.toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="bg-white border border-slate-200 rounded-2xl p-4">
-              <h4 className="text-xs font-black uppercase text-slate-500 mb-2">Sales Channel — Total Amount</h4>
-              <div className="space-y-2 text-xs">
-                {execMetrics.byChannel.map((c) => (
-                  <div key={c.channel} className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="font-bold text-slate-700">{c.channel} ({c.count})</span>
-                    <span className="font-black text-slate-900">KES {c.amount.toLocaleString()}</span>
-                  </div>
-                ))}
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5" data-testid="exec-channel-breakdown">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase text-slate-500">Sales Channels Breakdown</h4>
+                <span className="text-[11px] font-bold text-emerald-700">{execMetrics.validCount} orders</span>
               </div>
+              {execMetrics.byChannel.length === 0 ? (
+                <p className="text-xs text-slate-400">No valid sales in selected range.</p>
+              ) : (
+                <div className="space-y-2.5 text-xs">
+                  {execMetrics.byChannel.map((c) => (
+                    <div key={c.channel} className="space-y-1 pb-2 border-b border-slate-100 last:border-b-0 last:pb-0">
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-bold text-slate-800">
+                          {c.channel} <span className="text-slate-400 font-semibold">({c.count} · {c.sharePct}%)</span>
+                        </span>
+                        <span className="font-black text-slate-900">KES {c.amount.toLocaleString()}</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-sky-600" style={{ width: `${c.sharePct}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
             <div className="bg-white border border-slate-200 rounded-2xl p-4">
-              <h4 className="text-xs font-black uppercase text-slate-500 mb-2">Top Failure / Decline Reasons</h4>
+              <h4 className="text-xs font-black uppercase text-slate-500 mb-2">Cancelled / Voided / Failed Reasons</h4>
               {execMetrics.failureReasons.length === 0 ? (
-                <p className="text-xs text-slate-400">Zero declined/failed orders in selected range.</p>
+                <p className="text-xs text-slate-400">Zero cancelled, returned, or failed orders in selected range.</p>
               ) : (
                 <div className="space-y-2 text-xs">
                   {execMetrics.failureReasons.map((fr) => (
@@ -677,8 +725,8 @@ export function OrdaReportsView({
                   `transaction-summary-${startDate}-${endDate}.csv`,
                   ['Order #', 'Order Date', 'Customer', 'Order Status', 'Payment Method', 'Source', 'Location', 'Subtotal', 'Tax', 'Clerk', 'Delivery Method'],
                   scopedOrders.map((o) => [
-                    o.ticket_number || o.id, o.created_at, o.customer_name || 'Guest', o.status, o.payment_method,
-                    o.sales_channel || o.order_channel || 'POS', branchName(o.branch_id), o.total_amount, o.tax_amount || 0,
+                    o.ticket_number || o.id, o.created_at, o.customer_name || 'Guest', o.status, normalizePaymentMethodLabel(o),
+                    formatChannelDisplayName(normalizeChannelLabel(o)), branchName(o.branch_id), o.total_amount, o.tax_amount || 0,
                     o.cashier_name || '', o.dining_option || '',
                   ])
                 )}
@@ -723,9 +771,9 @@ export function OrdaReportsView({
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-900">#{o.ticket_number || o.id?.slice(0, 6)}</td>
                       <td className="py-2.5 px-3 text-slate-600">{new Date(o.created_at).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })}</td>
                       <td className="py-2.5 px-3 font-semibold">{o.customer_name || 'Guest'}</td>
-                      <td className="py-2.5 px-3">{o.payment_method}</td>
+                      <td className="py-2.5 px-3">{normalizePaymentMethodLabel(o)}</td>
                       <td className="py-2.5 px-3"><span className="px-2 py-0.5 rounded-full bg-slate-100 font-bold">{o.status}</span></td>
-                      <td className="py-2.5 px-3 font-bold text-emerald-700">{o.sales_channel || o.order_channel || 'POS'}</td>
+                      <td className="py-2.5 px-3 font-bold text-emerald-700">{formatChannelDisplayName(normalizeChannelLabel(o))}</td>
                       <td className="py-2.5 px-3">{branchName(o.branch_id)}</td>
                       <td className="py-2.5 px-3 font-black">KES {Number(o.total_amount || 0).toLocaleString()}</td>
                       <td className="py-2.5 px-3 text-slate-500">{o.cashier_name || '—'}</td>

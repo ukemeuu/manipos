@@ -669,8 +669,8 @@ export function AdminDashboard({
         fetchPojOrdersForRange({
           tenantSlug: pinUser.tenantSlug || tenantSlug,
           restaurantId: restId,
-          fromIso: startIso,
-          toIso: endIso,
+          startIso,
+          endIso,
           limit: 1000,
         }),
       ]);
@@ -2171,6 +2171,7 @@ export function AdminDashboard({
             <OrdaReportsView
               reportKey={reportSubTab}
               onSelectReport={setReportSubTab}
+              onDateRangeChange={handleFetchDateRange}
               orders={orders}
               menuItems={menuItems}
               discounts={discounts}

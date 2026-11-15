@@ -47,3 +47,48 @@ export function isMicrositeOrder(order) {
   const cashier = String(order.cashier_name || '').toLowerCase();
   return dining.includes('self-service') || cashier.includes('microsite') || cashier.includes('self-service');
 }
+
+export function formatChannelDisplayName(normChannel) {
+  const key = String(normChannel || '').trim().toUpperCase();
+  if (!key) return 'POS';
+  const labels = {
+    POS: 'POS',
+    'WEB POS': 'Web POS',
+    'WALK-IN': 'Walk-in',
+    MICROSITE: 'Microsite',
+    GLOVO: 'Glovo',
+    'UBER EATS': 'Uber Eats',
+    BOLT: 'Bolt',
+    WHATSAPP: 'WhatsApp',
+    'CALL CENTER': 'Call Center',
+  };
+  if (labels[key]) return labels[key];
+  return key
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+export function normalizePaymentMethodLabel(orderOrMethod) {
+  const rawMethod =
+    typeof orderOrMethod === 'string'
+      ? orderOrMethod
+      : orderOrMethod?.payment_method;
+  const clean = String(rawMethod || '').trim();
+  const low = clean.toLowerCase();
+
+  if (!clean) {
+    const payStatus = String(orderOrMethod?.payment_status || '').toLowerCase().trim();
+    if (payStatus === 'paid' || payStatus === 'settled') return 'Paid (Other)';
+    return 'Unassigned / Pending';
+  }
+  if (low === 'cash') return 'Cash';
+  if (low === 'card' || low === 'credit card' || low === 'debit card') return 'Card';
+  if (low === 'paid to app' || low === 'app' || low === 'online app') return 'Paid to App';
+  if (low.includes('paybill') || low.includes('i&m')) return 'I&M Paybill';
+  if (low.includes('mpesa') || low.includes('m-pesa') || low.includes('stk')) return 'M-Pesa';
+  if (low.includes('split')) return 'Split Payment';
+  if (low.includes('bank') || low.includes('eft') || low.includes('transfer')) return 'Bank Transfer';
+  return clean;
+}
