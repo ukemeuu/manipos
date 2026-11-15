@@ -759,7 +759,7 @@ export function LiveOrdersView({
                     </div>
                     <div>
                       <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">Items</span>
-                      {lines.length === 0 && order._fromPoj && Number(order.total_amount || 0) > 0 ? (
+                      {lines.length === 0 && (order._fromPoj || order.source_poj_id) && Number(order.total_amount || 0) > 0 ? (
                         <span
                           className="font-bold text-amber-700 block mt-0.5"
                           title="POJ line items require POJ Email & Password login or POJ Sync Bridge import"
@@ -1074,7 +1074,7 @@ export function LiveOrdersView({
                       <tr>
                         <td colSpan={3} className="py-4 px-3 text-center text-slate-500">
                           <AlertCircle size={14} className="inline mr-1 text-amber-600" />
-                          {selectedOrder._fromPoj
+                          {selectedOrder._fromPoj || selectedOrder.source_poj_id
                             ? 'Line items are protected on pojmanagement.com. Sign in with POJ Email & Password or run POJ Sync Bridge to import item details.'
                             : 'Line items not loaded for this order.'}
                         </td>
