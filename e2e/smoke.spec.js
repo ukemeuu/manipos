@@ -50,9 +50,14 @@ test.describe('Smoke tests', () => {
     const response = await page.goto(`${POS_URL}/`, { waitUntil: 'domcontentloaded' });
     expect(response.status()).toBe(200);
 
+    const emailTab = page.getByRole('button', { name: /Email & Password/i });
+    if (await emailTab.isVisible().catch(() => false)) {
+      await emailTab.click();
+    }
+
     await expect(page.locator('#staff-email')).toBeVisible();
     await expect(page.locator('#staff-password')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Sign In to Terminal/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Sign In to Workspace/i })).toBeVisible();
   });
 
   test('the menu builder route renders the builder shell', async ({ page }) => {

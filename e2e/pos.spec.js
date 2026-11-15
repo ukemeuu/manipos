@@ -25,17 +25,22 @@ test.describe('POS terminal', () => {
 
     await page.goto(`${POS_URL}/`, { waitUntil: 'domcontentloaded' });
 
+    const emailTab = page.getByRole('button', { name: /Email & Password/i });
+    if (await emailTab.isVisible().catch(() => false)) {
+      await emailTab.click();
+    }
+
     await page.locator('#staff-email').fill(STAFF_EMAIL);
     await page.locator('#staff-password').fill(STAFF_PASSWORD);
-    await page.getByRole('button', { name: /Sign In to Terminal/i }).click();
+    await page.getByRole('button', { name: /Sign In to Workspace/i }).click();
 
     // The login form is replaced by the authenticated surface: the management
-    // dashboard for admins/managers, the POS register for everyone else.
+    // dashboard for admins/managers, or the POS/Orders workspace for staff.
     await expect(page.locator('#staff-email')).toHaveCount(0, { timeout: 30_000 });
 
     // The authenticated view fetches data, so wait for it to render.
     await expect(
-      page.getByText(/Management Dashboard|Menu Grid|POS Register/i).first()
+      page.getByText(/Create Order|Live Orders|Management Dashboard|Menu Grid|POS Register/i).first()
     ).toBeVisible({ timeout: 30_000 });
 
     const text = await page.locator('#root').innerText();
@@ -47,13 +52,18 @@ test.describe('POS terminal', () => {
   test('wrong credentials are rejected', async ({ page }) => {
     await page.goto(`${POS_URL}/`, { waitUntil: 'domcontentloaded' });
 
+    const emailTab = page.getByRole('button', { name: /Email & Password/i });
+    if (await emailTab.isVisible().catch(() => false)) {
+      await emailTab.click();
+    }
+
     await page.locator('#staff-email').fill(STAFF_EMAIL);
     await page.locator('#staff-password').fill('definitely-not-the-password');
-    await page.getByRole('button', { name: /Sign In to Terminal/i }).click();
+    await page.getByRole('button', { name: /Sign In to Workspace/i }).click();
 
     // The error banner appears and the user stays on the login screen.
     await expect(page.locator('#staff-email')).toBeVisible();
-    await expect(page.getByText(/Unable to sign in|Invalid|incorrect|error/i).first()).toBeVisible({
+    await expect(page.getByText(/Unable to sign in|Invalid|incorrect|error|locked/i).first()).toBeVisible({
       timeout: 30_000,
     });
   });
