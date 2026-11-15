@@ -361,8 +361,9 @@ export function AdminDashboard({
     });
   }, [autoAcceptOrders, orders]);
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
+  const fetchDashboardData = async (opts = {}) => {
+    const silent = Boolean(opts?.silent) || (orders.length > 0 && menuItems.length > 0);
+    if (!silent) setLoading(true);
     try {
       const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
       const currentRestaurantId = pinUser.restaurantId || pinUser.restaurant_id || propTenantId || fallbackTenantId;
@@ -1986,7 +1987,7 @@ export function AdminDashboard({
 
             <button
               type="button"
-              onClick={fetchDashboardData}
+              onClick={() => fetchDashboardData({ silent: true })}
               title="Refresh data"
               className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 cursor-pointer"
             >
@@ -2049,7 +2050,7 @@ export function AdminDashboard({
                 setActiveModule('orders');
                 setActiveTab('orders');
               }}
-              onOrderPlaced={() => fetchDashboardData()}
+              onOrderPlaced={() => fetchDashboardData({ silent: true })}
             />
           ) : (activeTab === 'orders' || !isAdmin) ? (
             <LiveOrdersView
@@ -2060,7 +2061,7 @@ export function AdminDashboard({
               statusFilter={orderBucket}
               voidCompletedAllowed={settings.void_completed_allowed !== false}
               voidWindowHours={settings.void_window_hours ?? 168}
-              onRefresh={fetchDashboardData}
+              onRefresh={() => fetchDashboardData({ silent: true })}
               onFetchDateRange={handleFetchDateRange}
               onCreateOrder={() => {
                 setSettleTargetOrder(null);
