@@ -40,7 +40,7 @@ async function buildStaffSessionFromAuth(data, cleanEmail, password) {
                 resolvedTenantName = resolvedTenantName || myProfile.restaurant_name || '';
                 resolvedTenantSlug = resolvedTenantSlug || myProfile.restaurant_slug || '';
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     if (!resolvedTenantId) {
@@ -59,7 +59,7 @@ async function buildStaffSessionFromAuth(data, cleanEmail, password) {
                     resolvedTenantSlug = resolvedTenantSlug || restRow.slug || hostSlug;
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     let permissions = [];
@@ -68,7 +68,7 @@ async function buildStaffSessionFromAuth(data, cleanEmail, password) {
             p_staff_id: staffId,
         });
         if (Array.isArray(perms) && perms.length) permissions = perms;
-    } catch (_) {}
+    } catch (_) { }
     const finalRole = resolvedRole || 'staff';
     if (!permissions.length) permissions = roleDefaults(finalRole);
 
@@ -123,7 +123,7 @@ async function authenticateWithPojFallback(cleanEmail, password, preferredSlug =
                 const rows = await profRes.json();
                 if (Array.isArray(rows) && rows[0]) pojProfile = rows[0];
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (pojProfile.is_active === false || pojProfile.deleted_at) {
             return { success: false, error: 'This staff account is inactive in POJ Management.' };
@@ -166,7 +166,7 @@ async function authenticateWithPojFallback(cleanEmail, password, preferredSlug =
             if (linkRow && linkRow.link_auth_enabled === false) {
                 return { success: false, error: 'POJ Auth Bridge is disabled for this restaurant.' };
             }
-        } catch (_) {}
+        } catch (_) { }
 
         const fullName = String(
             pojProfile.full_name ||
@@ -234,7 +234,7 @@ export async function authenticateStaffLogin(email, password, preferredSlug = ''
                         return await buildStaffSessionFromAuth(retry.data, cleanEmail, password);
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // Fallback when poj-auth-bridge Edge Function isn't deployed yet:
             // verify directly against POJ Management Supabase Auth + profiles.
@@ -279,19 +279,100 @@ export async function authenticateStaffLogin(email, password, preferredSlug = ''
     return await verifyOfflineStaffCredential(cleanEmail, password);
 }
 
+async function resolvePojLinkForStore(cleanSlug, restaurantId = null) {
+    if (!cleanSlug) return null;
+    try {
+        let storeId = restaurantId;
+        if (!storeId) {
+            const { data: restRow } = await supabase
+                .from('restaurants')
+                .select('id')
+                .eq('slug', cleanSlug)
+                .limit(1)
+                .maybeSingle();
+            storeId = restRow?.id || null;
+        }
+        if (storeId) {
+            const { data: linkRow } = await supabase
+                .from('restaurant_poj_links')
+                .select('poj_supabase_url, link_auth_enabled')
+                .eq('restaurant_id', storeId)
+                .limit(1)
+                .maybeSingle();
+            if (linkRow) {
+                if (linkRow.link_auth_enabled === false) return null;
+                return { pojUrl: (linkRow.poj_supabase_url || POJ_DEFAULT_URL).replace(/\/+$/, '') };
+            }
+        }
+    } catch (_) { }
+
+    if (cleanSlug === 'potofjollof') {
+        return { pojUrl: POJ_DEFAULT_URL };
+    }
+    return null;
+}
+
+async function fetchPojTerminalStaff(pojUrl, includePin = false) {
+    const cols = includePin
+        ? 'id,name,role,pin,is_active,today_yesterday_only,can_view_revenue_breakdown'
+        : 'id,name,role,is_active,today_yesterday_only,can_view_revenue_breakdown';
+    const res = await fetch(
+        `${pojUrl}/rest/v1/staff_access?is_active=eq.true&select=${cols}`,
+        {
+            headers: {
+                apikey: POJ_ANON_KEY,
+                Authorization: `Bearer ${POJ_ANON_KEY}`,
+            },
+        }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+}
+
 /**
  * Fetch non-sensitive active staff names for Quick PIN selection on a store's POS terminal.
  */
 export async function fetchTerminalStaffRoster(tenantSlug) {
     const cleanSlug = String(tenantSlug || getActiveTenantSlug() || '').toLowerCase().trim();
     if (!cleanSlug || !isOnline()) return [];
+
+    let maniRoster = [];
     try {
         const { data, error } = await supabase.rpc('get_terminal_staff_names', {
             p_tenant_slug: cleanSlug,
         });
-        if (!error && Array.isArray(data)) return data;
-    } catch (_) {}
-    return [];
+        if (!error && Array.isArray(data)) maniRoster = data;
+    } catch (_) { }
+
+    try {
+        const pojLink = await resolvePojLinkForStore(cleanSlug);
+        if (pojLink) {
+            const pojRows = await fetchPojTerminalStaff(pojLink.pojUrl, false);
+            const seenKeys = new Set(
+                maniRoster.map((m) => `${String(m.name || '').trim().toLowerCase()}::${String(m.role || '').trim().toLowerCase()}`)
+            );
+            const merged = [...maniRoster];
+            for (const tp of pojRows) {
+                const name = String(tp.name || '').trim();
+                if (!name) continue;
+                const role = normalizePojRole(tp.role, name);
+                const key = `${name.toLowerCase()}::${role.toLowerCase()}`;
+                if (seenKeys.has(key)) continue;
+                seenKeys.add(key);
+                merged.push({
+                    id: `poj:${tp.id}`,
+                    name,
+                    role,
+                    source: 'poj',
+                });
+            }
+            merged.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+            return merged;
+        }
+    } catch (_) { }
+
+    return maniRoster;
 }
 
 /**
@@ -301,6 +382,7 @@ export async function authenticateStaffQuickPin({ tenantSlug, pin, staffId = nul
     const cleanSlug = String(tenantSlug || getActiveTenantSlug() || '').toLowerCase().trim();
     const cleanPin = String(pin || '').trim();
     const cleanName = String(staffName || '').trim();
+    const isPojSelected = typeof staffId === 'string' && staffId.startsWith('poj:');
 
     if (!cleanSlug) {
         return { success: false, error: 'Enter your store code (e.g. potofjollof).' };
@@ -319,36 +401,98 @@ export async function authenticateStaffQuickPin({ tenantSlug, pin, staffId = nul
                 .limit(1)
                 .maybeSingle();
             if (restRow?.id) store = restRow;
-        } catch (_) {}
+        } catch (_) { }
 
-        try {
-            const { data: rpcRes, error: rpcError } = await supabase.rpc('verify_staff_pin_for_store', {
-                p_tenant_slug: cleanSlug,
-                p_pin: cleanPin,
-                p_staff_id: staffId || null,
-            });
+        let maniPinError = null;
+        if (!isPojSelected) {
+            try {
+                const { data: rpcRes, error: rpcError } = await supabase.rpc('verify_staff_pin_for_store', {
+                    p_tenant_slug: cleanSlug,
+                    p_pin: cleanPin,
+                    p_staff_id: staffId || null,
+                });
 
-            if (!rpcError && rpcRes) {
-                if (rpcRes.success && rpcRes.staff_user) {
-                    const raw = rpcRes.staff_user;
-                    const staffUser = {
-                        ...raw,
-                        restaurantId: raw.restaurantId || store?.id || null,
-                        restaurantName: raw.restaurantName || store?.name || '',
-                        tenantSlug: raw.tenantSlug || store?.slug || cleanSlug,
-                        permissions: Array.isArray(raw.permissions) && raw.permissions.length
-                            ? raw.permissions
-                            : roleDefaults(raw.role || 'cashier'),
-                    };
-                    setTenantContext(staffUser.restaurantId);
-                    localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
-                    await provisionOfflineStaffCredential(`${cleanSlug}:pin:${String(staffUser.name || '').toLowerCase()}`, staffUser, cleanPin);
-                    await provisionOfflineStaffCredential(`${cleanSlug}:pin`, staffUser, cleanPin);
-                    return { success: true, staffUser, auth: 'pin' };
+                if (!rpcError && rpcRes) {
+                    if (rpcRes.success && rpcRes.staff_user) {
+                        const raw = rpcRes.staff_user;
+                        const staffUser = {
+                            ...raw,
+                            restaurantId: raw.restaurantId || store?.id || null,
+                            restaurantName: raw.restaurantName || store?.name || '',
+                            tenantSlug: raw.tenantSlug || store?.slug || cleanSlug,
+                            permissions: Array.isArray(raw.permissions) && raw.permissions.length
+                                ? raw.permissions
+                                : roleDefaults(raw.role || 'cashier'),
+                        };
+                        setTenantContext(staffUser.restaurantId);
+                        localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+                        await provisionOfflineStaffCredential(`${cleanSlug}:pin:${String(staffUser.name || '').toLowerCase()}`, staffUser, cleanPin);
+                        await provisionOfflineStaffCredential(`${cleanSlug}:pin`, staffUser, cleanPin);
+                        return { success: true, staffUser, auth: 'pin' };
+                    }
+                    maniPinError = rpcRes.error || 'Incorrect PIN.';
+                    if (String(maniPinError).toLowerCase().includes('too many pin attempts')) {
+                        return { success: false, error: maniPinError };
+                    }
                 }
-                return { success: false, error: rpcRes.error || 'Incorrect PIN.' };
-            }
-        } catch (_) {}
+            } catch (_) { }
+        }
+
+        // Scoped POJ Management terminal PIN fallback for migrated POJ stores (e.g. potofjollof)
+        // when staff terminal passes have not yet been synced into ManiPOS staff_access.
+        if (store?.id && store.is_active !== false && !['suspended', 'pending', 'rejected'].includes(store.status)) {
+            try {
+                const pojLink = await resolvePojLinkForStore(cleanSlug, store.id);
+                if (pojLink) {
+                    const pojRows = await fetchPojTerminalStaff(pojLink.pojUrl, true);
+                    const targetPojId = isPojSelected ? staffId.slice(4) : null;
+                    const matchedPoj = pojRows.find((tp) => {
+                        if (tp.is_active === false) return false;
+                        if (String(tp.pin || '').trim() !== cleanPin) return false;
+                        if (targetPojId && String(tp.id) !== targetPojId) return false;
+                        if (cleanName && !targetPojId && String(tp.name || '').trim().toLowerCase() !== cleanName.toLowerCase()) {
+                            return false;
+                        }
+                        return true;
+                    }) || (!targetPojId && cleanName
+                        ? pojRows.find((tp) => tp.is_active !== false && String(tp.pin || '').trim() === cleanPin)
+                        : null);
+
+                    if (matchedPoj) {
+                        const finalRole = normalizePojRole(matchedPoj.role, matchedPoj.name);
+                        const staffUser = {
+                            id: matchedPoj.id,
+                            name: String(matchedPoj.name || 'Staff').trim(),
+                            email: null,
+                            role: finalRole,
+                            restaurantId: store.id,
+                            restaurantName: store.name || '',
+                            tenantSlug: store.slug || cleanSlug,
+                            permissions: roleDefaults(finalRole),
+                            todayYesterdayOnly: Boolean(matchedPoj.today_yesterday_only),
+                            canViewRevenueBreakdown: matchedPoj.can_view_revenue_breakdown !== false,
+                            authSource: 'poj_pin',
+                            pojStaffId: matchedPoj.id,
+                        };
+                        setTenantContext(staffUser.restaurantId);
+                        localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
+                        await provisionOfflineStaffCredential(`${cleanSlug}:pin:${staffUser.name.toLowerCase()}`, staffUser, cleanPin);
+                        await provisionOfflineStaffCredential(`${cleanSlug}:pin`, staffUser, cleanPin);
+                        return { success: true, staffUser, auth: 'poj_pin' };
+                    }
+                    if (isPojSelected) {
+                        return {
+                            success: false,
+                            error: 'Incorrect PIN. Check your PIN or ask your manager to verify it in Team & Staff.',
+                        };
+                    }
+                }
+            } catch (_) { }
+        }
+
+        if (maniPinError) {
+            return { success: false, error: maniPinError };
+        }
 
         // Fallback to existing 3-arg verify_staff_pin(p_name, p_pin, p_restaurant_id)
         // when 20261121_terminal_pin_and_poj_auth.sql hasn't been applied yet.

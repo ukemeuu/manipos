@@ -3273,7 +3273,7 @@ export function PosTerminal({ staffName, staffRole, staffRestricted, onSignOut, 
                 p_id: null,
                 p_restaurant_id: pinUser.restaurantId || pinUser.restaurant_id || null,
                 p_name: name,
-                p_email: `${name.toLowerCase().replace(/\s+/g, '')}@${tenantSlug || 'demostore'}.com`,
+                p_email: null,
                 p_role: role,
                 p_pin: pin,
             });

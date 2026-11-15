@@ -85,7 +85,12 @@ export function PojSyncBridgeView({
       setProgressMsg('All POJ Management data extracted and synced into ManiPOS!');
       onSyncCompleted?.();
     } catch (err) {
-      setErrorMsg(err?.message || 'POJ sync failed. Check your POJ Management credentials and try again.');
+      const msg = err?.message || 'POJ sync failed. Check your POJ Management credentials and try again.';
+      if (msg.toLowerCase().includes('not authorised')) {
+        setErrorMsg('Admin actor not yet linked in ManiPOS staff_access. Sign in once using your ManiPOS Staff Admin PIN (e.g. POJ Lead Cashier) or run migration 20261122_fix_poj_staff_pin_sync_and_login.sql.');
+      } else {
+        setErrorMsg(msg);
+      }
     } finally {
       setSyncing(false);
     }
