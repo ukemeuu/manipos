@@ -303,7 +303,7 @@ export function AdminDashboard({
         fetchPojOrdersForRange({
           tenantSlug: resolvedSlug,
           restaurantId: restId,
-          limit: 1000,
+          limit: 120,
         }),
       ]).then(([mpRes, pojRes]) => {
         const hasMp = mpRes?.status === 'fulfilled' && Array.isArray(mpRes.value?.data);
@@ -584,7 +584,7 @@ export function AdminDashboard({
         fetchPojOrdersForRange({
           tenantSlug: resolvedSlug,
           restaurantId: currentRestaurantId,
-          limit: 1000,
+          limit: 250,
         }),
         // 1: Discounts / Promos (needed at POS settle)
         supabase
@@ -2202,6 +2202,7 @@ export function AdminDashboard({
               orders={orders}
               restaurantId={activeRestaurantId}
               restaurantName={profileName || restaurantName}
+              tenantSlug={tenantSlug}
               activeBranch={activeBranchObj}
               statusFilter={orderBucket}
               voidCompletedAllowed={settings.void_completed_allowed !== false}

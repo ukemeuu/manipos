@@ -22,6 +22,7 @@ import {
   mergeOrdersWithPoj,
   remapPojModifierGroupForManiPos,
   fetchPojOrdersForRange,
+  updatePojOrderStatus,
   resetPojEdgeProxyCache,
   clearPojSession,
 } from '../../services/data/pojSyncService';
@@ -458,5 +459,58 @@ describe('Microsite-only acceptance, immediate Accept update, POJ ticket merge, 
     const kotEmpty = buildKitchenSlipsHTML({ ticketNumber: '7103', totalAmount: 950, items: [] });
     expect(kotEmpty).toContain('Order Items (Summary)');
     expect(typeof printAllOrderSlips).toBe('function');
+  });
+
+  it('routes updatePojOrderStatus through poj-orders-sync patch_order for PIN sessions and merges POJ items onto pos_order_items', async () => {
+    resetPojEdgeProxyCache();
+    window.localStorage.removeItem('manipos_poj_session_v1');
+
+    const fromSpy = vi.spyOn(supabase, 'from').mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          limit: () => ({
+            maybeSingle: async () => ({
+              data: { poj_supabase_url: 'https://bfrvzwmckuiafkgwemdt.supabase.co', link_auth_enabled: true },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const invokeSpy = vi
+      .spyOn(Object.getPrototypeOf(supabase.functions), 'invoke')
+      .mockResolvedValueOnce({
+        data: { ok: true, data: [{ id: 'poj-6495', status: 'Ready' }] },
+        error: null,
+      });
+
+    const res = await updatePojOrderStatus({
+      tenantSlug: 'potofjollof',
+      restaurantId: 'd0db680a-7956-45a5-85ae-a4286f3370a0',
+      pojOrderId: 'poj-6495',
+      patch: { status: 'Ready', payment_method: 'Cash' },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(invokeSpy).toHaveBeenCalledWith('poj-orders-sync', expect.objectContaining({
+      body: expect.objectContaining({
+        action: 'patch_order',
+        poj_order_id: 'poj-6495',
+        patch: { status: 'Ready', payment_method: 'Cash' },
+      }),
+    }));
+
+    const merged = mergeOrdersWithPoj(
+      [{ id: 'm-6495', source_poj_id: 'poj-6495', ticket_number: '6495', status: 'Ready', items: [], pos_order_items: [] }],
+      [{ id: 'poj-6495', source_poj_id: 'poj-6495', ticket_number: '6495', status: 'Preparing', items: [{ id: 'it-1', item_name: 'Egusi Soup', quantity: 1, price: 2200 }], _fromPoj: true }]
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].status).toBe('Ready');
+    expect(merged[0].items).toHaveLength(1);
+    expect(merged[0].pos_order_items).toHaveLength(1);
+
+    invokeSpy.mockRestore();
+    fromSpy.mockRestore();
   });
 });

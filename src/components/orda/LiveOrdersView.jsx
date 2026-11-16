@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import {
   Search, Clock, User, Package, MapPin, Truck, Store, UtensilsCrossed,
-  Check, X, CheckCircle2, Ban, Printer, RefreshCw, ExternalLink, AlertCircle, Calendar
+  Check, X, CheckCircle2, Ban, Printer, RefreshCw, ExternalLink, AlertCircle, Calendar, CreditCard
 } from 'lucide-react';
 import { supabase, setTenantContext } from '../../lib/supabase';
+import { logAuditEvent } from '../../lib/auditLogger';
 import { SlideOverDrawer } from './SlideOverDrawer';
 import {
   processOrderInventoryDepletion,
@@ -212,10 +213,20 @@ function computeDateWindow(preset, customStart, customEnd) {
   return { startIso: null, endIso: null };
 }
 
+const PAYMENT_MODE_OPTIONS = [
+  'Cash',
+  'Mpesa Paybill',
+  'Card',
+  'Paid to App',
+  'Bank Transfer',
+  'Split Payment',
+];
+
 export function LiveOrdersView({
   orders = [],
   restaurantId,
   restaurantName,
+  tenantSlug = '',
   activeBranch,
   statusFilter = 'active',
   voidCompletedAllowed = true,
@@ -244,6 +255,14 @@ export function LiveOrdersView({
   const [voidCustomReason, setVoidCustomReason] = useState('');
   const [voidLineDisposition, setVoidLineDisposition] = useState({});
   const [voidSubmitting, setVoidSubmitting] = useState(false);
+
+  // Change Payment Mode state inside Order Details drawer
+  const [paymentEditOpen, setPaymentEditOpen] = useState(false);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('Cash');
+  const [editPaymentStatus, setEditPaymentStatus] = useState('Paid');
+  const [editPaymentRef, setEditPaymentRef] = useState('');
+  const [editPaymentReason, setEditPaymentReason] = useState('');
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   const handleSelectDatePreset = async (preset) => {
     setDatePreset(preset);
@@ -387,6 +406,7 @@ export function LiveOrdersView({
       if (order._fromPoj || order.source_poj_id || !updatedLocally) {
         const pojId = order.source_poj_id || order.id;
         const pojRes = await updatePojOrderStatus({
+          tenantSlug,
           restaurantId,
           pojOrderId: pojId,
           patch,
@@ -512,6 +532,7 @@ export function LiveOrdersView({
       let updatedPoj = false;
       if (voidTarget._fromPoj || voidTarget.source_poj_id || !updatedLocally) {
         const pojRes = await updatePojOrderStatus({
+          tenantSlug,
           restaurantId,
           pojOrderId: voidTarget.source_poj_id || voidTarget.id,
           patch: fullPatch,
@@ -554,6 +575,126 @@ export function LiveOrdersView({
     }
   };
 
+  const openPaymentEditor = (order) => {
+    if (!order) return;
+    setEditPaymentMethod(order.payment_method || 'Cash');
+    setEditPaymentStatus(order.payment_status || 'Paid');
+    setEditPaymentRef(order.mpesa_receipt_number || order.mpesa_receipt || '');
+    setEditPaymentReason('');
+    setPaymentEditOpen(true);
+  };
+
+  const savePaymentModeChange = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedOrder?.id || !restaurantId) return;
+    const nextMethod = String(editPaymentMethod || '').trim();
+    const nextStatus = String(editPaymentStatus || '').trim() || 'Paid';
+    const nextRef = String(editPaymentRef || '').trim();
+    const reason = String(editPaymentReason || '').trim();
+    if (!nextMethod) {
+      alert('Please select a payment method.');
+      return;
+    }
+
+    setTenantContext(restaurantId);
+    setPaymentSaving(true);
+    try {
+      const prevMethod = selectedOrder.payment_method || 'Cash';
+      const prevStatus = selectedOrder.payment_status || 'Pending';
+      const changeNote = `[Payment changed: ${prevMethod} → ${nextMethod}${reason ? ` (${reason})` : ''}]`;
+      const nextNotes = selectedOrder.notes
+        ? `${selectedOrder.notes}\n${changeNote}`
+        : changeNote;
+
+      const patch = {
+        payment_method: nextMethod,
+        payment_status: nextStatus,
+        ...(nextRef ? { mpesa_receipt_number: nextRef } : {}),
+        notes: nextNotes,
+      };
+      if (nextStatus.toLowerCase() === 'paid' && !selectedOrder.paid_at) {
+        patch.paid_at = new Date().toISOString();
+      }
+
+      let updatedLocally = false;
+      if (!selectedOrder._fromPoj) {
+        const optionalCols = ['mpesa_receipt_number', 'paid_at', 'payment_status', 'notes'];
+        let workingPatch = { ...patch };
+        let res = null;
+        for (let i = 0; i <= optionalCols.length; i += 1) {
+          res = await supabase
+            .from('pos_orders')
+            .update(workingPatch)
+            .eq('id', selectedOrder.id)
+            .eq('restaurant_id', restaurantId)
+            .select('id, payment_method, payment_status');
+          if (!res.error) break;
+          const msg = String(res.error.message || '').toLowerCase();
+          const missingCol = optionalCols.find((col) => col in workingPatch && msg.includes(col));
+          if (!missingCol) break;
+          const next = { ...workingPatch };
+          delete next[missingCol];
+          workingPatch = next;
+        }
+        if (res?.error) throw res.error;
+        updatedLocally = Array.isArray(res?.data) && res.data.length > 0;
+      }
+
+      let updatedPoj = false;
+      if (selectedOrder._fromPoj || selectedOrder.source_poj_id || !updatedLocally) {
+        const pojRes = await updatePojOrderStatus({
+          tenantSlug,
+          restaurantId,
+          pojOrderId: selectedOrder.source_poj_id || selectedOrder.id,
+          patch,
+        });
+        updatedPoj = Boolean(pojRes?.ok);
+        if (selectedOrder._fromPoj && !updatedPoj && pojRes?.error) {
+          throw new Error(pojRes.error);
+        }
+      }
+
+      if (!updatedLocally && !updatedPoj) {
+        throw new Error('Could not find active order record to update payment method.');
+      }
+
+      logAuditEvent({
+        action: 'order_payment_method_changed',
+        details: {
+          order_id: selectedOrder.id,
+          ticket_number: selectedOrder.ticket_number,
+          previous_payment_method: prevMethod,
+          new_payment_method: nextMethod,
+          previous_payment_status: prevStatus,
+          new_payment_status: nextStatus,
+          reason: reason || null,
+        },
+        staff: { restaurantId },
+      });
+
+      const updatedOrderObj = { ...selectedOrder, ...patch };
+      setSelectedOrder(updatedOrderObj);
+      setPaymentEditOpen(false);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('manipos:orders-updated', {
+            detail: {
+              orderId: selectedOrder.id,
+              sourcePojId: selectedOrder.source_poj_id || null,
+              updatedOrder: updatedOrderObj,
+            },
+          })
+        );
+      }
+      await onRefresh?.();
+    } catch (err) {
+      alert('Failed to update payment method: ' + (err?.message || err));
+    } finally {
+      setPaymentSaving(false);
+    }
+  };
+
   const renderLines = (order) => {
     const parseArr = (val) => {
       if (Array.isArray(val)) return val;
@@ -569,6 +710,10 @@ export function LiveOrdersView({
     if (posItems.length > 0) return posItems;
     const nestedItems = parseArr(order?.items);
     if (nestedItems.length > 0) return nestedItems;
+    const lineItems = parseArr(order?.line_items);
+    if (lineItems.length > 0) return lineItems;
+    const orderItems = parseArr(order?.order_items);
+    if (orderItems.length > 0) return orderItems;
     return [];
   };
 
@@ -1057,7 +1202,10 @@ export function LiveOrdersView({
       {/* Slide-Over Order & Receipt Details Drawer */}
       <SlideOverDrawer
         open={Boolean(selectedOrder)}
-        onClose={() => setSelectedOrder(null)}
+        onClose={() => {
+          setSelectedOrder(null);
+          setPaymentEditOpen(false);
+        }}
         title={selectedOrder ? `Order #${selectedOrder.ticket_number || selectedOrder.order_number || String(selectedOrder.id).slice(0, 8)}` : ''}
         subtitle={selectedOrder ? `${normalizeChannelLabel(selectedOrder)} · ${new Date(selectedOrder.created_at).toLocaleString('en-KE')}` : ''}
         footer={selectedOrder && (
@@ -1137,9 +1285,20 @@ export function LiveOrdersView({
               </div>
               <div>
                 <span className="text-slate-400 font-bold uppercase text-[10px]">Payment</span>
-                <p className="font-bold text-slate-900 mt-0.5">
-                  {selectedOrder.payment_method || 'Cash'} ({selectedOrder.payment_status || 'Pending'})
-                </p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <p className="font-bold text-slate-900">
+                    {selectedOrder.payment_method || 'Cash'} ({selectedOrder.payment_status || 'Pending'})
+                  </p>
+                  <button
+                    type="button"
+                    data-testid="change-payment-mode-btn"
+                    onClick={() => (paymentEditOpen ? setPaymentEditOpen(false) : openPaymentEditor(selectedOrder))}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-slate-300 bg-white hover:bg-slate-100 text-[10px] font-bold text-slate-700 cursor-pointer"
+                  >
+                    <CreditCard size={11} />
+                    {paymentEditOpen ? 'Cancel' : 'Change'}
+                  </button>
+                </div>
               </div>
               <div>
                 <span className="text-slate-400 font-bold uppercase text-[10px]">Customer</span>
@@ -1165,6 +1324,107 @@ export function LiveOrdersView({
                 </div>
               )}
             </div>
+
+            {paymentEditOpen && (
+              <form
+                onSubmit={savePaymentModeChange}
+                data-testid="change-payment-mode-form"
+                className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 space-y-3 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-slate-900 flex items-center gap-1.5">
+                    <CreditCard size={14} className="text-amber-700" />
+                    Change Mode of Payment
+                  </h4>
+                  <span className="text-[10px] font-bold text-amber-800 uppercase">
+                    Current: {selectedOrder.payment_method || 'Cash'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      New Payment Method
+                    </label>
+                    <select
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-900"
+                    >
+                      {Array.from(
+                        new Set(
+                          selectedOrder.payment_method
+                            ? [selectedOrder.payment_method, ...PAYMENT_MODE_OPTIONS]
+                            : PAYMENT_MODE_OPTIONS
+                        )
+                      ).map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Payment Status
+                    </label>
+                    <select
+                      value={editPaymentStatus}
+                      onChange={(e) => setEditPaymentStatus(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-900"
+                    >
+                      <option value="Paid">Paid</option>
+                      <option value="Pending">Pending</option>
+                      <option value="pending_verification">Pending Verification</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      M-Pesa / Card Reference (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editPaymentRef}
+                      onChange={(e) => setEditPaymentRef(e.target.value)}
+                      placeholder="e.g. UBI89A2X10"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-mono text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Reason (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editPaymentReason}
+                      onChange={(e) => setEditPaymentReason(e.target.value)}
+                      placeholder="e.g. Customer switched from Card to Cash"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentEditOpen(false)}
+                    className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={paymentSaving}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer disabled:opacity-50"
+                  >
+                    {paymentSaving ? 'Saving…' : 'Save Payment Mode'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div>
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">Cart Items</h4>

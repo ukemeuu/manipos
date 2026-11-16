@@ -123,6 +123,58 @@ serve(async (req) => {
       'Content-Type': 'application/json',
     };
 
+    // Support direct order patch from PIN-authenticated staff (status / payment_method / payment_status)
+    if (body.action === 'patch_order' && body.poj_order_id && body.patch && typeof body.patch === 'object') {
+      const pojOrderId = String(body.poj_order_id).trim();
+      const optionalCols = [
+        'accepted_at',
+        'kitchen_started_at',
+        'kitchen_ready_at',
+        'completed_at',
+        'return_reason',
+        'void_reason',
+        'void_disposition',
+        'payment_status',
+        'mpesa_receipt_number',
+      ];
+      let working: Record<string, unknown> = { ...(body.patch as Record<string, unknown>) };
+      let lastStatus = 200;
+      let lastErr = '';
+      let updatedRows: unknown[] = [];
+
+      for (let i = 0; i <= optionalCols.length; i += 1) {
+        const pRes = await fetch(
+          `${pojBaseUrl}/rest/v1/pos_orders?id=eq.${encodeURIComponent(pojOrderId)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              ...pojHeaders,
+              Prefer: 'return=representation',
+            },
+            body: JSON.stringify(working),
+          }
+        );
+        if (pRes.ok) {
+          updatedRows = ((await pRes.json().catch(() => [])) || []) as unknown[];
+          lastErr = '';
+          break;
+        }
+        lastStatus = pRes.status;
+        lastErr = await pRes.text().catch(() => `HTTP ${pRes.status}`);
+        const lowerMsg = lastErr.toLowerCase();
+        const missingCol = optionalCols.find((col) => col in working && lowerMsg.includes(col));
+        if (!missingCol) break;
+        const next = { ...working };
+        delete next[missingCol];
+        working = next;
+      }
+
+      if (lastErr) {
+        return jsonResponse({ ok: false, status: lastStatus, error: lastErr }, 200);
+      }
+      return jsonResponse({ ok: true, data: updatedRows });
+    }
+
     const queryParts: string[] = [
       'select=*,items:pos_order_items(*)',
       'order=created_at.desc',
@@ -208,36 +260,58 @@ serve(async (req) => {
 
     if (syncToManiPos && Array.isArray(orders) && orders.length > 0) {
       try {
-        const orderRows = orders.map((o) => ({
-          restaurant_id: restaurantId,
-          source_poj_id: String(o.id),
-          ticket_number: o.ticket_number != null ? String(o.ticket_number) : '',
-          customer_name: String(o.customer_name || o.guest_name || 'Walk-in Guest'),
-          dining_option: String(o.dining_option || 'Dine In'),
-          payment_method: o.payment_method ? String(o.payment_method) : 'Cash',
-          payment_status: o.payment_status ? String(o.payment_status) : 'Pending',
-          status: o.status ? String(o.status) : 'Pending',
-          total_amount: Number(o.total_amount ?? o.total ?? 0),
-          discount: Number(o.discount ?? 0),
-          cashier_name: o.cashier_name ? String(o.cashier_name) : 'Staff',
-          notes: o.notes ? String(o.notes) : null,
-          brand: o.brand ? String(o.brand) : 'POT OF JOLLOF',
-          order_channel: o.order_channel ? String(o.order_channel) : 'Walk-in',
-          delivery_address: o.delivery_address ? String(o.delivery_address) : null,
-          delivery_fee: Number(o.delivery_fee ?? 0),
-          created_at: o.created_at || new Date().toISOString(),
-        }));
+        const orderRows = orders.map((o) => {
+          const cashierStr = o.cashier_name ? String(o.cashier_name) : 'Staff';
+          const rawChannel = o.order_channel ? String(o.order_channel) : 'Walk-in';
+          const isMicro =
+            cashierStr.toLowerCase().includes('microsite') ||
+            cashierStr.toLowerCase().includes('self-service') ||
+            rawChannel.toLowerCase().includes('microsite') ||
+            rawChannel.toLowerCase().includes('online');
+          const rawItems = Array.isArray(o.items) ? (o.items as Record<string, unknown>[]) : [];
+          const snapshotItems = rawItems.map((it) => ({
+            id: it.id ? String(it.id) : undefined,
+            item_name: String(it.item_name || it.name || 'Item'),
+            quantity: Math.max(1, Number(it.quantity ?? 1)),
+            price: Number(it.price ?? it.unit_price ?? 0),
+            instructions: it.instructions ? String(it.instructions) : null,
+            modifiers: Array.isArray(it.modifiers) ? it.modifiers : [],
+          }));
+          return {
+            restaurant_id: restaurantId,
+            source_poj_id: String(o.id),
+            ticket_number: o.ticket_number != null ? String(o.ticket_number) : '',
+            customer_name: String(o.customer_name || o.guest_name || 'Walk-in Guest'),
+            dining_option: String(o.dining_option || 'Dine In'),
+            payment_method: o.payment_method ? String(o.payment_method) : 'Cash',
+            payment_status: o.payment_status ? String(o.payment_status) : 'Pending',
+            status: o.status ? String(o.status) : 'Pending',
+            total_amount: Number(o.total_amount ?? o.total ?? 0),
+            discount: Number(o.discount ?? 0),
+            cashier_name: cashierStr,
+            notes: o.notes ? String(o.notes) : null,
+            brand: o.brand ? String(o.brand) : 'POT OF JOLLOF',
+            order_channel: isMicro ? 'Online' : rawChannel,
+            sales_channel: isMicro ? 'Microsite' : rawChannel,
+            delivery_address: o.delivery_address ? String(o.delivery_address) : null,
+            delivery_fee: Number(o.delivery_fee ?? 0),
+            items: snapshotItems,
+            created_at: o.created_at || new Date().toISOString(),
+          };
+        });
 
         const pojIds = orderRows.map((r) => r.source_poj_id);
         const existingMap = new Map<string, string>();
+        const existingRowByPojId = new Map<string, Record<string, unknown>>();
         for (let i = 0; i < pojIds.length; i += 200) {
           const { data: existingOrders } = await maniAdmin
             .from('pos_orders')
-            .select('id, source_poj_id')
+            .select('id, source_poj_id, status, payment_status, payment_method, sales_channel, items')
             .eq('restaurant_id', restaurantId)
             .in('source_poj_id', pojIds.slice(i, i + 200));
           for (const row of existingOrders || []) {
             existingMap.set(String(row.source_poj_id), String(row.id));
+            existingRowByPojId.set(String(row.source_poj_id), row as Record<string, unknown>);
           }
         }
 
@@ -259,19 +333,59 @@ serve(async (req) => {
           }
         }
 
+        // Only update existing rows that genuinely changed (e.g. missing items snapshot or microsite channel tag,
+        // or POJ progressed an order that is still Pending in ManiPOS). Never overwrite progressed/settled ManiPOS state.
+        const progressedStatuses = new Set([
+          'preparing',
+          'in progress',
+          'in_progress',
+          'ready',
+          'completed',
+          'returned',
+          'voided',
+          'declined',
+          'cancelled',
+        ]);
+        const pendingUpdates: Array<{ id: string; patch: Record<string, unknown> }> = [];
         for (const upd of toUpdate) {
           const maniId = existingMap.get(upd.source_poj_id);
-          if (!maniId) continue;
-          const { error: updErr } = await maniAdmin
-            .from('pos_orders')
-            .update({
-              status: upd.status,
-              payment_status: upd.payment_status,
-              payment_method: upd.payment_method,
-              total_amount: upd.total_amount,
+          const cur = existingRowByPojId.get(upd.source_poj_id);
+          if (!maniId || !cur) continue;
+          const patch: Record<string, unknown> = {};
+          const curStatus = String(cur.status || '').toLowerCase().trim();
+          const updStatus = String(upd.status || '').toLowerCase().trim();
+          if (!progressedStatuses.has(curStatus) && updStatus && updStatus !== curStatus) {
+            patch.status = upd.status;
+          }
+          const curPayStatus = String(cur.payment_status || '').toLowerCase().trim();
+          const updPayStatus = String(upd.payment_status || '').toLowerCase().trim();
+          if (curPayStatus !== 'paid' && updPayStatus && updPayStatus !== curPayStatus) {
+            patch.payment_status = upd.payment_status;
+          }
+          const curItems = Array.isArray(cur.items) ? cur.items : [];
+          if (curItems.length === 0 && Array.isArray(upd.items) && upd.items.length > 0) {
+            patch.items = upd.items;
+          }
+          if (upd.sales_channel === 'Microsite' && cur.sales_channel !== 'Microsite') {
+            patch.sales_channel = 'Microsite';
+            patch.order_channel = 'Online';
+          }
+          if (Object.keys(patch).length > 0) {
+            pendingUpdates.push({ id: maniId, patch });
+          }
+        }
+
+        for (let i = 0; i < pendingUpdates.length; i += 25) {
+          const batch = pendingUpdates.slice(i, i + 25);
+          await Promise.all(
+            batch.map(async (u) => {
+              const { error: updErr } = await maniAdmin
+                .from('pos_orders')
+                .update(u.patch)
+                .eq('id', u.id);
+              if (!updErr) syncedCount++;
             })
-            .eq('id', maniId);
-          if (!updErr) syncedCount++;
+          );
         }
 
         // Sync pos_order_items for each mapped order

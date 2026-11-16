@@ -1008,8 +1008,8 @@ export async function fetchPojOrdersForRange({
   restaurantId,
   startIso = null,
   endIso = null,
-  limit = 5000,
-  timeoutMs = 8000,
+  limit = 200,
+  timeoutMs = 15000,
 }) {
   if (!restaurantId) return [];
   const pojUrl = await resolvePojBridgeUrl(tenantSlug, restaurantId);
@@ -1032,11 +1032,11 @@ export async function fetchPojOrdersForRange({
       if (!fnRes?.error && fnRes?.data?.ok && Array.isArray(fnRes.data.orders)) {
         return mapRawPojOrders(fnRes.data.orders, restaurantId);
       }
-      if (fnRes?.error || fnRes?.data?.missingSecret || fnRes?.data?.notLinked) {
+      if (fnRes?.data?.missingSecret || fnRes?.data?.notLinked || fnRes?.data?.wrongKeyRole) {
         edgePojOrdersSyncUnavailable = true;
       }
     } catch (_) {
-      edgePojOrdersSyncUnavailable = true;
+      // Transient network/timeout error — do not permanently disable edge proxy
     }
   }
 
@@ -1559,15 +1559,18 @@ export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
 
     if (matchIdx !== undefined) {
       const existing = merged[matchIdx];
+      const poItems = Array.isArray(po.items) && po.items.length > 0
+        ? po.items
+        : (Array.isArray(po.pos_order_items) ? po.pos_order_items : []);
       const nextItems =
-        !orderHasLineItems(existing) && orderHasLineItems(po)
-          ? (Array.isArray(po.items) && po.items.length > 0 ? po.items : po.pos_order_items || [])
+        !orderHasLineItems(existing) && poItems.length > 0
+          ? poItems
           : existing.items;
       merged[matchIdx] = {
         ...existing,
         source_poj_id: existing.source_poj_id || srcId || poId || null,
         _fromPoj: Boolean(existing._fromPoj || po._fromPoj),
-        ...(nextItems !== existing.items ? { items: nextItems } : {}),
+        ...(nextItems !== existing.items ? { items: nextItems, pos_order_items: nextItems } : {}),
       };
       continue;
     }
@@ -1599,9 +1602,45 @@ export async function updatePojOrderStatus({
   if (!pojUrl) return { ok: false, error: 'No linked POJ bridge configured' };
 
   const cleanPatch = { ...patch };
-  const optionalCols = ['accepted_at', 'kitchen_started_at', 'kitchen_ready_at', 'completed_at', 'return_reason', 'void_reason', 'void_disposition', 'payment_status'];
+  const optionalCols = [
+    'accepted_at',
+    'kitchen_started_at',
+    'kitchen_ready_at',
+    'completed_at',
+    'return_reason',
+    'void_reason',
+    'void_disposition',
+    'payment_status',
+    'mpesa_receipt_number',
+  ];
 
   const bearer = await getValidPojAccessToken(pojUrl);
+  const needsEdgeProxy = bearer === POJ_ANON_KEY;
+
+  if (needsEdgeProxy && !edgePojOrdersSyncUnavailable) {
+    try {
+      const fnRes = await supabase.functions.invoke('poj-orders-sync', {
+        body: {
+          action: 'patch_order',
+          restaurant_id: restaurantId,
+          tenant_slug: tenantSlug,
+          poj_order_id: String(pojOrderId),
+          patch: cleanPatch,
+        },
+      });
+      if (!fnRes?.error && fnRes?.data?.ok) {
+        return { ok: true, data: fnRes.data.data || [] };
+      }
+      if (fnRes?.data?.missingSecret || fnRes?.data?.notLinked || fnRes?.data?.wrongKeyRole) {
+        edgePojOrdersSyncUnavailable = true;
+      } else if (fnRes?.data?.error) {
+        return { ok: false, error: fnRes.data.error };
+      }
+    } catch (_) {
+      // Fall through to direct REST attempt
+    }
+  }
+
   const attemptPatch = async (payload) => {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller && timeoutMs > 0
