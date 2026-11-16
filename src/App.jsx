@@ -621,14 +621,22 @@ function App() {
     setCurrentRoute('home');
 
     // Leave via a real navigation (replace, not push) so the signed-in screens
-    // stay out of the browser history. Always return to the neutral shared login
-    // domain (pos.manipos.com/?logout=1) rather than staying pinned on a tenant URL.
+    // stay out of the browser history. On localhost, Capacitor Android, or an
+    // installed standalone PWA, stay on the same origin with ?page=login&logout=1
+    // so Android doesn't jump to Chrome or re-lock onto a tenant subdomain.
+    try {
+      sessionStorage.setItem('manipos_neutral_login', '1');
+    } catch (_) {}
     const host = window.location.hostname;
+    const isStandalonePwa =
+      Boolean(window.matchMedia?.('(display-mode: standalone)')?.matches) ||
+      window.navigator?.standalone === true;
     const isLocalOrNative =
       host === 'localhost' ||
       host === '127.0.0.1' ||
       /^(127|10|192\.168)\./.test(host) ||
-      Boolean(window.Capacitor?.isNativePlatform?.());
+      Boolean(window.Capacitor?.isNativePlatform?.()) ||
+      isStandalonePwa;
     if (isLocalOrNative) {
       window.location.replace('/?page=login&logout=1');
       return;
@@ -1041,6 +1049,15 @@ function App() {
 
   // ROUTE 2: Unified Workspace / Staff Terminal Login (manipos.com/?page=login, pos.manipos.com, <tenant>.pos.manipos.com)
   if (currentRoute === 'terminal' || currentRoute === 'dashboard' || currentRoute === 'app' || currentRoute === 'onboarding' || OPERATIONAL_ROUTES.has(currentRoute) || POJ_PORTAL_ROUTES.has(currentRoute)) {
+    const isNeutralLogout = (() => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        return sp.get('logout') === '1' || sp.get('neutral') === '1' || sessionStorage.getItem('manipos_neutral_login') === '1';
+      } catch (_) {
+        return false;
+      }
+    })();
+    const loginTenantSlug = isNeutralLogout ? null : tenantInfo.tenantSlug;
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative font-sans">
         <button
@@ -1054,14 +1071,17 @@ function App() {
         <div className="w-full max-w-md bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
           <div className="text-center mb-6">
             <div className="inline-block bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs px-3 py-1 rounded-full uppercase tracking-widest mb-3">
-              {tenantInfo.tenantSlug ? `${tenantInfo.tenantSlug}.pos.manipos.com` : window.location.hostname}
+              {loginTenantSlug ? `${loginTenantSlug}.pos.manipos.com` : 'ManiPOS · Workspace'}
             </div>
             <h2 className="text-2xl font-black text-white tracking-tight">Mani<span className="text-orange-500">POS</span></h2>
             <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mt-1">Staff, Admin, CRM &amp; Operations Login</p>
           </div>
           <PinLogin 
-            tenantSlug={tenantInfo.tenantSlug}
+            tenantSlug={loginTenantSlug}
             onLoginSuccess={async (userSession, userTenantSlug) => {
+              try {
+                sessionStorage.removeItem('manipos_neutral_login');
+              } catch (_) {}
               const staffRole = userSession?.staffUser?.role;
               const targetRoute = isAdminAccount(userSession?.staffUser)
                 ? 'app'

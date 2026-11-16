@@ -35,4 +35,18 @@ describe('tenant routing boundaries', () => {
     expect(info.tenantSlug).toBe('potofjollof');
     expect(info.isGuestMicrosite).toBe(false);
   });
+
+  it('routes Android Capacitor app.manipos.com and ?logout=1 to neutral ManiPOS POS without locking to a tenant', () => {
+    setTestUrl('https://app.manipos.com/?page=pos');
+    const appInfo = getTenantInfo();
+    expect(appInfo.isPosDomain).toBe(true);
+    expect(appInfo.tenantSlug).toBe(null);
+    expect(appInfo.isGuestMicrosite).toBe(false);
+
+    setTestUrl('https://potofjollof.pos.manipos.com/?page=login&logout=1');
+    const logoutInfo = getTenantInfo();
+    expect(logoutInfo.isPosDomain).toBe(true);
+    expect(logoutInfo.tenantSlug).toBe(null);
+    expect(logoutInfo.isGuestMicrosite).toBe(false);
+  });
 });

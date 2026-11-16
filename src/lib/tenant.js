@@ -73,7 +73,7 @@ export function getTenantInfo() {
       } else if (parts[0] === 'retail') {
         isRetailMarketingDomain = true;
         isRetailMode = true;
-      } else if (parts[0] === 'pos') {
+      } else if (parts[0] === 'pos' || parts[0] === 'app') {
         isPosDomain = true;
       } else if (parts[0] === 'feedback') {
         isFeedbackDomain = true;
@@ -144,6 +144,14 @@ export function getTenantInfo() {
     isGuestMicrosite = false;
     isFeedbackDomain = false;
     isRetailMarketingDomain = false;
+  }
+
+  // After explicit sign-out (?logout=1), return to neutral ManiPOS login
+  // without pre-locking to any tenant slug (important for Android PWA / Capacitor).
+  if (searchParams.get('logout') === '1' || searchParams.get('neutral') === '1') {
+    tenantSlug = null;
+    isGuestMicrosite = false;
+    isPosDomain = true;
   }
 
   // CRITICAL RULE (GEMINI.md Rule 1):
