@@ -1344,6 +1344,7 @@ export function AdminDashboard({
     { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
     { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
     { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
+    { id: 'hr', label: 'HR', icon: Users, tab: 'hr-admin', visible: canDo(TAB_PERMISSION.staff) },
     { id: 'account', label: 'Account', icon: Building2, tab: 'account' },
   ].filter((item) => item.visible !== false && visibleRailIds.includes(item.id));
 
@@ -1751,14 +1752,6 @@ export function AdminDashboard({
                   </button>
                   <button
                     type="button"
-                    onClick={() => selectModule('settings', 'hr-admin')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'hr-admin' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
-                      }`}
-                  >
-                    <Calendar size={15} /> HR Approvals &amp; People
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => selectModule('settings', 'qr-vault')}
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'qr-vault' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
@@ -1888,6 +1881,28 @@ export function AdminDashboard({
                   <Armchair size={14} /> Floor & Reservations →
                 </button>
               </div>
+            </>
+          )}
+
+          {activeModule === 'hr' && (
+            <>
+              {[
+                { id: 'hr-admin', label: 'HR Approvals & People', icon: Users },
+                { id: 'staff-portal', label: 'My Staff Self-Service', icon: Calendar },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectModule('hr', item.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === item.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                  >
+                    <Icon size={15} /> {item.label}
+                  </button>
+                );
+              })}
             </>
           )}
 

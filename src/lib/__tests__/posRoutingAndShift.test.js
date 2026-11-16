@@ -46,7 +46,7 @@ describe('Interface B (Orda) Routing & RBAC', () => {
     expect(resolveOrdaEntryState({ staffUser: admin, requestedRoute: 'terminal' }).initialWebPos).toBe(true);
     expect(resolveOrdaEntryState({ staffUser: admin, tabParam: 'hr-admin' })).toMatchObject({
       isAdmin: true,
-      activeModule: 'settings',
+      activeModule: 'hr',
       activeTab: 'hr-admin',
       initialWebPos: false,
     });
@@ -115,6 +115,7 @@ describe('Interface B (Orda) Routing & RBAC', () => {
       'settings',
       'wallet',
       'inventory',
+      'hr',
       'account',
     ]);
     expect(isAdminAccount(admin)).toBe(true);

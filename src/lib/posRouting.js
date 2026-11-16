@@ -33,6 +33,7 @@ const INVENTORY_TABS = new Set([
   'inv-waste',
 ]);
 const ACCOUNT_TABS = new Set(['account', 'staff-portal']);
+const HR_TABS = new Set(['hr', 'hr-admin']);
 const SETTINGS_TABS = new Set([
   'settings',
   'order-settings',
@@ -45,7 +46,6 @@ const SETTINGS_TABS = new Set([
   'locations',
   'team-roles',
   'staff',
-  'hr-admin',
   'qr-vault',
   'poj-sync',
   'suppliers',
@@ -61,6 +61,7 @@ export function resolveModuleForOrdaTab(tabParam = '') {
   if (MENU_TABS.has(tab)) return 'menu';
   if (WALLET_TABS.has(tab)) return 'wallet';
   if (INVENTORY_TABS.has(tab)) return 'inventory';
+  if (HR_TABS.has(tab)) return 'hr';
   if (ACCOUNT_TABS.has(tab)) return 'account';
   if (SETTINGS_TABS.has(tab)) return 'settings';
   return 'orders';
@@ -128,7 +129,7 @@ export function resolveOrdaEntryState({ staffUser, requestedRoute = '', tabParam
 export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   const isAdmin = isAdminAccount(staffUser);
   if (isAdmin) {
-    return ['orders', 'dashboard', 'customers', 'menu', 'settings', 'wallet', 'inventory', 'account'];
+    return ['orders', 'dashboard', 'customers', 'menu', 'settings', 'wallet', 'inventory', 'hr', 'account'];
   }
 
   const has = (perm) => Array.isArray(permissions) && permissions.includes(perm);
@@ -138,5 +139,6 @@ export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   if (canAccessMenuModule({ staffUser, permissions })) ids.push('menu');
   if (has('manage_settings') || has('manage_staff')) ids.push('settings');
   if (has('manage_inventory')) ids.push('inventory');
+  if (has('manage_staff')) ids.push('hr');
   return ids;
 }
