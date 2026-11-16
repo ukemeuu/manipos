@@ -431,14 +431,14 @@ export function CustomersCrmView({
               <button
                 type="button"
                 onClick={() => setSubTab('listing')}
-                className={`px-3 py-1 rounded-lg ${subTab === 'listing' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                className={`px-3 py-1 rounded-lg ${subTab === 'listing' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
               >
                 Customer List
               </button>
               <button
                 type="button"
                 onClick={() => setSubTab('store-credit')}
-                className={`px-3 py-1 rounded-lg ${subTab === 'store-credit' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                className={`px-3 py-1 rounded-lg ${subTab === 'store-credit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
               >
                 Store Credit
               </button>
@@ -455,7 +455,7 @@ export function CustomersCrmView({
             onClick={() => setCampaignModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800"
           >
-            <Send size={14} className="text-emerald-700" /> Send Message
+            <Send size={14} className="text-amber-700" /> Send Message
           </button>
           <button
             type="button"
@@ -467,7 +467,7 @@ export function CustomersCrmView({
           <button
             type="button"
             onClick={() => openAddCustomer(null)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
           >
             <Plus size={14} /> Add New Customer
           </button>
@@ -475,9 +475,9 @@ export function CustomersCrmView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
-          <button type="button" onClick={() => setNotice('')} className="text-emerald-700 hover:underline">Dismiss</button>
+          <button type="button" onClick={() => setNotice('')} className="text-amber-700 hover:underline">Dismiss</button>
         </div>
       )}
 
@@ -485,7 +485,7 @@ export function CustomersCrmView({
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="bg-white border border-slate-200 rounded-2xl p-4">
             <p className="text-[11px] font-bold uppercase text-slate-400">Total Store Credit</p>
-            <p className={`text-xl font-black mt-1 ${totalStoreCredit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+            <p className={`text-xl font-black mt-1 ${totalStoreCredit >= 0 ? 'text-amber-700' : 'text-rose-700'}`}>
               KES {totalStoreCredit.toLocaleString()}
             </p>
           </div>
@@ -517,7 +517,7 @@ export function CustomersCrmView({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by customer name, phone, email, or KRA Pin..."
-            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400/25"
           />
         </div>
 
@@ -534,7 +534,7 @@ export function CustomersCrmView({
                 onClick={() => setCreditFilter(f.id)}
                 className={`px-3 py-1.5 rounded-xl border ${
                   creditFilter === f.id
-                    ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                    ? 'bg-amber-50 border-amber-400 text-slate-900'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
@@ -589,7 +589,7 @@ export function CustomersCrmView({
                             setSelectedGuest(g);
                             setDetailTab(subTab === 'store-credit' ? 'wallet' : 'orders');
                           }}
-                          className="font-bold text-slate-900 hover:text-emerald-700 text-left"
+                          className="font-bold text-slate-900 hover:text-amber-700 text-left"
                         >
                           {fullName}
                         </button>
@@ -611,7 +611,7 @@ export function CustomersCrmView({
                       <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                         KES {Number(st.spend || 0).toLocaleString()}
                       </td>
-                      <td className={`py-3 px-4 text-right font-mono font-black ${bal < 0 ? 'text-rose-600' : bal > 0 ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <td className={`py-3 px-4 text-right font-mono font-black ${bal < 0 ? 'text-rose-600' : bal > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
                         KES {bal.toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-amber-700">
@@ -622,7 +622,7 @@ export function CustomersCrmView({
                           <button
                             type="button"
                             onClick={() => openFundsModal(g)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold hover:bg-emerald-100"
+                            className="px-2.5 py-1 rounded-lg bg-amber-50 text-slate-900 font-bold hover:bg-amber-100"
                           >
                             + Funds
                           </button>
@@ -739,7 +739,7 @@ export function CustomersCrmView({
               <button type="button" onClick={() => setAddModalOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
                 Cancel
               </button>
-              <button type="submit" disabled={savingGuest} className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50">
+              <button type="submit" disabled={savingGuest} className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50">
                 {savingGuest ? 'Saving...' : editingGuest ? 'Save Changes' : 'Create Customer'}
               </button>
             </div>
@@ -783,7 +783,7 @@ export function CustomersCrmView({
                   type="checkbox"
                   checked={campaignForm.send_sms}
                   onChange={(e) => setCampaignForm((p) => ({ ...p, send_sms: e.target.checked }))}
-                  className="rounded border-slate-300 text-emerald-700"
+                  className="rounded border-slate-300 text-amber-700"
                 />
                 Send via SMS
               </label>
@@ -792,7 +792,7 @@ export function CustomersCrmView({
                   type="checkbox"
                   checked={campaignForm.send_email}
                   onChange={(e) => setCampaignForm((p) => ({ ...p, send_email: e.target.checked }))}
-                  className="rounded border-slate-300 text-emerald-700"
+                  className="rounded border-slate-300 text-amber-700"
                 />
                 Send via Email
               </label>
@@ -833,7 +833,7 @@ export function CustomersCrmView({
               <button type="button" onClick={() => setCampaignModalOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-700">
                 Cancel
               </button>
-              <button type="submit" disabled={sendingCampaign} className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black disabled:opacity-50">
+              <button type="submit" disabled={sendingCampaign} className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black disabled:opacity-50">
                 {sendingCampaign ? 'Queueing...' : `Send to ${campaignRecipients.length} Guests`}
               </button>
             </div>
@@ -878,7 +878,7 @@ export function CustomersCrmView({
                 type="button"
                 onClick={() => setFundsForm((p) => ({ ...p, entry_type: 'credit' }))}
                 className={`py-2.5 rounded-xl font-black border ${
-                  fundsForm.entry_type === 'credit' ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'
+                  fundsForm.entry_type === 'credit' ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-white border-slate-200 text-slate-600'
                 }`}
               >
                 + Credit Wallet
@@ -922,7 +922,7 @@ export function CustomersCrmView({
               <button type="button" onClick={() => setFundsGuest(null)} className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-700">
                 Cancel
               </button>
-              <button type="submit" disabled={savingFunds} className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black disabled:opacity-50">
+              <button type="submit" disabled={savingFunds} className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black disabled:opacity-50">
                 {savingFunds ? 'Saving...' : 'Apply Adjustment'}
               </button>
             </div>
@@ -949,7 +949,7 @@ export function CustomersCrmView({
               <button
                 type="button"
                 onClick={() => openFundsModal(selectedGuest)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
               >
                 <Wallet size={13} /> Add / Debit Funds
               </button>
@@ -966,7 +966,7 @@ export function CustomersCrmView({
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                 <p className="text-[10px] font-bold uppercase text-slate-400">Store Credit</p>
-                <p className="text-base font-black text-emerald-700 mt-0.5">
+                <p className="text-base font-black text-amber-700 mt-0.5">
                   KES {Number(selectedGuest.store_credit_balance || 0).toLocaleString()}
                 </p>
               </div>
@@ -991,7 +991,7 @@ export function CustomersCrmView({
                     type="button"
                     onClick={() => setDetailTab(t.id)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${
-                      detailTab === t.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-500 hover:bg-slate-100'
+                      detailTab === t.id ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-500 hover:bg-slate-100'
                     }`}
                   >
                     <Icon size={13} /> {t.label}
@@ -1016,7 +1016,7 @@ export function CustomersCrmView({
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-mono font-black text-emerald-700">KES {Number(o.total_amount || 0).toLocaleString()}</p>
+                        <p className="font-mono font-black text-amber-700">KES {Number(o.total_amount || 0).toLocaleString()}</p>
                         <p className="text-[10px] font-bold uppercase text-slate-500">{o.status}</p>
                       </div>
                     </div>
@@ -1036,7 +1036,7 @@ export function CustomersCrmView({
                         <p className="font-bold text-slate-900 capitalize">{l.entry_type} · {l.remark || 'Order Loyalty'}</p>
                         <p className="text-[11px] text-slate-400">{new Date(l.created_at).toLocaleString('en-KE')}</p>
                       </div>
-                      <span className={`font-mono font-black ${l.points_delta >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      <span className={`font-mono font-black ${l.points_delta >= 0 ? 'text-amber-700' : 'text-rose-700'}`}>
                         {l.points_delta >= 0 ? '+' : ''}{l.points_delta} pts
                       </span>
                     </div>
@@ -1073,7 +1073,7 @@ export function CustomersCrmView({
                           {new Date(l.created_at).toLocaleString('en-KE')} · After: KES {Number(l.balance_after || 0).toLocaleString()}
                         </p>
                       </div>
-                      <span className={`font-mono font-black ${l.entry_type === 'credit' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      <span className={`font-mono font-black ${l.entry_type === 'credit' ? 'text-amber-700' : 'text-rose-700'}`}>
                         {l.entry_type === 'credit' ? '+' : '-'}KES {Number(l.amount || 0).toLocaleString()}
                       </span>
                     </div>

@@ -7,7 +7,7 @@ import { SlideOverDrawer } from './SlideOverDrawer';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const inputCls =
-  'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:border-emerald-600';
+  'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-400';
 const labelCls = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1';
 
 export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug, onBranchesUpdated }) {
@@ -115,7 +115,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
               opening_hours: defaultHours,
             })
           }
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
         >
           <Plus size={14} /> Add Location
         </button>
@@ -123,7 +123,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-emerald-700" size={22} /></div>
+          <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-amber-700" size={22} /></div>
         ) : (
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
@@ -141,7 +141,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
                 <tr key={b.id} className="hover:bg-slate-50">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2">
-                      <Building2 size={15} className="text-emerald-700" />
+                      <Building2 size={15} className="text-amber-700" />
                       <div>
                         <p className="font-bold text-slate-900">{b.name} {b.is_default ? '(Primary)' : ''}</p>
                         <p className="text-[11px] text-slate-500">{b.address || b.city || `${tenantSlug}.manipos.com`}</p>
@@ -149,7 +149,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
                     </div>
                   </td>
                   <td className="py-3.5 px-4">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${b.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${b.status === 'active' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
                       {b.status}
                     </span>
                   </td>
@@ -190,7 +190,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
             <span />
             <div className="flex gap-2">
               <button type="button" onClick={() => setDrawer(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold cursor-pointer">Cancel</button>
-              <button type="button" disabled={saving || !drawer?.name?.trim()} onClick={saveBranch} className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black cursor-pointer">
+              <button type="button" disabled={saving || !drawer?.name?.trim()} onClick={saveBranch} className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-400 text-black text-xs font-black cursor-pointer">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save Location
               </button>
             </div>
@@ -322,7 +322,7 @@ export function CloseStoreModal({ open, onClose, restaurantId, restaurantName, c
     <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-200 text-slate-900">
         <div className="flex items-start gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${currentlyClosed ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${currentlyClosed ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-600'}`}>
             <Lock size={18} />
           </div>
           <div>
@@ -361,7 +361,7 @@ export function CloseStoreModal({ open, onClose, restaurantId, restaurantName, c
             disabled={saving}
             onClick={() => handleToggleStore(!currentlyClosed)}
             className={`px-5 py-2 rounded-xl text-white text-xs font-black cursor-pointer ${
-              currentlyClosed ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-rose-600 hover:bg-rose-700'
+              currentlyClosed ? 'bg-amber-400 hover:bg-amber-300' : 'bg-rose-600 hover:bg-rose-700'
             }`}
           >
             {saving ? 'Updating...' : currentlyClosed ? 'Reopen Store' : 'Confirm Close Store'}

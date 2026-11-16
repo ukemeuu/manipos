@@ -127,7 +127,7 @@ async function authenticateWithPojFallback(cleanEmail, password, preferredSlug =
         } catch (_) { }
 
         if (pojProfile.is_active === false || pojProfile.deleted_at) {
-            return { success: false, error: 'This staff account is inactive in POJ Management.' };
+            return { success: false, error: 'This staff account is inactive in the linked store.' };
         }
 
         const slugCandidates = [
@@ -165,7 +165,7 @@ async function authenticateWithPojFallback(cleanEmail, password, preferredSlug =
                 .limit(1)
                 .maybeSingle();
             if (linkRow && linkRow.link_auth_enabled === false) {
-                return { success: false, error: 'POJ Auth Bridge is disabled for this restaurant.' };
+                return { success: false, error: 'Linked store auth bridge is disabled for this restaurant.' };
             }
         } catch (_) { }
 

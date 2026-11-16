@@ -227,14 +227,14 @@ export function TeamRolesAndAccountView({
               <button
                 type="button"
                 onClick={() => setSubTab('team-roles')}
-                className={`px-3 py-1 rounded-lg ${subTab === 'team-roles' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                className={`px-3 py-1 rounded-lg ${subTab === 'team-roles' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
               >
                 Team & 24-Permission Roles
               </button>
               <button
                 type="button"
                 onClick={() => setSubTab('account')}
-                className={`px-3 py-1 rounded-lg ${subTab === 'account' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                className={`px-3 py-1 rounded-lg ${subTab === 'account' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
               >
                 Account, Password & Support PIN
               </button>
@@ -249,7 +249,7 @@ export function TeamRolesAndAccountView({
           <button
             type="button"
             onClick={() => openRoleDrawer(null)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
           >
             <Plus size={14} /> Create Custom Role
           </button>
@@ -257,7 +257,7 @@ export function TeamRolesAndAccountView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
           <button type="button" onClick={() => setNotice('')} className="hover:underline">Dismiss</button>
         </div>
@@ -290,7 +290,7 @@ export function TeamRolesAndAccountView({
                         {r.description && <p className="text-[11px] text-slate-400">{r.description}</p>}
                       </td>
                       <td className="py-3 px-4">{modCount} / 8 Modules</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">{posCount} / 24 POS</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-amber-700">{posCount} / 24 POS</td>
                       <td className="py-3 px-4 text-right">
                         <button type="button" onClick={() => openRoleDrawer(r)} className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100">
                           <Edit3 size={13} />
@@ -352,7 +352,7 @@ export function TeamRolesAndAccountView({
                                 type="button"
                                 onClick={() => assignStaffRoleAndBranches(st.id, undefined, b.id)}
                                 className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${
-                                  has ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-white border-slate-200 text-slate-500'
+                                  has ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-white border-slate-200 text-slate-500'
                                 }`}
                               >
                                 {b.name}
@@ -375,7 +375,7 @@ export function TeamRolesAndAccountView({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 text-xs">
           <form onSubmit={handleChangePassword} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
             <div>
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><Lock size={15} className="text-emerald-700" /> Account Security & Password</h3>
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><Lock size={15} className="text-amber-700" /> Account Security & Password</h3>
               <p className="text-slate-500 mt-0.5">Update merchant owner credentials or revoke remote device sessions.</p>
             </div>
             <div>
@@ -387,7 +387,7 @@ export function TeamRolesAndAccountView({
               <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
             </div>
             <div className="flex flex-wrap gap-2 pt-2">
-              <button type="submit" disabled={saving} className="px-4 py-2 rounded-xl bg-emerald-700 text-white font-black">
+              <button type="submit" disabled={saving} className="px-4 py-2 rounded-xl bg-amber-400 text-black font-black">
                 Update Password
               </button>
               <button type="button" onClick={handleSignOutOthers} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 font-bold">
@@ -398,7 +398,7 @@ export function TeamRolesAndAccountView({
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
             <div>
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><KeyRound size={15} className="text-emerald-700" /> Support Verification PIN & Store Controls</h3>
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><KeyRound size={15} className="text-amber-700" /> Support Verification PIN & Store Controls</h3>
               <p className="text-slate-500 mt-0.5">Generate temporary 6-digit Support Verification PINs for technician troubleshooting.</p>
             </div>
 
@@ -409,7 +409,7 @@ export function TeamRolesAndAccountView({
                   <div key={b.id || 'hq'} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
                     <div>
                       <p className="font-bold text-slate-900">{b.name}</p>
-                      <p className="font-mono text-emerald-700 font-bold">
+                      <p className="font-mono text-amber-700 font-bold">
                         {activePin ? `PIN: ${activePin.pin}` : 'No active support PIN'}
                       </p>
                     </div>
@@ -493,7 +493,7 @@ export function TeamRolesAndAccountView({
                     pos_permissions: p.pos_permissions.length === 24 ? [] : [...ORDA_24_POS_PERMISSIONS],
                   }))
                 }
-                className="text-emerald-700 font-bold hover:underline"
+                className="text-amber-700 font-bold hover:underline"
               >
                 Toggle All (24)
               </button>
@@ -522,7 +522,7 @@ export function TeamRolesAndAccountView({
             </div>
           </div>
 
-          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">
+          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
             {saving ? 'Saving...' : 'Save Custom Role'}
           </button>
         </form>

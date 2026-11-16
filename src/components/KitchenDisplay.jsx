@@ -276,7 +276,7 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black border ${connected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
+            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black border ${connected ? 'bg-amber-400/10 border-amber-400/30 text-amber-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
               {connected ? <Wifi size={13} /> : <WifiOff size={13} />}
               {connected ? 'Live' : 'Offline'}
             </div>
@@ -345,7 +345,7 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
             const tone = {
               amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
               orange: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
-              emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+              emerald: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
             }[column.tone];
             return (
               <section key={column.key} className="min-h-[40vh] lg:min-h-0 rounded-3xl border border-white/10 bg-white/[0.02] flex flex-col overflow-hidden">
@@ -382,7 +382,7 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
                               <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${late ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-white/5 text-slate-300 border-white/10'}`}>
                                 {ageLabel(mins)}
                               </span>
-                              {order.status === 'Ready' && <CheckCircle2 size={16} className="text-emerald-400" />}
+                              {order.status === 'Ready' && <CheckCircle2 size={16} className="text-amber-400" />}
                             </div>
                             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
                               {order.customer_name || 'Walk-in'} · {order.dining_option || order.order_channel || 'Dine-in'}
@@ -426,7 +426,7 @@ export function KitchenDisplay({ tenant, staffName = 'Kitchen', onBack }) {
                             <button
                               onClick={() => updateStatus(order, 'Ready')}
                               disabled={busyId === order.id}
-                              className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                              className="flex-1 py-2.5 rounded-xl bg-amber-400 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                             >
                               <CheckCircle2 size={14} /> Mark ready
                             </button>

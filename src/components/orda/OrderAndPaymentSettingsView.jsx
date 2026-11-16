@@ -34,7 +34,7 @@ const KENYA_BANKS_AND_WALLETS = [
 
 const ORDER_METHODS = ['Delivery', 'Pickup', 'Dine In'];
 const inputCls =
-  'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600';
+  'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400/25 focus:border-amber-400';
 const labelCls = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1';
 
 export function OrderAndPaymentSettingsView({
@@ -195,7 +195,7 @@ export function OrderAndPaymentSettingsView({
         </div>
 
         {notice && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-slate-900 text-xs font-bold">
             {notice}
           </div>
         )}
@@ -215,7 +215,7 @@ export function OrderAndPaymentSettingsView({
                     type="checkbox"
                     checked={Boolean(orderCfg[t.key])}
                     onChange={(e) => setOrderCfg((p) => ({ ...p, [t.key]: e.target.checked }))}
-                    className="rounded text-emerald-700"
+                    className="rounded text-amber-700"
                   />
                 </label>
               ))}
@@ -239,7 +239,7 @@ export function OrderAndPaymentSettingsView({
                     type="checkbox"
                     checked={orderCfg.allow_negative_store_credit}
                     onChange={(e) => setOrderCfg((p) => ({ ...p, allow_negative_store_credit: e.target.checked }))}
-                    className="rounded text-emerald-700"
+                    className="rounded text-amber-700"
                   />
                 </label>
               </div>
@@ -255,7 +255,7 @@ export function OrderAndPaymentSettingsView({
                   type="checkbox"
                   checked={orderCfg.whatsapp_forwarding_enabled}
                   onChange={(e) => setOrderCfg((p) => ({ ...p, whatsapp_forwarding_enabled: e.target.checked }))}
-                  className="rounded text-emerald-700"
+                  className="rounded text-amber-700"
                 />
               </label>
               <div>
@@ -373,7 +373,7 @@ export function OrderAndPaymentSettingsView({
                   type="checkbox"
                   checked={orderCfg.void_completed_allowed}
                   onChange={(e) => setOrderCfg((p) => ({ ...p, void_completed_allowed: e.target.checked }))}
-                  className="rounded text-emerald-700"
+                  className="rounded text-amber-700"
                 />
               </label>
               <div>
@@ -393,7 +393,7 @@ export function OrderAndPaymentSettingsView({
             type="button"
             disabled={saving}
             onClick={() => persistSettingsPatch(orderCfg, 'Order Methods & Void settings saved.')}
-            className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center gap-2 disabled:opacity-50"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Save Order Settings
@@ -414,7 +414,7 @@ export function OrderAndPaymentSettingsView({
       </div>
 
       {notice && (
-        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-slate-900 text-xs font-bold">
           {notice}
         </div>
       )}
@@ -460,7 +460,7 @@ export function OrderAndPaymentSettingsView({
                           prev.map((row, i) => (i === idx ? { ...row, pos_enabled: e.target.checked } : row))
                         )
                       }
-                      className="rounded text-emerald-700"
+                      className="rounded text-amber-700"
                     />
                   </td>
                   <td className="py-2.5 px-4 text-center">
@@ -472,7 +472,7 @@ export function OrderAndPaymentSettingsView({
                           prev.map((row, i) => (i === idx ? { ...row, microsite_enabled: e.target.checked } : row))
                         )
                       }
-                      className="rounded text-emerald-700"
+                      className="rounded text-amber-700"
                     />
                   </td>
                   <td className="py-2.5 px-4 text-right">
@@ -504,7 +504,7 @@ export function OrderAndPaymentSettingsView({
               'Payment tender visibility matrix saved.'
             )
           }
-          className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black inline-flex items-center gap-1.5"
+          className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black inline-flex items-center gap-1.5"
         >
           <Save size={14} /> Save Tender Matrix
         </button>
@@ -532,7 +532,7 @@ export function OrderAndPaymentSettingsView({
                 is_active: true,
               })
             }
-            className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center gap-1.5"
           >
             <Plus size={14} /> Add Charge Rule
           </button>
@@ -557,7 +557,7 @@ export function OrderAndPaymentSettingsView({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-bold text-emerald-700 mt-1">
+                  <p className="text-xs font-bold text-amber-700 mt-1">
                     {ch.charge_type === 'percent' ? `${ch.charge_value}%` : `KES ${Number(ch.charge_value).toLocaleString()} fixed`}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-1">
@@ -569,7 +569,7 @@ export function OrderAndPaymentSettingsView({
                   <button
                     type="button"
                     onClick={() => setChargeDrawer(ch)}
-                    className="text-xs font-bold text-slate-700 hover:text-emerald-700"
+                    className="text-xs font-bold text-slate-700 hover:text-amber-700"
                   >
                     Edit
                   </button>
@@ -703,7 +703,7 @@ export function OrderAndPaymentSettingsView({
                 type="checkbox"
                 checked={Boolean(chargeDrawer.is_tax_charge)}
                 onChange={(e) => setChargeDrawer((p) => ({ ...p, is_tax_charge: e.target.checked }))}
-                className="rounded text-emerald-700"
+                className="rounded text-amber-700"
               />
             </label>
 
@@ -762,7 +762,7 @@ export function OrderAndPaymentSettingsView({
             <button
               type="submit"
               disabled={saving}
-              className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+              className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
             >
               {saving ? 'Saving...' : 'Save Additional Charge'}
             </button>
@@ -829,7 +829,7 @@ export function OrderAndPaymentSettingsView({
                   setTenders((prev) => [...prev, { ...customTenderModal, code, is_custom: true }]);
                   setCustomTenderModal(null);
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"
+                className="px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
               >
                 Add to Matrix
               </button>

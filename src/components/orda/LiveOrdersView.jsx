@@ -138,7 +138,7 @@ function relativeTimeLabel(iso) {
 }
 
 function channelBadgeStyle(label) {
-  if (label === 'MICROSITE') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (label === 'MICROSITE') return 'bg-amber-50 text-amber-700 border-amber-200';
   if (label === 'WHATSAPP') return 'bg-green-50 text-green-700 border-green-200';
   if (label === 'GLOVO') return 'bg-amber-50 text-amber-700 border-amber-200';
   if (label === 'UBER EATS') return 'bg-slate-900 text-white border-slate-900';
@@ -164,7 +164,7 @@ function statusPillMeta(bucket, order) {
     case 'shipped':
       return { label: 'Out for Delivery', cls: 'bg-cyan-50 text-cyan-800 border-cyan-200' };
     case 'completed':
-      return { label: 'Completed', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+      return { label: 'Completed', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     case 'declined':
       return { label: 'Declined', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
     case 'cancelled':
@@ -784,14 +784,14 @@ export function LiveOrdersView({
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               placeholder="Search Order #, customer, M-Pesa receipt..."
-              className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 w-full sm:w-64 focus:outline-none focus:border-emerald-600"
+              className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 w-full sm:w-64 focus:outline-none focus:border-amber-400"
             />
           </div>
 
           <select
             value={channelFilter}
             onChange={(e) => { setChannelFilter(e.target.value); setPage(1); }}
-            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-600"
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-400"
           >
             {CHANNEL_OPTIONS.map((ch) => (
               <option key={ch} value={ch}>{ch}</option>
@@ -801,7 +801,7 @@ export function LiveOrdersView({
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-600"
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-400"
           >
             <option value="newest">Sort: Newest First</option>
             <option value="oldest">Sort: Oldest First</option>
@@ -836,7 +836,7 @@ export function LiveOrdersView({
               type="button"
               onClick={() => handleSelectDatePreset(preset.id)}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${datePreset === preset.id
-                ? 'bg-emerald-700 text-white border-emerald-700'
+                ? 'bg-amber-400 text-black border-amber-400'
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
             >
@@ -881,9 +881,9 @@ export function LiveOrdersView({
             {cumulativeTotals.totalCount} shown
           </span>
         </div>
-        <div className="bg-white border border-emerald-200 rounded-2xl px-4 py-3">
-          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">Cumulative Total</span>
-          <span className="text-lg font-black text-emerald-700 font-mono">
+        <div className="bg-white border border-amber-200 rounded-2xl px-4 py-3">
+          <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">Cumulative Total</span>
+          <span className="text-lg font-black text-amber-700 font-mono">
             KES {Math.round(cumulativeTotals.cumulativeTotal).toLocaleString()}
           </span>
         </div>
@@ -904,7 +904,7 @@ export function LiveOrdersView({
       {/* Empty State */}
       {pagedOrders.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto">
             <Package size={22} />
           </div>
           <div>
@@ -917,7 +917,7 @@ export function LiveOrdersView({
             <button
               type="button"
               onClick={onCreateOrder}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold transition-colors cursor-pointer"
             >
               + Create Order
             </button>
@@ -936,7 +936,7 @@ export function LiveOrdersView({
             return (
               <div
                 key={order.id}
-                className="bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl overflow-hidden shadow-xs transition-all flex flex-col md:flex-row"
+                className="bg-white border border-slate-200 hover:border-amber-300 rounded-2xl overflow-hidden shadow-xs transition-all flex flex-col md:flex-row"
               >
                 {/* Main Order Content */}
                 <div
@@ -998,9 +998,9 @@ export function LiveOrdersView({
                       {lines.length === 0 && (order._fromPoj || order.source_poj_id) && Number(order.total_amount || 0) > 0 ? (
                         <span
                           className="font-bold text-amber-700 block mt-0.5"
-                          title="POJ line items require POJ Email & Password login or POJ Sync Bridge import"
+                          title="Synced line items require Data Migration & Sync import"
                         >
-                          Items in POJ
+                          Items Pending Sync
                         </span>
                       ) : lines.length === 0 && Number(order.total_amount || 0) > 0 ? (
                         <span
@@ -1023,7 +1023,7 @@ export function LiveOrdersView({
                         ) : order.dining_option === 'Takeaway' || order.dining_option === 'Pickup' ? (
                           <Store size={12} className="text-sky-600" />
                         ) : (
-                          <UtensilsCrossed size={12} className="text-emerald-600" />
+                          <UtensilsCrossed size={12} className="text-amber-600" />
                         )}
                         {order.dining_option || 'Dine-in'}
                         {order.table_number ? ` · ${order.table_number}` : ''}
@@ -1038,7 +1038,7 @@ export function LiveOrdersView({
                     </div>
                     <div>
                       <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">Total</span>
-                      <span className="font-black text-emerald-700 font-mono block mt-0.5">
+                      <span className="font-black text-amber-700 font-mono block mt-0.5">
                         KES {Number(order.total_amount || 0).toLocaleString()}
                       </span>
                     </div>
@@ -1063,7 +1063,7 @@ export function LiveOrdersView({
                       type="button"
                       disabled={busy}
                       onClick={() => updateOrderStatus(order, 'Preparing')}
-                      className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                      className="flex-1 py-3 px-4 bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <Check size={14} /> Accept
                     </button>
@@ -1084,7 +1084,7 @@ export function LiveOrdersView({
                       type="button"
                       disabled={busy}
                       onClick={() => updateOrderStatus(order, 'Ready')}
-                      className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                      className="flex-1 py-3 px-4 bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <CheckCircle2 size={14} /> Ready
                     </button>
@@ -1105,7 +1105,7 @@ export function LiveOrdersView({
                       type="button"
                       disabled={busy}
                       onClick={() => updateOrderStatus(order, 'Completed')}
-                      className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                      className="flex-1 py-3 px-4 bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <CheckCircle2 size={14} /> Complete
                     </button>
@@ -1151,7 +1151,7 @@ export function LiveOrdersView({
                     <button
                       type="button"
                       onClick={() => onResumeOpenOrder(order)}
-                      className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="flex-1 py-3 px-4 bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       Settle Tab
                     </button>
@@ -1241,7 +1241,7 @@ export function LiveOrdersView({
                     type="button"
                     disabled={updatingId === selectedOrder.id}
                     onClick={() => updateOrderStatus(selectedOrder, 'Preparing')}
-                    className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold cursor-pointer disabled:opacity-50"
                   >
                     Accept Order
                   </button>
@@ -1260,7 +1260,7 @@ export function LiveOrdersView({
                 <button
                   type="button"
                   onClick={() => updateOrderStatus(selectedOrder, 'Completed', { payment_status: 'Paid' })}
-                  className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold cursor-pointer"
                 >
                   Mark Completed
                 </button>
@@ -1314,7 +1314,7 @@ export function LiveOrdersView({
               {selectedOrder.mpesa_receipt_number && (
                 <div className="col-span-2">
                   <span className="text-slate-400 font-bold uppercase text-[10px]">M-Pesa Receipt</span>
-                  <p className="font-mono font-bold text-emerald-700 mt-0.5">{selectedOrder.mpesa_receipt_number}</p>
+                  <p className="font-mono font-bold text-amber-700 mt-0.5">{selectedOrder.mpesa_receipt_number}</p>
                 </div>
               )}
               {selectedOrder.notes && (
@@ -1418,7 +1418,7 @@ export function LiveOrdersView({
                   <button
                     type="submit"
                     disabled={paymentSaving}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer disabled:opacity-50"
+                    className="px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer disabled:opacity-50"
                   >
                     {paymentSaving ? 'Saving…' : 'Save Payment Mode'}
                   </button>
@@ -1460,7 +1460,7 @@ export function LiveOrdersView({
                         <td colSpan={3} className="py-4 px-3 text-center text-slate-500">
                           <AlertCircle size={14} className="inline mr-1 text-amber-600" />
                           {selectedOrder._fromPoj || selectedOrder.source_poj_id
-                            ? 'Line items are protected on pojmanagement.com. Sign in with POJ Email & Password or run POJ Sync Bridge to import item details.'
+                            ? 'Line items are not yet synced for this external order. Run Data Migration & Sync to import item details.'
                             : 'Line items not loaded for this order.'}
                         </td>
                       </tr>
@@ -1476,7 +1476,7 @@ export function LiveOrdersView({
                 <span className="font-mono">KES {Number(selectedOrder.subtotal ?? selectedOrder.total_amount ?? 0).toLocaleString()}</span>
               </div>
               {Number(selectedOrder.discount_amount || selectedOrder.discount || 0) > 0 && (
-                <div className="flex justify-between text-emerald-700">
+                <div className="flex justify-between text-amber-700">
                   <span>Discount</span>
                   <span className="font-mono">-KES {Number(selectedOrder.discount_amount || selectedOrder.discount).toLocaleString()}</span>
                 </div>
@@ -1512,7 +1512,7 @@ export function LiveOrdersView({
               )}
               <div className="flex justify-between font-black text-sm text-slate-900 pt-2 border-t border-slate-200">
                 <span>Grand Total</span>
-                <span className="font-mono text-emerald-700">KES {Number(selectedOrder.total_amount || 0).toLocaleString()}</span>
+                <span className="font-mono text-amber-700">KES {Number(selectedOrder.total_amount || 0).toLocaleString()}</span>
               </div>
               {selectedOrder.void_reason && (
                 <div className="mt-2 pt-2 border-t border-rose-200 text-rose-700 font-bold text-[11px]">
@@ -1612,7 +1612,7 @@ export function LiveOrdersView({
                         renderLines(voidTarget).forEach((l, i) => { m[l.id || i] = 'return_to_stock'; });
                         setVoidLineDisposition(m);
                       }}
-                      className="text-emerald-700 hover:underline"
+                      className="text-amber-700 hover:underline"
                     >
                       All Return to Stock
                     </button>
@@ -1644,7 +1644,7 @@ export function LiveOrdersView({
                             type="button"
                             onClick={() => setVoidLineDisposition((prev) => ({ ...prev, [key]: 'return_to_stock' }))}
                             className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${mode === 'return_to_stock'
-                              ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                              ? 'bg-amber-50 border-amber-400 text-slate-900'
                               : 'bg-white border-slate-200 text-slate-500'
                               }`}
                           >

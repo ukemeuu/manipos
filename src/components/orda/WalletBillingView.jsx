@@ -217,7 +217,7 @@ export function WalletBillingView({
                   key={t.id}
                   type="button"
                   onClick={() => setSubTab(t.id)}
-                  className={`px-3 py-1 rounded-lg ${subTab === t.id ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                  className={`px-3 py-1 rounded-lg ${subTab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
                 >
                   {t.label}
                 </button>
@@ -235,12 +235,12 @@ export function WalletBillingView({
             onClick={() => setLoanModal(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800"
           >
-            <Laptop size={14} className="text-emerald-700" /> Request POS / Loan
+            <Laptop size={14} className="text-amber-700" /> Request POS / Loan
           </button>
           <button
             type="button"
             onClick={() => setDepositModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
           >
             <Plus size={14} /> Deposit Funds
           </button>
@@ -248,7 +248,7 @@ export function WalletBillingView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
           <button type="button" onClick={() => setNotice('')} className="hover:underline">Dismiss</button>
         </div>
@@ -258,10 +258,10 @@ export function WalletBillingView({
       {subTab === 'payments' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-[#0B3B24] text-white rounded-2xl p-5 shadow-sm">
-              <p className="text-[11px] font-bold uppercase text-emerald-200">Merchant Wallet Balance</p>
+            <div className="bg-[#0d0d0d] text-white rounded-2xl p-5 shadow-sm">
+              <p className="text-[11px] font-bold uppercase text-amber-300">Merchant Wallet Balance</p>
               <p className="text-3xl font-black mt-1 font-mono">KES {walletBalance.toLocaleString()}</p>
-              <p className="text-[11px] text-emerald-200/80 mt-2">Settled Paystack & SMS/Subscription credits</p>
+              <p className="text-[11px] text-amber-300/80 mt-2">Settled Paystack & SMS/Subscription credits</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-2xl p-5">
               <p className="text-[11px] font-bold uppercase text-slate-400">Online Transactions Recorded</p>
@@ -286,7 +286,7 @@ export function WalletBillingView({
                 type="button"
                 onClick={() => setEntryFilter(t)}
                 className={`px-3 py-1.5 rounded-xl border ${
-                  entryFilter === t ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'
+                  entryFilter === t ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-white border-slate-200 text-slate-600'
                 }`}
               >
                 {t}
@@ -317,7 +317,7 @@ export function WalletBillingView({
                         <td className="py-3 px-4 font-bold">{l.entry_type}</td>
                         <td className="py-3 px-4 font-mono">{l.reference || '—'} · {l.channel || ''}</td>
                         <td className="py-3 px-4 text-slate-600">{l.description || '—'}</td>
-                        <td className={`py-3 px-4 text-right font-mono font-bold ${isDebit ? 'text-rose-700' : 'text-emerald-700'}`}>
+                        <td className={`py-3 px-4 text-right font-mono font-bold ${isDebit ? 'text-rose-700' : 'text-amber-700'}`}>
                           {isDebit ? '-' : '+'}KES {Number(l.amount_kes || 0).toLocaleString()}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
@@ -348,8 +348,8 @@ export function WalletBillingView({
               </p>
             </div>
             <div className="inline-flex bg-slate-100 rounded-xl p-1 font-bold">
-              <button type="button" onClick={() => setBillingCycle('monthly')} className={`px-3 py-1 rounded-lg ${billingCycle === 'monthly' ? 'bg-white shadow-sm text-emerald-800' : 'text-slate-600'}`}>Monthly</button>
-              <button type="button" onClick={() => setBillingCycle('annual')} className={`px-3 py-1 rounded-lg ${billingCycle === 'annual' ? 'bg-white shadow-sm text-emerald-800' : 'text-slate-600'}`}>Annual (2 mos free)</button>
+              <button type="button" onClick={() => setBillingCycle('monthly')} className={`px-3 py-1 rounded-lg ${billingCycle === 'monthly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600'}`}>Monthly</button>
+              <button type="button" onClick={() => setBillingCycle('annual')} className={`px-3 py-1 rounded-lg ${billingCycle === 'annual' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600'}`}>Annual (2 mos free)</button>
             </div>
           </div>
 
@@ -358,9 +358,9 @@ export function WalletBillingView({
               const isCurrent = (subscription?.plan_id || 'growth') === p.id;
               const price = billingCycle === 'annual' ? Number(p.annual_kes) : Number(p.monthly_kes);
               return (
-                <div key={p.id} className={`rounded-2xl border p-5 space-y-4 bg-white ${isCurrent ? 'border-emerald-600 ring-2 ring-emerald-600/20' : 'border-slate-200'}`}>
+                <div key={p.id} className={`rounded-2xl border p-5 space-y-4 bg-white ${isCurrent ? 'border-amber-400 ring-2 ring-emerald-600/20' : 'border-slate-200'}`}>
                   <div>
-                    <p className="text-xs font-bold uppercase text-emerald-700">{p.max_locations} Location(s)</p>
+                    <p className="text-xs font-bold uppercase text-amber-700">{p.max_locations} Location(s)</p>
                     <h3 className="text-lg font-black text-slate-900 mt-0.5">{p.name}</h3>
                     <p className="text-2xl font-black text-slate-900 mt-2 font-mono">
                       KES {price.toLocaleString()} <span className="text-xs font-semibold text-slate-400">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
@@ -368,7 +368,7 @@ export function WalletBillingView({
                   </div>
                   <ul className="space-y-1.5 text-xs text-slate-600">
                     {(p.features || []).map((f) => (
-                      <li key={f} className="flex items-center gap-2"><CheckCircle2 size={13} className="text-emerald-600 shrink-0" /> {f}</li>
+                      <li key={f} className="flex items-center gap-2"><CheckCircle2 size={13} className="text-amber-600 shrink-0" /> {f}</li>
                     ))}
                   </ul>
                   <button
@@ -376,7 +376,7 @@ export function WalletBillingView({
                     disabled={saving || isCurrent}
                     onClick={() => handleSwitchPlan(p)}
                     className={`w-full py-2.5 rounded-xl text-xs font-black ${
-                      isCurrent ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-slate-900 hover:bg-emerald-700 text-white'
+                      isCurrent ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'bg-slate-900 hover:bg-amber-400 text-black'
                     }`}
                   >
                     {isCurrent ? 'Current Plan' : `Switch to ${p.name}`}
@@ -405,7 +405,7 @@ export function WalletBillingView({
                     <td className="py-3 px-4 uppercase font-bold">{inv.plan_id}</td>
                     <td className="py-3 px-4 text-slate-500">{new Date(inv.created_at).toLocaleDateString('en-KE')}</td>
                     <td className="py-3 px-4 text-right font-mono font-bold">KES {Number(inv.amount_kes || 0).toLocaleString()}</td>
-                    <td className="py-3 px-4 uppercase font-bold text-emerald-700">{inv.status}</td>
+                    <td className="py-3 px-4 uppercase font-bold text-amber-700">{inv.status}</td>
                   </tr>
                 ))}
                 {invoices.length === 0 && (
@@ -422,8 +422,8 @@ export function WalletBillingView({
         <div className="space-y-4">
           <div className="flex items-center justify-between bg-white border border-slate-200 rounded-2xl p-4 text-xs">
             <div className="inline-flex bg-slate-100 rounded-xl p-1 font-bold">
-              <button type="button" onClick={() => setPaystackSubTab('transactions')} className={`px-3 py-1 rounded-lg ${paystackSubTab === 'transactions' ? 'bg-white shadow-sm text-emerald-800' : 'text-slate-600'}`}>Transactions ({paystackTransactions.length})</button>
-              <button type="button" onClick={() => setPaystackSubTab('payouts')} className={`px-3 py-1 rounded-lg ${paystackSubTab === 'payouts' ? 'bg-white shadow-sm text-emerald-800' : 'text-slate-600'}`}>Payout Schedule</button>
+              <button type="button" onClick={() => setPaystackSubTab('transactions')} className={`px-3 py-1 rounded-lg ${paystackSubTab === 'transactions' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600'}`}>Transactions ({paystackTransactions.length})</button>
+              <button type="button" onClick={() => setPaystackSubTab('payouts')} className={`px-3 py-1 rounded-lg ${paystackSubTab === 'payouts' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600'}`}>Payout Schedule</button>
             </div>
             <div className="text-slate-500">
               Payout Account: <strong className="text-slate-900">{payoutAcc.bank_name || 'Not configured'} {payoutAcc.account_number ? `(${payoutAcc.account_number})` : ''}</strong>
@@ -448,7 +448,7 @@ export function WalletBillingView({
                       <td className="py-3 px-4 font-mono font-bold">#{o.ticket_number || String(o.id).slice(0, 8)}</td>
                       <td className="py-3 px-4">{o.sales_channel || o.order_channel || 'Online'} · {o.payment_method}</td>
                       <td className="py-3 px-4 text-slate-500">{new Date(o.created_at).toLocaleString('en-KE')}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">KES {Number(o.total_amount || 0).toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-amber-700">KES {Number(o.total_amount || 0).toLocaleString()}</td>
                       <td className="py-3 px-4 uppercase font-bold">{o.payment_status || 'Settled'}</td>
                     </tr>
                   ))}
@@ -494,7 +494,7 @@ export function WalletBillingView({
               <label className="block font-bold mb-1">Transaction Reference</label>
               <input type="text" value={depositForm.reference} onChange={(e) => setDepositForm((p) => ({ ...p, reference: e.target.value }))} placeholder="Auto-generated if blank" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
             </div>
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">
+            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
               {saving ? 'Recording...' : 'Confirm Topup'}
             </button>
           </form>
@@ -531,7 +531,7 @@ export function WalletBillingView({
               <label className="block font-bold mb-1">Delivery / Deployment Notes</label>
               <textarea rows={2} value={loanForm.notes} onChange={(e) => setLoanForm((p) => ({ ...p, notes: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
             </div>
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">
+            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
               {saving ? 'Submitting...' : 'Submit Hardware / Loan Request'}
             </button>
           </form>

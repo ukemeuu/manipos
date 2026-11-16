@@ -146,7 +146,7 @@ export function PojOperationsView({
     return (
       <div className="space-y-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3">
-          <QrCode className="text-emerald-700" size={20} />
+          <QrCode className="text-amber-700" size={20} />
           <div>
             <h2 className="text-base font-black text-slate-900">QR Code Vault & Direct Ordering Links</h2>
             <p className="text-xs text-slate-500">Storefront: {baseUrl}</p>
@@ -160,13 +160,13 @@ export function PojOperationsView({
   return (
     <div className={standalone ? 'min-h-screen bg-slate-50 text-slate-900' : 'space-y-5'}>
       {standalone && (
-        <header className="bg-[#0B3B24] text-white px-6 py-4 flex items-center justify-between">
+        <header className="bg-[#0d0d0d] text-white px-6 py-4 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">{restaurantName} · {mode.toUpperCase()} TERMINAL</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">{restaurantName} · {mode.toUpperCase()} TERMINAL</p>
             <h1 className="text-lg font-black">Signed in as {actorName}</h1>
           </div>
           {onSignOut && (
-            <button type="button" onClick={onSignOut} className="px-3.5 py-2 rounded-xl bg-emerald-900 hover:bg-rose-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+            <button type="button" onClick={onSignOut} className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-rose-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
               <LogOut size={14} /> Sign Out
             </button>
           )}
@@ -175,7 +175,7 @@ export function PojOperationsView({
 
       <div className={standalone ? 'max-w-6xl mx-auto p-6 space-y-5' : 'space-y-5'}>
         {notice && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl">
+          <div className="bg-amber-50 border border-amber-200 text-slate-900 text-xs font-bold px-4 py-3 rounded-xl">
             {notice}
           </div>
         )}
@@ -185,7 +185,7 @@ export function PojOperationsView({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <p className="text-[11px] font-black uppercase text-slate-400">Gross Customer Sales</p>
-                <p className="text-2xl font-black text-emerald-700 font-mono mt-1">KES {grossSales.toLocaleString()}</p>
+                <p className="text-2xl font-black text-amber-700 font-mono mt-1">KES {grossSales.toLocaleString()}</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <p className="text-[11px] font-black uppercase text-slate-400">Recorded Operating Expenses</p>
@@ -212,7 +212,7 @@ export function PojOperationsView({
                 }}
                 className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3"
               >
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><Receipt size={15} className="text-emerald-700" /> Record Operating Expense</h3>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><Receipt size={15} className="text-amber-700" /> Record Operating Expense</h3>
                 <select value={expForm.category} onChange={(e) => setExpForm((p) => ({ ...p, category: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
                   {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                 </select>
@@ -230,7 +230,7 @@ export function PojOperationsView({
                   </select>
                   <input type="text" value={expForm.vendor_name} onChange={(e) => setExpForm((p) => ({ ...p, vendor_name: e.target.value }))} placeholder="Vendor (Optional)" className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                 </div>
-                <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1 cursor-pointer">
+                <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1 cursor-pointer">
                   <Plus size={14} /> Save Expense
                 </button>
               </form>
@@ -301,11 +301,11 @@ export function PojOperationsView({
               }}
               className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3"
             >
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><Thermometer size={15} className="text-emerald-700" /> Cold-Chain & Receiving Temp Log</h3>
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><Thermometer size={15} className="text-amber-700" /> Cold-Chain & Receiving Temp Log</h3>
               <input type="text" required value={tempForm.equipment_name} onChange={(e) => setTempForm((p) => ({ ...p, equipment_name: e.target.value }))} placeholder="Unit / Delivery Truck" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
               <input type="number" step="0.1" required value={tempForm.temp_celsius} onChange={(e) => setTempForm((p) => ({ ...p, temp_celsius: e.target.value }))} placeholder="Temp (°C)" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
               <textarea rows={2} value={tempForm.notes} onChange={(e) => setTempForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Supplier / Batch Notes" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-              <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+              <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer">
                 Log Temperature
               </button>
             </form>
@@ -319,7 +319,7 @@ export function PojOperationsView({
                     <p className="text-xs font-black text-slate-900">{t.equipment_name}</p>
                     <p className="text-[11px] text-slate-500">{new Date(t.created_at).toLocaleString('en-KE')} · By {t.recorded_by || 'Staff'} {t.notes ? `· ${t.notes}` : ''}</p>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-black ${t.status === 'Warning' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-black ${t.status === 'Warning' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>
                     {t.temp_celsius}°C
                   </span>
                 </div>
@@ -342,7 +342,7 @@ export function PojOperationsView({
               }}
               className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3"
             >
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><ClipboardList size={15} className="text-emerald-700" /> Internal Stock Requisition</h3>
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2"><ClipboardList size={15} className="text-amber-700" /> Internal Stock Requisition</h3>
               <select value={reqForm.department} onChange={(e) => setReqForm((p) => ({ ...p, department: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
                 <option>Kitchen</option>
                 <option>Bar / Beverage</option>
@@ -355,7 +355,7 @@ export function PojOperationsView({
                 <input type="text" value={reqForm.unit} onChange={(e) => setReqForm((p) => ({ ...p, unit: e.target.value }))} placeholder="Unit (kg/L/pcs)" className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
               </div>
               <textarea rows={2} value={reqForm.notes} onChange={(e) => setReqForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Urgency / Notes" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-              <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+              <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer">
                 Submit Requisition
               </button>
             </form>
@@ -370,9 +370,9 @@ export function PojOperationsView({
                     <p className="text-[11px] text-slate-500">{r.department} · Requested by {r.requested_by}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${r.status === 'Issued' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{r.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${r.status === 'Issued' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{r.status}</span>
                     {r.status === 'Pending' && (
-                      <button type="button" onClick={() => approveRequisition(r.id, 'Issued')} className="p-1.5 rounded-lg bg-emerald-700 text-white cursor-pointer" title="Issue Stock">
+                      <button type="button" onClick={() => approveRequisition(r.id, 'Issued')} className="p-1.5 rounded-lg bg-amber-400 text-black cursor-pointer" title="Issue Stock">
                         <Check size={13} />
                       </button>
                     )}

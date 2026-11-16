@@ -450,7 +450,7 @@ export function RetailPosTerminal({
         {/* Scan Status & Connection Indicators */}
         <div className="flex items-center gap-4">
           {scanFeedback && (
-            <div className={`text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 animate-pulse ${scanFeedback.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+            <div className={`text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 animate-pulse ${scanFeedback.success ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
               }`}>
               {scanFeedback.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
               <span>{scanFeedback.text}</span>
@@ -459,7 +459,7 @@ export function RetailPosTerminal({
 
           <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs">
             {isOnline ? (
-              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span className="flex items-center gap-1.5 text-amber-400 font-bold">
                 <Wifi className="w-3.5 h-3.5" /> Cloud Sync Active
               </span>
             ) : (
@@ -577,7 +577,7 @@ export function RetailPosTerminal({
                         ? 'bg-red-500/20 text-red-400'
                         : product.stock_quantity <= 5
                           ? 'bg-amber-500/20 text-amber-400'
-                          : 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-amber-400/10 text-amber-400'
                         }`}>
                         {product.stock_quantity <= 0 ? 'Out of Stock' : `${product.stock_quantity} left`}
                       </span>
@@ -741,7 +741,7 @@ export function RetailPosTerminal({
             {/* Payment Method Selector */}
             <div className="grid grid-cols-3 gap-2">
               {[
-                { id: 'CASH', label: 'Cash', icon: Banknote, color: 'text-emerald-400' },
+                { id: 'CASH', label: 'Cash', icon: Banknote, color: 'text-amber-400' },
                 { id: 'CARD', label: 'Card / POS', icon: CreditCard, color: 'text-cyan-400' },
                 { id: 'MPESA', label: 'Mobile / M-Pesa', icon: Smartphone, color: 'text-amber-400' },
               ].map(m => (
@@ -786,9 +786,9 @@ export function RetailPosTerminal({
                 </div>
 
                 {Number(amountTendered) >= totalAmount && (
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="p-3 rounded-xl bg-amber-400/10 border border-amber-400/20 text-center">
                     <span className="text-xs text-slate-400">Change Due: </span>
-                    <strong className="text-emerald-400 font-mono text-base font-black">
+                    <strong className="text-amber-400 font-mono text-base font-black">
                       KES {(Number(amountTendered) - totalAmount).toFixed(2)}
                     </strong>
                   </div>
@@ -811,7 +811,7 @@ export function RetailPosTerminal({
       {completedOrder && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl text-center">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-6 h-6" />
             </div>
 

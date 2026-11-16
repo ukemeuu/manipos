@@ -1364,7 +1364,7 @@ export function AdminDashboard({
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="animate-spin text-emerald-700 mx-auto" size={40} />
+          <Loader2 className="animate-spin text-amber-700 mx-auto" size={40} />
           <p className="text-slate-500 text-sm font-semibold tracking-wide uppercase">Loading ManiPOS Command Center...</p>
         </div>
       </div>
@@ -1372,13 +1372,13 @@ export function AdminDashboard({
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 flex font-sans overflow-x-hidden">
-      {/* 1. ORDA FAR-LEFT DEEP GREEN ICON RAIL (Tablet md+ & Desktop) */}
-      <nav className="w-16 sm:w-[70px] bg-[#0B3B24] text-emerald-100 hidden md:flex flex-col justify-between items-center py-4 shrink-0 z-30 border-r border-emerald-950">
+    <div className="min-h-[100dvh] bg-white text-slate-900 flex font-sans overflow-x-hidden">
+      {/* 1. FAR-LEFT BLACK & YELLOW ICON RAIL (Tablet md+ & Desktop) */}
+      <nav className="w-16 sm:w-[70px] bg-[#0d0d0d] text-slate-200 hidden md:flex flex-col justify-between items-center py-4 shrink-0 z-30 border-r border-slate-800">
         <div className="w-full flex flex-col items-center gap-2">
           <div
             onClick={() => selectModule('orders', 'orders')}
-            className="w-10 h-10 rounded-xl bg-white text-[#0B3B24] font-black text-lg flex items-center justify-center shadow-md cursor-pointer mb-3"
+            className="w-10 h-10 rounded-xl bg-amber-400 text-black font-black text-lg flex items-center justify-center shadow-md cursor-pointer mb-3"
             title={profileName || restaurantName}
           >
             {(profileName || restaurantName || 'M')[0].toUpperCase()}
@@ -1394,8 +1394,8 @@ export function AdminDashboard({
                   onClick={() => selectModule(item.id, item.tab)}
                   title={item.label}
                   className={`relative w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${isActive
-                    ? 'bg-emerald-700/80 text-white shadow-inner ring-1 ring-emerald-400/30'
-                    : 'text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white'
+                    ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-amber-400'
                     }`}
                 >
                   <Icon size={18} />
@@ -1410,7 +1410,7 @@ export function AdminDashboard({
             })}
         </div>
 
-        <div className="w-full flex flex-col items-center gap-2 pt-3 border-t border-emerald-900/80">
+        <div className="w-full flex flex-col items-center gap-2 pt-3 border-t border-slate-800">
           {isAdmin && (
             <button
               type="button"
@@ -1418,7 +1418,7 @@ export function AdminDashboard({
               title={settings.store_closed ? 'Store Closed — Click to Reopen' : 'Close Store (End of Day)'}
               className={`w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 transition cursor-pointer ${settings.store_closed
                 ? 'bg-rose-600 text-white'
-                : 'text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-amber-400'
                 }`}
             >
               <Power size={17} />
@@ -1433,7 +1433,7 @@ export function AdminDashboard({
               type="button"
               onClick={onSignOut}
               title="Sign Out"
-              className="w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 text-emerald-200/70 hover:bg-rose-950/60 hover:text-rose-200 transition cursor-pointer"
+              className="w-12 py-2 rounded-xl flex flex-col items-center justify-center gap-1 text-amber-300/70 hover:bg-rose-950/60 hover:text-rose-200 transition cursor-pointer"
             >
               <LogOut size={17} />
               <span className="text-[9px] font-bold leading-none">Exit</span>
@@ -1484,13 +1484,13 @@ export function AdminDashboard({
                       syncUrlForOrdaState('orders', 'orders', false);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition ${selected
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      ? 'bg-amber-50 text-slate-900 border border-amber-200'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       }`}
                   >
                     <span>{b.label}</span>
                     <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${selected ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${selected ? 'bg-amber-400 text-black' : 'bg-slate-100 text-slate-600'
                         }`}
                     >
                       {b.count}
@@ -1524,7 +1524,7 @@ export function AdminDashboard({
                           setReportSubTab(r.id);
                           selectModule('dashboard', 'reports');
                         }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${active ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${active ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                           }`}
                       >
                         <RIcon size={14} /> {r.label}
@@ -1534,7 +1534,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('dashboard', 'fpa-expenses')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'fpa-expenses' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'fpa-expenses' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Receipt size={14} /> Accountant &amp; FP&amp;A
@@ -1542,7 +1542,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('dashboard', 'analytics')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'analytics' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'analytics' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <TrendingUp size={14} /> Legacy Sales Charts
@@ -1552,7 +1552,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('dashboard', 'onboarding')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'onboarding' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'onboarding' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <ShieldCheck size={15} /> Store Setup Checklist
@@ -1565,7 +1565,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('customers', 'customers')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'customers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'customers' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <Users size={14} /> Customer List
@@ -1573,7 +1573,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('customers', 'guest-crm')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'guest-crm' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'guest-crm' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <UserCheck size={14} /> Guest CRM &amp; Tags
@@ -1581,7 +1581,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('customers', 'customer-retention')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'customer-retention' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'customer-retention' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <TrendingUp size={14} /> Customer Retention &amp; VIP
@@ -1589,7 +1589,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('customers', 'store-credit')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'store-credit' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'store-credit' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <Wallet size={14} /> Store Credit Wallets
@@ -1599,7 +1599,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('customers', 'promotions')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'promotions' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'promotions' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Percent size={14} /> Promotions (5 Rules)
@@ -1607,7 +1607,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('customers', 'vouchers')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'vouchers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'vouchers' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Tag size={14} /> Vouchers
@@ -1615,7 +1615,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('customers', 'loyalty')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'loyalty' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'loyalty' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Star size={14} /> Loyalty Programs
@@ -1623,7 +1623,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('customers', 'offers')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'offers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'offers' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Gift size={14} /> Influencer & Legacy Offers
@@ -1634,7 +1634,7 @@ export function AdminDashboard({
                 <button
                   type="button"
                   onClick={() => selectModule('customers', 'feedback')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'feedback' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'feedback' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
                   <MessageSquare size={14} /> Customer Feedback
@@ -1647,7 +1647,7 @@ export function AdminDashboard({
             <button
               type="button"
               onClick={() => selectModule('menu', 'menu')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'menu' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'menu' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                 }`}
             >
               <Package size={15} /> Catalog, Modifiers & Combos
@@ -1661,7 +1661,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'settings')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'settings' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Settings size={15} /> Store Settings & SEO
@@ -1669,7 +1669,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'order-settings')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'order-settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'order-settings' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Truck size={15} /> Order Methods & Void
@@ -1677,7 +1677,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'payment-settings')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'payment-settings' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'payment-settings' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <CreditCard size={15} /> Payment & Charges
@@ -1685,7 +1685,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'delivery-areas')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'delivery-areas' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'delivery-areas' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <MapPin size={15} /> Delivery Areas (Zones)
@@ -1693,7 +1693,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'table-management')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'table-management' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'table-management' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Armchair size={15} /> Table Management & QR
@@ -1701,7 +1701,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'integrations')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'integrations' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'integrations' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Plug size={15} /> Integrations Hub
@@ -1709,7 +1709,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'omnichannel')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'omnichannel' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'omnichannel' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Globe size={15} /> Omnichannel (Glovo/Bolt/Uber)
@@ -1717,7 +1717,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'api-webhooks')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'api-webhooks' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'api-webhooks' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <KeyRound size={15} /> API Keys & Webhooks
@@ -1727,7 +1727,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('settings', 'locations')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'locations' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'locations' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <MapPin size={15} /> Locations & Branches
@@ -1737,7 +1737,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'team-roles')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'team-roles' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'team-roles' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <ShieldCheck size={15} /> Team Roles (24 POS Perms)
@@ -1745,7 +1745,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'staff')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'staff' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'staff' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Users size={15} /> Staff PINs &amp; Access
@@ -1753,7 +1753,7 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'qr-vault')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'qr-vault' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'qr-vault' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <QrCode size={15} /> QR Code Vault
@@ -1761,10 +1761,10 @@ export function AdminDashboard({
                   <button
                     type="button"
                     onClick={() => selectModule('settings', 'poj-sync')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'poj-sync' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-emerald-700 bg-emerald-50/40 hover:bg-emerald-100 border border-emerald-200/70'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'poj-sync' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-amber-700 bg-amber-50/40 hover:bg-amber-100 border border-amber-200/70'
                       }`}
                   >
-                    <RefreshCw size={15} /> POJ Migration &amp; Sync
+                    <RefreshCw size={15} /> Data Migration &amp; Sync
                   </button>
                 </>
               )}
@@ -1773,7 +1773,7 @@ export function AdminDashboard({
                   href={`/?tenant=${encodeURIComponent(tenantSlug)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 border border-emerald-100 mt-1"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-amber-700 hover:bg-amber-50 border border-emerald-100 mt-1"
                 >
                   <ExternalLink size={15} /> Preview Live Storefront
                 </a>
@@ -1782,7 +1782,7 @@ export function AdminDashboard({
                 <button
                   type="button"
                   onClick={() => selectModule('settings', 'suppliers')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'suppliers' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'suppliers' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
                   <Truck size={15} /> Supplier Management
@@ -1792,7 +1792,7 @@ export function AdminDashboard({
                 <button
                   type="button"
                   onClick={() => selectModule('settings', 'linkhub')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'linkhub' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'linkhub' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
                   <Link2 size={15} /> Link Hub & Socials
@@ -1802,7 +1802,7 @@ export function AdminDashboard({
                 <button
                   type="button"
                   onClick={() => selectModule('settings', 'audit')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'audit' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'audit' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
                   <ShieldCheck size={15} /> Security & Audit Logs
@@ -1833,7 +1833,7 @@ export function AdminDashboard({
                       setInvSection(item.id);
                       selectModule('inventory', 'inventory');
                     }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${active ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${active ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Icon size={14} /> {item.label}
@@ -1851,7 +1851,7 @@ export function AdminDashboard({
                     key={op.id}
                     type="button"
                     onClick={() => selectModule('inventory', op.id)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === op.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === op.id ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <OpIcon size={14} /> {op.label}
@@ -1896,7 +1896,7 @@ export function AdminDashboard({
                     key={item.id}
                     type="button"
                     onClick={() => selectModule('hr', item.id)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === item.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === item.id ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Icon size={15} /> {item.label}
@@ -1919,7 +1919,7 @@ export function AdminDashboard({
                     key={item.id}
                     type="button"
                     onClick={() => selectModule('wallet', item.id)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === item.id ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === item.id ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
                     <Icon size={15} /> {item.label}
@@ -1934,7 +1934,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('account', 'account')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'account' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'account' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <ShieldCheck size={15} /> Security &amp; Support PIN
@@ -1942,7 +1942,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => selectModule('account', 'staff-portal')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'staff-portal' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100'
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'staff-portal' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 <Calendar size={15} /> My Staff Portal
@@ -1966,7 +1966,7 @@ export function AdminDashboard({
                   href={`/?tenant=${encodeURIComponent(tenantSlug)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-amber-700 hover:bg-amber-50"
                 >
                   <ExternalLink size={15} /> Open Live Storefront
                 </a>
@@ -1998,7 +1998,7 @@ export function AdminDashboard({
                   onClick={() => { if (isAdmin) setCloseStoreOpen(true); }}
                   className={`${isAdmin ? 'cursor-pointer' : ''} text-[10px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${settings.store_closed
                     ? 'bg-rose-50 text-rose-700 border-rose-200'
-                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
                     }`}
                 >
                   {settings.store_closed ? 'Closed' : 'Open'}
@@ -2013,7 +2013,7 @@ export function AdminDashboard({
               <select
                 value={activeBranchId}
                 onChange={(e) => setActiveBranchId(e.target.value)}
-                className="hidden sm:block bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+                className="hidden sm:block bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-400"
               >
                 <option value="all">All Branches ({branches.length})</option>
                 {branches.map((b) => (
@@ -2036,7 +2036,7 @@ export function AdminDashboard({
                   return next;
                 });
               }}
-              className="px-3 sm:px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="px-3 sm:px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Plus size={15} />
               <span>{showWebPos ? 'Live Orders' : 'Create Order'}</span>
@@ -2049,7 +2049,7 @@ export function AdminDashboard({
                 setShiftModalMode(activeShift ? 'close' : 'open');
               }}
               className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${activeShift
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                ? 'bg-amber-50 border-amber-200 text-slate-900 hover:bg-amber-100'
                 : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
                 }`}
               title={activeShift ? `Active Shift opened ${new Date(activeShift.opened_at).toLocaleTimeString()}` : 'Open Cashier Shift'}
@@ -2063,7 +2063,7 @@ export function AdminDashboard({
               type="button"
               onClick={handleToggleAutoAccept}
               className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${autoAcceptOrders
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                ? 'bg-amber-50 border-amber-300 text-slate-900'
                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               title="Automatically approve incoming digital menu orders"
@@ -2076,7 +2076,7 @@ export function AdminDashboard({
               type="button"
               onClick={handleOpenPrinterModal}
               className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${qzConnected
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                ? 'bg-amber-50 border-amber-200 text-slate-900'
                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               title="Configure Receipt & Kitchen Printers"
@@ -2139,7 +2139,7 @@ export function AdminDashboard({
                   }}
                   className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${
                     selected
-                      ? 'bg-emerald-700 text-white border-emerald-700'
+                      ? 'bg-amber-400 text-black border-amber-400'
                       : 'bg-slate-50 text-slate-700 border-slate-200'
                   }`}
                 >
@@ -2173,7 +2173,7 @@ export function AdminDashboard({
               <button
                 type="button"
                 onClick={() => { setOrderBucket('new'); selectModule('orders', 'orders'); }}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
               >
                 View Incoming Orders &rarr;
               </button>
@@ -2406,7 +2406,7 @@ export function AdminDashboard({
                       {/* Checklist Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="flex items-center gap-4 bg-slate-950 border border-slate-800/80 p-5 rounded-2xl">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-sm">✓</div>
+                          <div className="w-10 h-10 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-black text-sm">✓</div>
                           <div>
                             <h4 className="font-bold text-white text-sm">1. Restaurant Details</h4>
                             <p className="text-xs text-slate-400">Account & store workspace created</p>
@@ -2414,7 +2414,7 @@ export function AdminDashboard({
                         </div>
 
                         <div className={`flex items-center gap-4 bg-slate-950 border ${menuItems.length > 0 ? 'border-slate-800/80' : 'border-amber-500/40'} p-5 rounded-2xl`}>
-                          <div className={`w-10 h-10 rounded-xl ${menuItems.length > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-400/20 text-amber-400'} flex items-center justify-center font-black text-sm`}>
+                          <div className={`w-10 h-10 rounded-xl ${menuItems.length > 0 ? 'bg-amber-400/20 text-amber-400' : 'bg-amber-400/20 text-amber-400'} flex items-center justify-center font-black text-sm`}>
                             {menuItems.length > 0 ? '✓' : '2'}
                           </div>
                           <div className="flex-1">
@@ -2516,7 +2516,7 @@ export function AdminDashboard({
                     {/* Scorecards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-2xl flex items-center gap-4">
-                        <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 flex items-center justify-center rounded-xl border border-emerald-500/10">
+                        <div className="w-12 h-12 bg-amber-400/10 text-amber-400 flex items-center justify-center rounded-xl border border-amber-400/10">
                           <DollarSign size={24} />
                         </div>
                         <div>
@@ -2621,7 +2621,7 @@ export function AdminDashboard({
                             <h4 className="font-extrabold text-white text-base">Dish Sales Velocity & Performance Analyzer</h4>
                           </div>
                           <p className="text-xs text-slate-400 mt-1">
-                            Culinary sales volume & velocity breakdown. <span className="text-emerald-400 font-semibold">Strictly excludes all delivery charges & packaging fees.</span>
+                            Culinary sales volume & velocity breakdown. <span className="text-amber-400 font-semibold">Strictly excludes all delivery charges & packaging fees.</span>
                           </p>
                         </div>
                         <span className="text-xs font-mono font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-xl">
@@ -2649,7 +2649,7 @@ export function AdminDashboard({
                                     {dish.name}
                                   </span>
                                 </div>
-                                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-mono font-extrabold text-[11px] rounded-lg shrink-0">
+                                <span className="px-2 py-0.5 bg-amber-400/10 text-amber-400 font-mono font-extrabold text-[11px] rounded-lg shrink-0">
                                   {dish.qty} sold
                                 </span>
                               </div>
@@ -2713,7 +2713,7 @@ export function AdminDashboard({
                       </div>
                       <button
                         onClick={() => openStaffModal({ name: '', email: '', role: 'cashier', password: '' })}
-                        className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
+                        className="flex items-center gap-1 bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
                       >
                         <Plus size={16} /> Add Staff Account
                       </button>
@@ -2791,7 +2791,7 @@ export function AdminDashboard({
                           placeholder="e.g. Pot of Jollof Kitchen"
                           value={profileName}
                           onChange={(e) => setProfileName(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors"
                         />
                         <p className="text-[11px] text-slate-500">Printed at the top of every receipt and slip.</p>
                       </div>
@@ -2812,7 +2812,7 @@ export function AdminDashboard({
                               disabled={logoUploading}
                               onChange={(e) => handleLogoUpload(e.target.files?.[0])}
                             />
-                            <span className="inline-flex items-center gap-2 text-xs font-bold text-slate-300 bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl hover:border-emerald-500 transition-colors">
+                            <span className="inline-flex items-center gap-2 text-xs font-bold text-slate-300 bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl hover:border-amber-400 transition-colors">
                               {logoUploading ? 'Uploading…' : 'Upload logo'}
                             </span>
                           </label>
@@ -2839,7 +2839,7 @@ export function AdminDashboard({
                             placeholder="e.g. 5th Floor, Westlands Heights, Nairobi"
                             value={settings.address || ''}
                             onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors"
                           />
                         </div>
                       </div>
@@ -2854,7 +2854,7 @@ export function AdminDashboard({
                             placeholder="e.g. +254 700 123 456"
                             value={settings.phone || ''}
                             onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors"
                           />
                         </div>
                       </div>
@@ -2867,7 +2867,7 @@ export function AdminDashboard({
                             placeholder="e.g. P000000000A"
                             value={settings.kra_pin || ''}
                             onChange={(e) => setSettings({ ...settings, kra_pin: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors font-mono"
                           />
                         </div>
 
@@ -2878,7 +2878,7 @@ export function AdminDashboard({
                             placeholder="e.g. yourrestaurant.co.ke"
                             value={settings.website || ''}
                             onChange={(e) => setSettings({ ...settings, website: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors font-mono"
                           />
                         </div>
                       </div>
@@ -2893,7 +2893,7 @@ export function AdminDashboard({
                               placeholder={network[0].toUpperCase() + network.slice(1)}
                               value={settings.socials?.[network] || ''}
                               onChange={(e) => setSettings((prev) => ({ ...prev, socials: { ...(prev.socials || {}), [network]: e.target.value } }))}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs focus:border-amber-400 focus:outline-none transition-colors font-mono"
                             />
                           ))}
                         </div>
@@ -2907,7 +2907,7 @@ export function AdminDashboard({
                           placeholder="e.g. 174379"
                           value={settings.till_number || ''}
                           onChange={(e) => setSettings({ ...settings, till_number: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors font-mono"
                         />
                         <p className="text-[11px] text-slate-500">Use this instead of a paybill if customers pay from a till.</p>
                       </div>
@@ -2921,7 +2921,7 @@ export function AdminDashboard({
                             placeholder="e.g. 522522"
                             value={settings.mpesa_paybill || ''}
                             onChange={(e) => setSettings({ ...settings, mpesa_paybill: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors font-mono"
                           />
                         </div>
 
@@ -2933,7 +2933,7 @@ export function AdminDashboard({
                             placeholder="e.g. ACCOUNT01"
                             value={settings.mpesa_account || ''}
                             onChange={(e) => setSettings({ ...settings, mpesa_account: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none transition-colors font-mono"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors font-mono"
                           />
                         </div>
                       </div>
@@ -2985,7 +2985,7 @@ export function AdminDashboard({
                               placeholder="Type custom channel name and click Add..."
                               value={settings.custom_channel_input || ''}
                               onChange={(e) => setSettings({ ...settings, custom_channel_input: e.target.value })}
-                              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs focus:border-emerald-500 focus:outline-none"
+                              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs focus:border-amber-400 focus:outline-none"
                             />
                             <button
                               type="button"
@@ -3010,7 +3010,7 @@ export function AdminDashboard({
                           {/* Display custom active channels */}
                           <div className="flex flex-wrap gap-2 pt-1">
                             {(settings.enabled_payment_methods || []).filter(m => !['CASH', 'MPESA', 'CARD', 'UBEREATS', 'GLOVO', 'BOLTFOOD', 'BANK_TRANSFER'].includes(m)).map(customM => (
-                              <span key={customM} className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs rounded-full">
+                              <span key={customM} className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400/10 border border-amber-400/20 text-amber-400 font-bold text-xs rounded-full">
                                 {customM}
                                 <button
                                   type="button"
@@ -3046,7 +3046,7 @@ export function AdminDashboard({
                               placeholder="e.g. Pot of Jollof — Westlands"
                               value={settings.seo_title || ''}
                               onChange={(e) => setSettings({ ...settings, seo_title: e.target.value })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"
                             />
                           </div>
                           <div className="space-y-1.5">
@@ -3060,7 +3060,7 @@ export function AdminDashboard({
                                 cuisines_input: e.target.value,
                                 cuisines: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
                               })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"
                             />
                           </div>
                         </div>
@@ -3072,7 +3072,7 @@ export function AdminDashboard({
                             placeholder="Order authentic smoky Jollof rice, suya & grilled chicken delivered fast in Nairobi..."
                             value={settings.seo_description || ''}
                             onChange={(e) => setSettings({ ...settings, seo_description: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"
                           />
                         </div>
 
@@ -3084,7 +3084,7 @@ export function AdminDashboard({
                               placeholder="e.g. G-XXXXXXXXXX"
                               value={settings.google_analytics_id || ''}
                               onChange={(e) => setSettings({ ...settings, google_analytics_id: e.target.value })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:outline-none"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono focus:border-amber-400 focus:outline-none"
                             />
                           </div>
                           <div className="space-y-1.5">
@@ -3094,7 +3094,7 @@ export function AdminDashboard({
                               placeholder="e.g. 123456789012345"
                               value={settings.meta_pixel_id || ''}
                               onChange={(e) => setSettings({ ...settings, meta_pixel_id: e.target.value })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:outline-none"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono focus:border-amber-400 focus:outline-none"
                             />
                           </div>
                         </div>
@@ -3107,7 +3107,7 @@ export function AdminDashboard({
                               placeholder="e.g. Follow Us on Instagram"
                               value={settings.confirmation_cta_text || settings.confirmation_cta_label || ''}
                               onChange={(e) => setSettings({ ...settings, confirmation_cta_text: e.target.value, confirmation_cta_label: e.target.value })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"
                             />
                           </div>
                           <div className="space-y-1.5">
@@ -3117,7 +3117,7 @@ export function AdminDashboard({
                               placeholder="https://instagram.com/..."
                               value={settings.confirmation_cta_url || ''}
                               onChange={(e) => setSettings({ ...settings, confirmation_cta_url: e.target.value })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"
                             />
                           </div>
                         </div>
@@ -3126,7 +3126,7 @@ export function AdminDashboard({
                       <button
                         type="submit"
                         disabled={submitting}
-                        className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 mt-4 text-sm"
+                        className="w-full flex items-center justify-center gap-2 bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 mt-4 text-sm"
                       >
                         {submitting ? <Loader2 className="animate-spin" size={18} /> : (
                           <>
@@ -3154,7 +3154,7 @@ export function AdminDashboard({
                       </div>
                       <button
                         onClick={() => setEditingSupplier({ name: '', contact_name: '', phone: '', email: '', address: '' })}
-                        className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
+                        className="flex items-center gap-1 bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
                       >
                         <Plus size={16} /> Add Supplier
                       </button>
@@ -3267,7 +3267,7 @@ export function AdminDashboard({
                           <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Active Free Delivery Rule</span>
                           <span className="text-sm font-black text-white mt-1 block">
                             {discounts.find(d => d.type === "free_delivery" && d.is_active) ? (
-                              <span className="text-emerald-400 flex items-center gap-1.5 mt-1">
+                              <span className="text-amber-400 flex items-center gap-1.5 mt-1">
                                 <Check size={14} /> Code: {discounts.find(d => d.type === "free_delivery" && d.is_active).code}
                               </span>
                             ) : (
@@ -3344,7 +3344,7 @@ export function AdminDashboard({
                                   type="button"
                                   onClick={() => toggleDiscountStatus(disc)}
                                   className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border transition-all cursor-pointer ${disc.is_active
-                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                    ? "bg-amber-400/10 border-amber-400/30 text-amber-400"
                                     : "bg-slate-800 border-slate-700 text-slate-400"
                                     }`}
                                 >
@@ -3673,7 +3673,7 @@ export function AdminDashboard({
                       </div>
                       <button
                         onClick={() => setEditingLink({ title: '', subtitle: '', url: '', icon: 'Utensils', badge_text: '', button_color: 'amber', is_active: true })}
-                        className="flex items-center gap-1 bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all cursor-pointer"
+                        className="flex items-center gap-1 bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all cursor-pointer"
                       >
                         <Plus size={16} /> Add New Link
                       </button>
@@ -3894,7 +3894,7 @@ export function AdminDashboard({
                     required
                     defaultValue={editingItem.name}
                     placeholder="e.g. Traditional swallow"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                   />
                 </div>
 
@@ -3907,7 +3907,7 @@ export function AdminDashboard({
                       required
                       defaultValue={editingItem.price}
                       placeholder="e.g. 500"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                     />
                   </div>
 
@@ -3920,7 +3920,7 @@ export function AdminDashboard({
                       list="menu-category-options"
                       defaultValue={editingItem.category || ''}
                       placeholder="e.g. Main Dishes"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-sm focus:border-emerald-500 focus:outline-none text-slate-300"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-sm focus:border-amber-400 focus:outline-none text-slate-300"
                     />
                     <datalist id="menu-category-options">
                       {Array.from(new Set(menuItems.map((m) => m.category).filter(Boolean))).sort().map((c) => (
@@ -3936,7 +3936,7 @@ export function AdminDashboard({
                     name="description"
                     defaultValue={editingItem.description}
                     placeholder="e.g. Served hot with custom additions..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none h-20 resize-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none h-20 resize-none"
                   />
                 </div>
 
@@ -3954,7 +3954,7 @@ export function AdminDashboard({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2"
+                  className="w-full bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2"
                 >
                   {submitting ? <Loader2 className="animate-spin mx-auto" size={18} /> : 'Save Menu Item'}
                 </button>
@@ -3988,7 +3988,7 @@ export function AdminDashboard({
                     required
                     defaultValue={editingStaff.name}
                     placeholder="e.g. Sarah Connor"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                   />
                 </div>
 
@@ -4000,7 +4000,7 @@ export function AdminDashboard({
                     required
                     defaultValue={editingStaff.email}
                     placeholder="e.g. sarah@demostore.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none font-medium"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none font-medium"
                   />
                 </div>
 
@@ -4010,7 +4010,7 @@ export function AdminDashboard({
                     <select
                       name="role"
                       defaultValue={editingStaff.role || 'cashier'}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-sm focus:border-emerald-500 focus:outline-none text-slate-300"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-sm focus:border-amber-400 focus:outline-none text-slate-300"
                     >
                       <option value="cashier">Cashier</option>
                       <option value="waiter">Waiter</option>
@@ -4027,7 +4027,7 @@ export function AdminDashboard({
                       required={!editingStaff.id}
                       defaultValue={editingStaff.pin_code || editingStaff.pin || ''}
                       placeholder="••••••••"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none font-medium"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none font-medium"
                     />
                   </div>
                 </div>
@@ -4040,7 +4040,7 @@ export function AdminDashboard({
                     <button
                       type="button"
                       onClick={() => setStaffPermissions(null)}
-                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors"
                     >
                       Reset to role defaults
                     </button>
@@ -4087,7 +4087,7 @@ export function AdminDashboard({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2"
+                  className="w-full bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2"
                 >
                   {submitting ? <Loader2 className="animate-spin mx-auto" size={18} /> : 'Save Staff Account'}
                 </button>
@@ -4121,7 +4121,7 @@ export function AdminDashboard({
                     required
                     defaultValue={editingSupplier.name}
                     placeholder="e.g. East Africa Wholesalers Ltd"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                   />
                 </div>
 
@@ -4132,7 +4132,7 @@ export function AdminDashboard({
                     type="text"
                     defaultValue={editingSupplier.contact_name}
                     placeholder="e.g. Jane Njoroge"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                   />
                 </div>
 
@@ -4144,7 +4144,7 @@ export function AdminDashboard({
                       type="tel"
                       defaultValue={editingSupplier.phone}
                       placeholder="e.g. +254700000000"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                     />
                   </div>
 
@@ -4155,7 +4155,7 @@ export function AdminDashboard({
                       type="email"
                       defaultValue={editingSupplier.email}
                       placeholder="e.g. sales@vendor.com"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none text-slate-300"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none text-slate-300"
                     />
                   </div>
                 </div>
@@ -4167,14 +4167,14 @@ export function AdminDashboard({
                     type="text"
                     defaultValue={editingSupplier.address}
                     placeholder="e.g. Warehouse 4B, Industrial Area, Nairobi"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2 flex items-center justify-center"
+                  className="w-full bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2 flex items-center justify-center"
                 >
                   {submitting ? <Loader2 className="animate-spin" size={18} /> : 'Save Supplier'}
                 </button>
@@ -4324,7 +4324,7 @@ export function AdminDashboard({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-emerald-500 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2 flex items-center justify-center cursor-pointer"
+                  className="w-full bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50 text-sm mt-2 flex items-center justify-center cursor-pointer"
                 >
                   {submitting ? <Loader2 className="animate-spin" size={18} /> : 'Save Link Button'}
                 </button>
@@ -4383,7 +4383,7 @@ export function AdminDashboard({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Cash Sales</span>
-                  <span className="font-bold text-emerald-700">KES {shiftSummary.cashSales.toLocaleString()}</span>
+                  <span className="font-bold text-amber-700">KES {shiftSummary.cashSales.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">M-Pesa / Card / Other</span>
@@ -4425,7 +4425,7 @@ export function AdminDashboard({
               <button
                 type="submit"
                 disabled={shiftBusy}
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer disabled:opacity-50"
               >
                 {shiftBusy
                   ? 'Saving...'
@@ -4447,7 +4447,7 @@ export function AdminDashboard({
                 <h3 className="text-lg font-black text-slate-900">QZ Tray Thermal Printers</h3>
                 <p className="text-xs text-slate-500">
                   Status:{' '}
-                  <span className={qzConnected ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                  <span className={qzConnected ? 'text-amber-700 font-bold' : 'text-amber-700 font-bold'}>
                     {qzConnected ? 'Connected to QZ Tray' : 'Offline — Using built-in browser print'}
                   </span>
                 </p>
@@ -4534,7 +4534,7 @@ export function AdminDashboard({
                       items: [{ name: 'Printer Test Item', quantity: 1, price: 500 }],
                     }, printerPrefs.frontDeskPrinter || '');
                   }}
-                  className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                  className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-bold text-slate-900 hover:bg-amber-100 cursor-pointer"
                 >
                   Test Print
                 </button>
@@ -4545,7 +4545,7 @@ export function AdminDashboard({
                   setPrinterPrefs(printerPrefs);
                   setPrinterModalOpen(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
               >
                 Save Printers
               </button>
@@ -4561,7 +4561,7 @@ export function AdminDashboard({
             onSubmit={handleUnlockPin}
             className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-7 text-center space-y-5 shadow-2xl"
           >
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="w-14 h-14 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-400 flex items-center justify-center mx-auto">
               <Lock size={24} />
             </div>
             <div>
@@ -4583,7 +4583,7 @@ export function AdminDashboard({
               value={lockPinInput}
               onChange={(e) => setLockPinInput(e.target.value)}
               placeholder="••••"
-              className="w-full text-center tracking-[0.6em] font-mono text-2xl bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-2xl py-3.5 text-white focus:outline-none"
+              className="w-full text-center tracking-[0.6em] font-mono text-2xl bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-2xl py-3.5 text-white focus:outline-none"
             />
             <div className="grid grid-cols-3 gap-2">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Clear', '0', '⌫'].map((key) => (
@@ -4605,7 +4605,7 @@ export function AdminDashboard({
             <button
               type="submit"
               disabled={lockBusy}
-              className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm cursor-pointer disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-400 text-black font-black text-sm cursor-pointer disabled:opacity-50"
             >
               {lockBusy ? 'Verifying...' : 'Unlock POS'}
             </button>
@@ -4616,7 +4616,7 @@ export function AdminDashboard({
       {/* MOBILE BOTTOM NAVIGATION BAR (< md) */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0B3B24] text-emerald-100 border-t border-emerald-900 flex items-center justify-around px-1 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0d0d0d] text-slate-200 border-t border-emerald-900 flex items-center justify-around px-1 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
       >
         {railNavItems.slice(0, 4).map((item) => {
           const Icon = item.icon;
@@ -4627,7 +4627,7 @@ export function AdminDashboard({
               type="button"
               onClick={() => selectModule(item.id, item.tab)}
               className={`relative flex-1 py-1 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold cursor-pointer ${
-                isActive ? 'text-white bg-emerald-700/70' : 'text-emerald-200/80'
+                isActive ? 'text-white bg-amber-400/70' : 'text-amber-300/80'
               }`}
             >
               <Icon size={17} />
@@ -4643,7 +4643,7 @@ export function AdminDashboard({
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
-          className="flex-1 py-1 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-emerald-200/80 cursor-pointer"
+          className="flex-1 py-1 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-amber-300/80 cursor-pointer"
         >
           <Menu size={17} />
           <span>More</span>
@@ -4655,15 +4655,15 @@ export function AdminDashboard({
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs" onClick={() => setMobileNavOpen(false)} />
           <div className="relative z-10 w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col overflow-hidden">
-            <div className="bg-[#0B3B24] text-white px-4 py-4 flex items-center justify-between">
+            <div className="bg-[#0d0d0d] text-white px-4 py-4 flex items-center justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-widest text-emerald-300 font-bold">ManiPOS Menu</p>
+                <p className="text-[10px] uppercase tracking-widest text-amber-300 font-bold">ManiPOS Menu</p>
                 <h2 className="text-sm font-black truncate">{profileName || restaurantName}</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
-                className="p-1.5 rounded-lg bg-emerald-900/60 text-white cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-900/60 text-white cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -4706,7 +4706,7 @@ export function AdminDashboard({
                         }}
                         className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border text-left cursor-pointer ${
                           active
-                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            ? 'bg-amber-400 text-black border-amber-400'
                             : 'bg-slate-50 text-slate-700 border-slate-200'
                         }`}
                       >
@@ -4743,7 +4743,7 @@ export function AdminDashboard({
                         }}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold ${
                           activeTab === 'reports' && reportSubTab === r.id
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            ? 'bg-amber-50 text-slate-900 border border-amber-200'
                             : 'text-slate-600 hover:bg-slate-100'
                         }`}
                       >
@@ -4781,7 +4781,7 @@ export function AdminDashboard({
                         }}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold ${
                           activeTab === s.id
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            ? 'bg-amber-50 text-slate-900 border border-amber-200'
                             : 'text-slate-600 hover:bg-slate-100'
                         }`}
                       >
@@ -4857,7 +4857,7 @@ export function AdminDashboard({
                   frame?.contentWindow?.focus?.();
                   frame?.contentWindow?.print?.();
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer size={14} /> Print Now
               </button>

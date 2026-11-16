@@ -31,7 +31,7 @@ export function AuthenticatedHome({
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-hidden">
       {/* Background ambient lighting */}
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-orange-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-amber-400/10 rounded-full blur-[140px] pointer-events-none" />
 
       {/* Top Header */}
       <header className="bg-slate-900/60 backdrop-blur-md border-b border-slate-900 px-8 py-5 flex items-center justify-between z-10">
@@ -78,7 +78,7 @@ export function AuthenticatedHome({
                 {restaurantName || 'ManiPOS Restaurant'}
               </span>
               <span className="px-3 py-1 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 font-bold flex items-center gap-1.5">
-                <MapPin size={14} className="text-emerald-400" />
+                <MapPin size={14} className="text-amber-400" />
                 {branchName}
               </span>
             </div>
@@ -96,15 +96,15 @@ export function AuthenticatedHome({
               whileHover={{ scale: 1.02, y: -4 }}
               whileTap={{ scale: 0.98 }}
               onClick={onOpenDashboard}
-              className="bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 p-8 rounded-3xl flex flex-col justify-between space-y-6 shadow-2xl transition-all group cursor-pointer relative overflow-hidden"
+              className="bg-slate-900/90 border border-slate-800 hover:border-amber-400/60 p-8 rounded-3xl flex flex-col justify-between space-y-6 shadow-2xl transition-all group cursor-pointer relative overflow-hidden"
             >
               <div className="space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors shadow-lg shadow-emerald-500/10">
+                <div className="w-16 h-16 rounded-2xl bg-amber-400/10 text-amber-400 border border-amber-400/20 flex items-center justify-center group-hover:bg-amber-400 group-hover:text-slate-950 transition-colors shadow-lg shadow-emerald-500/10">
                   <Building2 size={32} />
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-black text-2xl text-white group-hover:text-emerald-400 transition-colors">
+                  <h3 className="font-black text-2xl text-white group-hover:text-amber-400 transition-colors">
                     MANAGEMENT DASHBOARD
                   </h3>
                   <p className="text-sm text-slate-400 leading-relaxed">
@@ -113,7 +113,7 @@ export function AuthenticatedHome({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-emerald-400 font-bold text-sm">
+              <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-amber-400 font-bold text-sm">
                 <span>Open Dashboard</span>
                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
               </div>
@@ -149,18 +149,18 @@ export function AuthenticatedHome({
 
           </div>
 
-          {/* Operations & POJ CRM / HR / Accounting Modules */}
+          {/* Operations, CRM, HR & Accounting Modules */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
             {[
               { page: 'menu-builder', label: 'Menu Builder', desc: 'Categories, items, images and microsite visibility.', Icon: ClipboardList, tone: 'text-violet-400 border-violet-500/30 hover:border-violet-400/60', bg: 'bg-violet-500/10' },
               { page: 'kds', label: 'Kitchen Display', desc: 'Live tickets, prep timers and station filters.', Icon: ChefHat, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
               { page: 'floor', label: 'Floor & Reservations', desc: 'Tables, seating zones and guest bookings.', Icon: Armchair, tone: 'text-sky-400 border-sky-500/30 hover:border-sky-400/60', bg: 'bg-sky-500/10' },
-              { page: 'inventory', label: 'Inventory & Recipes', desc: 'Stock levels, reorder alerts and recipe links.', Icon: Package, tone: 'text-emerald-400 border-emerald-500/30 hover:border-emerald-400/60', bg: 'bg-emerald-500/10' },
+              { page: 'inventory', label: 'Inventory & Recipes', desc: 'Stock levels, reorder alerts and recipe links.', Icon: Package, tone: 'text-amber-400 border-amber-400/30 hover:border-amber-400/60', bg: 'bg-amber-400/10' },
               { url: '/?page=dashboard&tab=guest-crm', page: 'crm', label: 'Guest CRM & Retention', desc: 'Guest directory, VIP tags, visits, retention & feedback.', Icon: UserCheck, tone: 'text-teal-400 border-teal-500/30 hover:border-teal-400/60', bg: 'bg-teal-500/10' },
               { url: '/?page=dashboard&tab=hr-admin', page: 'hr', label: 'Staff HR & Approvals', desc: 'Leave, overtime, advances, loans, warnings & checklists.', Icon: UserCheck, tone: 'text-indigo-400 border-indigo-500/30 hover:border-indigo-400/60', bg: 'bg-indigo-500/10' },
               { url: '/?page=dashboard&tab=fpa-expenses', page: 'accountant', label: 'Accountant & Expenses', desc: 'Gross sales P&L, operating expenses & department budgets.', Icon: Building2, tone: 'text-rose-400 border-rose-500/30 hover:border-rose-400/60', bg: 'bg-rose-500/10' },
               { url: '/?page=dashboard&tab=staff-portal', page: 'staff-portal', label: 'My Staff Portal', desc: 'Leave, loans, salary advances, shifts, HR signatures & ID card.', Icon: Sparkles, tone: 'text-lime-400 border-lime-500/30 hover:border-lime-400/60', bg: 'bg-lime-500/10' },
-              { url: '/?page=dashboard&tab=poj-sync', page: 'poj-sync', label: 'POJ Migration & Sync', desc: 'Import all POJ staff accounts, loans, leave, CRM & keep both linked.', Icon: Link2, tone: 'text-cyan-400 border-cyan-500/30 hover:border-cyan-400/60', bg: 'bg-cyan-500/10' },
+              { url: '/?page=dashboard&tab=poj-sync', page: 'poj-sync', label: 'Data Migration & Sync', desc: 'Import staff accounts, loans, leave, CRM & keep stores linked.', Icon: Link2, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
             ].map((mod) => (
               <motion.button
                 key={mod.page}

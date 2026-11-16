@@ -7,7 +7,7 @@ import {
 import { supabase } from '../lib/supabase';
 
 const TABLE_STATUSES = {
-  available: { label: 'Available', dot: 'bg-emerald-400', card: 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400/60', badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  available: { label: 'Available', dot: 'bg-emerald-400', card: 'border-amber-400/30 bg-amber-400/5 hover:border-amber-400/60', badge: 'bg-amber-400/15 text-amber-300 border-amber-400/30' },
   occupied: { label: 'Occupied', dot: 'bg-orange-400', card: 'border-orange-500/30 bg-orange-500/5 hover:border-orange-400/60', badge: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
   reserved: { label: 'Reserved', dot: 'bg-sky-400', card: 'border-sky-500/30 bg-sky-500/5 hover:border-sky-400/60', badge: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
   cleaning: { label: 'Cleaning', dot: 'bg-slate-400', card: 'border-slate-600 bg-slate-800/40 hover:border-slate-500', badge: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
@@ -307,7 +307,7 @@ export function FloorPlanView({ tenant, staffName = 'Manager', onBack, onOpenPos
             { label: 'Tables', value: stats.total, icon: Armchair, tone: 'text-sky-300' },
             { label: 'Seats', value: stats.seats, icon: Users, tone: 'text-indigo-300' },
             { label: 'Occupied', value: stats.occupied, icon: UtensilsCrossed, tone: 'text-orange-300' },
-            { label: 'Available', value: stats.available, icon: CheckCircle2, tone: 'text-emerald-300' },
+            { label: 'Available', value: stats.available, icon: CheckCircle2, tone: 'text-amber-300' },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
@@ -420,11 +420,11 @@ export function FloorPlanView({ tenant, staffName = 'Manager', onBack, onOpenPos
                   </p>
                   {reservation.notes && <p className="text-[11px] text-slate-500 mt-1">{reservation.notes}</p>}
                 </div>
-                <span className={`px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider ${reservation.status === 'seated' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : reservation.status === 'cancelled' ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-sky-500/15 text-sky-300 border-sky-500/30'}`}>
+                <span className={`px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider ${reservation.status === 'seated' ? 'bg-amber-400/15 text-amber-300 border-amber-400/30' : reservation.status === 'cancelled' ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-sky-500/15 text-sky-300 border-sky-500/30'}`}>
                   {reservation.status || 'confirmed'}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => setReservationStatus(reservation, 'seated')} className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase cursor-pointer">Seat</button>
+                  <button onClick={() => setReservationStatus(reservation, 'seated')} className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 text-amber-300 border border-amber-400/30 text-[10px] font-black uppercase cursor-pointer">Seat</button>
                   <button onClick={() => setReservationStatus(reservation, 'cancelled')} className="p-1.5 rounded-lg bg-red-500/10 text-red-300 border border-red-500/20 cursor-pointer" title="Cancel"><X size={12} /></button>
                 </div>
               </article>

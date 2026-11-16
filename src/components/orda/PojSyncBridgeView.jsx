@@ -64,7 +64,7 @@ export function PojSyncBridgeView({
     }
     setSyncing(true);
     setErrorMsg('');
-    setProgressMsg('Connecting to pojmanagement.com…');
+    setProgressMsg('Connecting to external store…');
     try {
       const snapshot = await exportSnapshotFromPoj({
         pojUrl: POJ_DEFAULT_URL,
@@ -82,12 +82,12 @@ export function PojSyncBridgeView({
         onProgress: (m) => setProgressMsg(m),
       });
       setSummary(res);
-      setProgressMsg('All POJ Management data extracted and synced into ManiPOS!');
+      setProgressMsg('All external store data extracted and synced into ManiPOS!');
       onSyncCompleted?.();
     } catch (err) {
-      const msg = err?.message || 'POJ sync failed. Check your POJ Management credentials and try again.';
+      const msg = err?.message || 'Data sync failed. Check your source store credentials and try again.';
       if (msg.toLowerCase().includes('not authorised')) {
-        setErrorMsg('Admin actor not yet linked in ManiPOS staff_access. Sign in once using your ManiPOS Staff Admin PIN (e.g. POJ Lead Cashier) or run migration 20261122_fix_poj_staff_pin_sync_and_login.sql.');
+        setErrorMsg('Admin actor not yet linked in ManiPOS staff_access. Sign in once using your ManiPOS Staff Admin PIN.');
       } else {
         setErrorMsg(msg);
       }
@@ -104,7 +104,7 @@ export function PojSyncBridgeView({
     try {
       const text = await file.text();
       const snapshot = JSON.parse(text);
-      if (!snapshot?.tables) throw new Error('Invalid POJ backup JSON file.');
+      if (!snapshot?.tables) throw new Error('Invalid backup JSON file.');
       setLastSnapshot(snapshot);
       const res = await importPojSnapshotToManiPos({
         snapshot,
@@ -156,16 +156,16 @@ export function PojSyncBridgeView({
       <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-black uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-black uppercase tracking-wider">
               <Link2 size={13} /> Two-Way Migration &amp; Auth Bridge
             </div>
             <h2 className="text-lg font-black text-slate-900">
-              POJ Management -&gt; {restaurantName} Migration &amp; Live Link
+              External Store -&gt; {restaurantName} Migration &amp; Live Link
             </h2>
             <p className="text-xs text-slate-500 max-w-2xl">
-              Extract all staff profiles, 4-digit terminal PINs, menu items, all modifier groups (spice levels, add-ons, swallow choices),
+              Extract staff profiles, 4-digit terminal PINs, menu items, modifier groups,
               leave requests, loan requests, salary advances, overtime logs, warnings, HR documents, shift rosters, expenses, FP&amp;A budgets,
-              Guest CRM, delivery fees, inventory &amp; POs from <span className="font-semibold text-slate-700">pojmanagement.com</span> safely without duplicates.
+              Guest CRM, delivery fees, inventory &amp; POs safely without duplicates.
             </p>
           </div>
           {linkRecord?.last_synced_at && (
@@ -181,25 +181,25 @@ export function PojSyncBridgeView({
           )}
         </div>
 
-        <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="text-emerald-700 shrink-0 mt-0.5" size={18} />
+            <ShieldCheck className="text-amber-700 shrink-0 mt-0.5" size={18} />
             <div>
-              <p className="text-xs font-black text-emerald-950">
+              <p className="text-xs font-black text-slate-950">
                 Single Sign-On Auth Bridge (Keep Both Working Together)
               </p>
-              <p className="text-[11px] text-emerald-800">
-                Staff can sign in directly on manipos.com using their existing pojmanagement.com email &amp; password —
+              <p className="text-[11px] text-slate-700">
+                Staff can sign in directly on manipos.com using their existing store email &amp; password —
                 ManiPOS automatically links &amp; provisions their tenant account on first login.
               </p>
             </div>
           </div>
-          <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-900">
+          <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-950">
             <input
               type="checkbox"
               checked={linkAuthEnabled}
               onChange={(e) => toggleAuthBridge(e.target.checked)}
-              className="rounded border-emerald-400 text-emerald-700"
+              className="rounded border-amber-400 text-amber-700"
             />
             {linkAuthEnabled ? 'Linked Active' : 'Paused'}
           </label>
@@ -214,7 +214,7 @@ export function PojSyncBridgeView({
 
         {progressMsg && (
           <div className="bg-slate-900 text-slate-100 rounded-xl px-4 py-3 text-xs font-semibold flex items-center gap-2.5">
-            {syncing ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <CheckCircle2 size={15} className="text-emerald-400" />}
+            {syncing ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <CheckCircle2 size={15} className="text-amber-400" />}
             <span>{progressMsg}</span>
           </div>
         )}
@@ -222,20 +222,20 @@ export function PojSyncBridgeView({
         <form onSubmit={handleExtractAndImport} className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
           <div>
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
-              POJ Management Admin Email
+              Source Store Admin Email
             </label>
             <input
               type="email"
               required={!serviceRoleKey}
               value={pojEmail}
               onChange={(e) => setPojEmail(e.target.value)}
-              placeholder="potofjollofke@gmail.com"
+              placeholder="admin@yourstore.com"
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900"
             />
           </div>
           <div>
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
-              POJ Management Password
+              Source Store Password
             </label>
             <input
               type="password"
@@ -250,10 +250,10 @@ export function PojSyncBridgeView({
             <button
               type="submit"
               disabled={syncing}
-              className="w-full bg-[#0B3B24] hover:bg-emerald-800 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-              <span>{syncing ? 'Extracting & Syncing…' : 'Sync All Data from POJ'}</span>
+              <span>{syncing ? 'Extracting & Syncing…' : 'Sync All Store Data'}</span>
             </button>
           </div>
         </form>
@@ -264,7 +264,7 @@ export function PojSyncBridgeView({
             onClick={() => setShowAdvanced((v) => !v)}
             className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
           >
-            {showAdvanced ? 'Hide Advanced Key Option ▲' : 'Optional: Use POJ Service Role Key ▼'}
+            {showAdvanced ? 'Hide Advanced Key Option ▲' : 'Optional: Use Service Role Key ▼'}
           </button>
           <div className="flex flex-wrap items-center gap-2">
             <label className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center gap-1.5 cursor-pointer">
@@ -277,7 +277,7 @@ export function PojSyncBridgeView({
                 onClick={handleDownloadJson}
                 className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 cursor-pointer"
               >
-                <Download size={14} /> Download POJ Snapshot (.json)
+                <Download size={14} /> Download Store Snapshot (.json)
               </button>
             )}
           </div>
@@ -286,7 +286,7 @@ export function PojSyncBridgeView({
         {showAdvanced && (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
-              Optional POJ Supabase Service Role Key (bypasses row RLS if needed)
+              Optional Source Supabase Service Role Key (bypasses row RLS if needed)
             </label>
             <input
               type="password"
@@ -302,13 +302,13 @@ export function PojSyncBridgeView({
       {summary && (
         <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
-            <Database size={14} className="text-emerald-700" /> Latest Sync Breakdown
+            <Database size={14} className="text-amber-700" /> Latest Sync Breakdown
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {Object.entries(summary).map(([tbl, st]) => (
               <div key={tbl} className="border border-slate-200 rounded-xl p-3 bg-slate-50">
                 <p className="text-[11px] font-black text-slate-800 truncate">{tbl}</p>
-                <p className="text-xs text-emerald-700 font-bold mt-1">
+                <p className="text-xs text-amber-700 font-bold mt-1">
                   +{st?.inserted || 0} new · {st?.updated || 0} updated
                 </p>
                 {st?.error && (

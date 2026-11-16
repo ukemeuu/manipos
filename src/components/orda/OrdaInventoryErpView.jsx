@@ -882,7 +882,7 @@ export function OrdaInventoryErpView({
                 onClick={() => setSection(t.id)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition ${
                   section === t.id
-                    ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                    ? 'bg-amber-50 border-amber-400 text-slate-900'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
@@ -894,7 +894,7 @@ export function OrdaInventoryErpView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
           <button type="button" onClick={() => setNotice('')} className="hover:underline">Dismiss</button>
         </div>
@@ -987,12 +987,12 @@ export function OrdaInventoryErpView({
                           <td className="py-2.5 px-3 text-right font-mono font-bold">{i.quantity}</td>
                           <td className="py-2.5 px-3 text-right font-mono">{i.reorder_threshold}</td>
                           <td className="py-2.5 px-3 text-right font-mono">KES {Number(i.cost_price || 0).toLocaleString()}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">KES {Math.round(val).toLocaleString()}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700">KES {Math.round(val).toLocaleString()}</td>
                           <td className="py-2.5 px-3 text-right">{bCnt}</td>
                           <td className="py-2.5 px-3">{i.supplier || '—'}</td>
                           <td className="py-2.5 px-3">{stores.find((s) => s.id === selectedStoreId)?.name || 'All'}</td>
                           <td className="py-2.5 px-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLow ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLow ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>
                               {isLow ? 'Reorder' : 'Healthy'}
                             </span>
                           </td>
@@ -1014,7 +1014,7 @@ export function OrdaInventoryErpView({
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-4">
                 <p className="text-[10px] font-bold uppercase text-slate-400">Ideal Food Cost (BOM)</p>
-                <p className="text-xl font-black text-emerald-700 mt-1">
+                <p className="text-xl font-black text-amber-700 mt-1">
                   KES {Math.round(depletionCostTotal).toLocaleString()} (
                   {totalSalesRev > 0 ? ((depletionCostTotal / totalSalesRev) * 100).toFixed(1) : '0.0'}%)
                 </p>
@@ -1041,7 +1041,7 @@ export function OrdaInventoryErpView({
               <div className="flex justify-between py-2 border-b border-slate-100"><span>Gross Completed Sales</span><span className="font-mono font-bold">KES {totalSalesRev.toLocaleString()}</span></div>
               <div className="flex justify-between py-2 border-b border-slate-100 text-rose-700"><span>Theoretical COGS (BOM Depletion)</span><span className="font-mono">-KES {Math.round(depletionCostTotal).toLocaleString()}</span></div>
               <div className="flex justify-between py-2 border-b border-slate-100 text-rose-700"><span>Shrinkage / Spoilage / Wastage Cost</span><span className="font-mono">-KES {Math.round(shrinkageCostTotal).toLocaleString()}</span></div>
-              <div className="flex justify-between py-2 font-black text-sm text-emerald-700">
+              <div className="flex justify-between py-2 font-black text-sm text-amber-700">
                 <span>Estimated Gross Food Profit</span>
                 <span className="font-mono">KES {Math.round(totalSalesRev - depletionCostTotal - shrinkageCostTotal).toLocaleString()}</span>
               </div>
@@ -1071,7 +1071,7 @@ export function OrdaInventoryErpView({
                         <td className="py-3 px-4 text-right font-mono">{b.quantity} {ing?.unit || ''}</td>
                         <td className="py-3 px-4">{b.expiry_date}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${days <= 0 ? 'bg-rose-100 text-rose-800' : days <= 7 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${days <= 0 ? 'bg-rose-100 text-rose-800' : days <= 7 ? 'bg-amber-100 text-amber-800' : 'bg-amber-50 text-amber-700'}`}>
                             {days <= 0 ? 'EXPIRED' : `${days} days left`}
                           </span>
                         </td>
@@ -1105,7 +1105,7 @@ export function OrdaInventoryErpView({
                       <td className="py-3 px-4">{new Date(sc.created_at).toLocaleString('en-KE')}</td>
                       <td className="py-3 px-4">{sc.counted_by || 'Staff'}</td>
                       <td className="py-3 px-4 text-right font-bold">{(sc.lines || []).length}</td>
-                      <td className={`py-3 px-4 text-right font-mono font-black ${Number(sc.total_variance_value) < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                      <td className={`py-3 px-4 text-right font-mono font-black ${Number(sc.total_variance_value) < 0 ? 'text-rose-700' : 'text-amber-700'}`}>
                         KES {Number(sc.total_variance_value || 0).toLocaleString()}
                       </td>
                     </tr>
@@ -1176,7 +1176,7 @@ export function OrdaInventoryErpView({
                       setSection('purchase-orders');
                       setPoDrawer(true);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-emerald-700 text-white text-xs font-black"
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-black"
                   >
                     Create PO from Low Stock
                   </button>
@@ -1220,14 +1220,14 @@ export function OrdaInventoryErpView({
               <button
                 type="button"
                 onClick={() => setItemsSubTab('ingredients')}
-                className={`px-3.5 py-1.5 rounded-lg ${itemsSubTab === 'ingredients' ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+                className={`px-3.5 py-1.5 rounded-lg ${itemsSubTab === 'ingredients' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
               >
                 Ingredients ({ingredients.length})
               </button>
               <button
                 type="button"
                 onClick={() => setItemsSubTab('sub-recipes')}
-                className={`px-3.5 py-1.5 rounded-lg ${itemsSubTab === 'sub-recipes' ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+                className={`px-3.5 py-1.5 rounded-lg ${itemsSubTab === 'sub-recipes' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
               >
                 Sub Recipes ({subRecipes.length})
               </button>
@@ -1259,7 +1259,7 @@ export function OrdaInventoryErpView({
                       setIngForm({ name: '', category: 'Proteins', unit: 'kg', quantity: '0', reorder_threshold: '5', cost_price: '0', sku: '', brand: '', supplier: '' });
                       setIngredientDrawer('new');
                     }}
-                    className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
                   >
                     <Plus size={14} /> Add Ingredient
                   </button>
@@ -1271,7 +1271,7 @@ export function OrdaInventoryErpView({
                     setSubForm({ name: '', category: 'Prep / Sauce', unit: 'kg', use_for_preparation: true, yield_qty: '5', components: [] });
                     setSubRecipeDrawer('new');
                   }}
-                  className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"
+                  className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
                 >
                   <Plus size={14} /> Add Sub Recipe
                 </button>
@@ -1313,7 +1313,7 @@ export function OrdaInventoryErpView({
                         <td className="py-3 px-4">{i.category}</td>
                         <td className="py-3 px-4 font-mono text-slate-500">{i.sku || '—'}</td>
                         <td className="py-3 px-4">{i.unit}</td>
-                        <td className={`py-3 px-4 text-right font-mono font-bold ${Number(i.quantity) <= Number(i.reorder_threshold) ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        <td className={`py-3 px-4 text-right font-mono font-bold ${Number(i.quantity) <= Number(i.reorder_threshold) ? 'text-rose-600' : 'text-amber-700'}`}>
                           {storeStockQty(i.id)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono">{i.reorder_threshold}</td>
@@ -1367,13 +1367,13 @@ export function OrdaInventoryErpView({
                       <td className="py-3 px-4 font-bold text-slate-900">{sr.name}</td>
                       <td className="py-3 px-4">{sr.category}</td>
                       <td className="py-3 px-4 text-right font-mono">{sr.yield_qty} {sr.unit}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">{sr.current_stock || 0} {sr.unit}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-amber-700">{sr.current_stock || 0} {sr.unit}</td>
                       <td className="py-3 px-4 text-right font-mono">KES {Number(sr.unit_cost || 0).toLocaleString()} / {sr.unit}</td>
                       <td className="py-3 px-4 text-right">
                         <button
                           type="button"
                           onClick={() => { setPrepModal(sr); setPrepMultiplier('1'); }}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold"
+                          className="px-2.5 py-1 rounded-lg bg-amber-50 text-slate-900 font-bold"
                         >
                           Prepare Sub Recipe
                         </button>
@@ -1404,7 +1404,7 @@ export function OrdaInventoryErpView({
                   key={t.id}
                   type="button"
                   onClick={() => setStoresSubTab(t.id)}
-                  className={`px-3.5 py-1.5 rounded-lg ${storesSubTab === t.id ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+                  className={`px-3.5 py-1.5 rounded-lg ${storesSubTab === t.id ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
                 >
                   {t.label}
                 </button>
@@ -1413,7 +1413,7 @@ export function OrdaInventoryErpView({
             <button
               type="button"
               onClick={() => setBatchModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
             >
               <Plus size={14} /> Add Batch Item
             </button>
@@ -1492,7 +1492,7 @@ export function OrdaInventoryErpView({
                     type="button"
                     onClick={() => setMovementTypeFilter(mt)}
                     className={`px-2.5 py-1 rounded-lg border ${
-                      movementTypeFilter === mt ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'
+                      movementTypeFilter === mt ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-white border-slate-200 text-slate-600'
                     }`}
                   >
                     {mt}
@@ -1521,7 +1521,7 @@ export function OrdaInventoryErpView({
                             <td className="py-2.5 px-4 text-slate-500">{new Date(m.created_at).toLocaleString('en-KE')}</td>
                             <td className="py-2.5 px-4 font-bold">{m.movement_type}</td>
                             <td className="py-2.5 px-4 font-bold text-slate-900">{ing?.name || 'Item'}</td>
-                            <td className={`py-2.5 px-4 text-right font-mono font-bold ${Number(m.quantity) < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                            <td className={`py-2.5 px-4 text-right font-mono font-bold ${Number(m.quantity) < 0 ? 'text-rose-700' : 'text-amber-700'}`}>
                               {Number(m.quantity) > 0 ? `+${m.quantity}` : m.quantity} {ing?.unit || ''}
                             </td>
                             <td className="py-2.5 px-4 text-right font-mono">{m.balance_after ?? '—'}</td>
@@ -1544,14 +1544,14 @@ export function OrdaInventoryErpView({
             <button
               type="button"
               onClick={() => setRecipesSubTab('menu')}
-              className={`px-3.5 py-1.5 rounded-lg ${recipesSubTab === 'menu' ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+              className={`px-3.5 py-1.5 rounded-lg ${recipesSubTab === 'menu' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
             >
               Menu Item Recipes
             </button>
             <button
               type="button"
               onClick={() => setRecipesSubTab('modifiers')}
-              className={`px-3.5 py-1.5 rounded-lg ${recipesSubTab === 'modifiers' ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+              className={`px-3.5 py-1.5 rounded-lg ${recipesSubTab === 'modifiers' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
             >
               Modifier Recipes
             </button>
@@ -1650,7 +1650,7 @@ export function OrdaInventoryErpView({
             <button
               type="submit"
               disabled={saving}
-              className="py-2 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black"
+              className="py-2 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black"
             >
               + Link Component
             </button>
@@ -1679,7 +1679,7 @@ export function OrdaInventoryErpView({
                         <td className="py-3 px-4 font-bold text-slate-900">{r.menu_item_name}</td>
                         <td className="py-3 px-4">{ing?.name || sub?.name || 'Component'} ({r.component_type})</td>
                         <td className="py-3 px-4 text-right font-mono">{r.quantity} {r.unit}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">
+                        <td className="py-3 px-4 text-right font-mono font-bold text-amber-700">
                           KES {(Number(r.quantity || 0) * unitCost).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-right">
@@ -1723,7 +1723,7 @@ export function OrdaInventoryErpView({
                 type="button"
                 disabled={saving}
                 onClick={handleSubmitStockCount}
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
               >
                 Post Stock Count
               </button>
@@ -1759,7 +1759,7 @@ export function OrdaInventoryErpView({
                           className="w-24 text-right bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 font-mono"
                         />
                       </td>
-                      <td className={`py-2.5 px-3 text-right font-mono font-bold ${variance !== null && variance < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                      <td className={`py-2.5 px-3 text-right font-mono font-bold ${variance !== null && variance < 0 ? 'text-rose-700' : 'text-amber-700'}`}>
                         {variance === null ? '—' : `${variance > 0 ? '+' : ''}${variance.toFixed(2)}`}
                       </td>
                     </tr>
@@ -1834,7 +1834,7 @@ export function OrdaInventoryErpView({
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono"
               />
             </div>
-            <button type="submit" disabled={saving} className="py-2 px-4 rounded-xl bg-emerald-700 text-white font-black">
+            <button type="submit" disabled={saving} className="py-2 px-4 rounded-xl bg-amber-400 text-black font-black">
               Submit
             </button>
           </form>
@@ -1864,7 +1864,7 @@ export function OrdaInventoryErpView({
                         <button
                           type="button"
                           onClick={() => fulfillTransferRequest(tr)}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-700 text-white font-bold"
+                          className="px-2.5 py-1 rounded-lg bg-amber-400 text-black font-bold"
                         >
                           Approve & Fulfill
                         </button>
@@ -1886,14 +1886,14 @@ export function OrdaInventoryErpView({
               <button
                 type="button"
                 onClick={() => setPoSubTab('orders')}
-                className={`px-3.5 py-1.5 rounded-lg ${poSubTab === 'orders' ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+                className={`px-3.5 py-1.5 rounded-lg ${poSubTab === 'orders' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
               >
                 Purchase Orders ({purchaseOrders.length})
               </button>
               <button
                 type="button"
                 onClick={() => setPoSubTab('suppliers')}
-                className={`px-3.5 py-1.5 rounded-lg ${poSubTab === 'suppliers' ? 'bg-emerald-700 text-white' : 'text-slate-600'}`}
+                className={`px-3.5 py-1.5 rounded-lg ${poSubTab === 'suppliers' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
               >
                 Suppliers ({suppliers.length})
               </button>
@@ -1902,7 +1902,7 @@ export function OrdaInventoryErpView({
               <button
                 type="button"
                 onClick={() => setPoDrawer(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
               >
                 <Plus size={14} /> Create Purchase Order
               </button>
@@ -1935,12 +1935,12 @@ export function OrdaInventoryErpView({
                           <button
                             type="button"
                             onClick={() => handleReceiveGrn(po)}
-                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-700 text-white font-bold"
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-400 text-black font-bold"
                           >
                             <PackageCheck size={13} /> Receive GRN
                           </button>
                         ) : (
-                          <span className="text-emerald-700 font-bold">Received</span>
+                          <span className="text-amber-700 font-bold">Received</span>
                         )}
                       </td>
                     </tr>
@@ -1995,7 +1995,7 @@ export function OrdaInventoryErpView({
                 placeholder="e.g. Main Kitchen Cold Room / Bar Store"
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
               />
-              <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-700 text-white font-black">
+              <button type="submit" className="px-4 py-2 rounded-xl bg-amber-400 text-black font-black">
                 + Add Store
               </button>
             </form>
@@ -2069,7 +2069,7 @@ export function OrdaInventoryErpView({
               <input type="text" value={ingForm.sku} onChange={(e) => setIngForm((p) => ({ ...p, sku: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
             </div>
           </div>
-          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">
+          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
             {saving ? 'Saving...' : 'Save Ingredient'}
           </button>
         </form>
@@ -2110,7 +2110,7 @@ export function OrdaInventoryErpView({
                     components: [...p.components, { inventory_item_id: ingredients[0]?.id || '', qty: 1 }],
                   }))
                 }
-                className="text-emerald-700 font-bold hover:underline"
+                className="text-amber-700 font-bold hover:underline"
               >
                 + Add Ingredient
               </button>
@@ -2144,7 +2144,7 @@ export function OrdaInventoryErpView({
               </div>
             ))}
           </div>
-          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">
+          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
             {saving ? 'Saving...' : 'Save Sub Recipe'}
           </button>
         </form>
@@ -2189,7 +2189,7 @@ export function OrdaInventoryErpView({
                     ],
                   }));
                 }}
-                className="text-emerald-700 font-bold hover:underline"
+                className="text-amber-700 font-bold hover:underline"
               >
                 + Add Line
               </button>
@@ -2232,7 +2232,7 @@ export function OrdaInventoryErpView({
               </div>
             ))}
           </div>
-          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">
+          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
             {saving ? 'Creating...' : 'Create Purchase Order'}
           </button>
         </form>
@@ -2267,7 +2267,7 @@ export function OrdaInventoryErpView({
               <label className="block font-bold mb-1">Expiry Date *</label>
               <input type="date" required value={batchForm.expiry_date} onChange={(e) => setBatchForm((p) => ({ ...p, expiry_date: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
             </div>
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">Add Batch & Stock</button>
+            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">Add Batch & Stock</button>
           </form>
         </div>
       )}
@@ -2312,7 +2312,7 @@ export function OrdaInventoryErpView({
               <label className="block font-bold mb-1">Number of Batches *</label>
               <input type="number" step="0.5" min="0.5" required value={prepMultiplier} onChange={(e) => setPrepMultiplier(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
             </div>
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white font-black">Record Preparation Batch</button>
+            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">Record Preparation Batch</button>
           </form>
         </div>
       )}

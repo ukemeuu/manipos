@@ -948,7 +948,7 @@ export function WebPosView({
   if (placedOrder) {
     return (
       <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-xl mx-auto my-8 text-center shadow-sm">
-        <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-4">
+        <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="w-8 h-8" />
         </div>
         <h3 className="text-xl font-black text-slate-900">
@@ -1005,7 +1005,7 @@ export function WebPosView({
               setManualDiscountValue('');
               setManualDiscountReason('');
             }}
-            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-sm font-bold cursor-pointer"
           >
             + Create Another Order
           </button>
@@ -1042,7 +1042,7 @@ export function WebPosView({
             <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
               {initialOrder ? `Settle Open Order #${initialOrder.ticket_number || initialOrder.id?.slice(0, 6)}` : 'Web POS — Create Order'}
               {activeBranch?.name && (
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                   {activeBranch.name}
                 </span>
               )}
@@ -1070,7 +1070,7 @@ export function WebPosView({
           <select
             value={salesChannel}
             onChange={(e) => handleSelectChannel(e.target.value)}
-            className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+            className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/25"
           >
             {SALES_CHANNELS.map((ch) => (
               <option key={ch} value={ch}>
@@ -1099,11 +1099,11 @@ export function WebPosView({
                   setShowOpenTabsBar(false);
                   onSelectOpenOrder(tabOrd);
                 }}
-                className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-amber-200 hover:border-emerald-600 text-xs font-bold text-slate-800 flex items-center gap-2 cursor-pointer"
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-amber-200 hover:border-amber-400 text-xs font-bold text-slate-800 flex items-center gap-2 cursor-pointer"
               >
                 <span className="font-mono text-amber-700">#{tabOrd.ticket_number || tabOrd.id?.slice(0, 5)}</span>
                 <span>{label}</span>
-                <span className="text-emerald-700">KES {Number(tabOrd.total_amount || 0).toLocaleString()}</span>
+                <span className="text-amber-700">KES {Number(tabOrd.total_amount || 0).toLocaleString()}</span>
               </button>
             );
           })}
@@ -1124,7 +1124,7 @@ export function WebPosView({
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
                 className={`shrink-0 lg:w-full text-left px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition ${selectedCategory === cat
-                  ? 'bg-emerald-700 text-white shadow-sm'
+                  ? 'bg-amber-400 text-black shadow-sm'
                   : 'bg-white lg:bg-transparent border border-slate-200 lg:border-0 text-slate-700 hover:bg-slate-200/70'
                   }`}
               >
@@ -1168,7 +1168,7 @@ export function WebPosView({
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search dishes, drinks, combos..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400/25"
                   />
                 </div>
 
@@ -1179,16 +1179,16 @@ export function WebPosView({
                     className="flex-1 flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-800"
                   >
                     <span className="flex items-center gap-1.5 truncate">
-                      <User className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <User className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                       <span className="truncate">{customerName || 'Guest Customer'}</span>
                     </span>
-                    <span className="text-[10px] text-emerald-700 uppercase">Change</span>
+                    <span className="text-[10px] text-amber-700 uppercase">Change</span>
                   </button>
                 </div>
               </div>
 
               {customerMode === 'lookup' && (
-                <div className="mb-4 p-3 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2.5">
+                <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2.5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
@@ -1230,7 +1230,7 @@ export function WebPosView({
                               if (g.delivery_address) setDeliveryAddress(g.delivery_address);
                               setCustomerMode('guest');
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-emerald-600 text-[11px] font-semibold text-slate-700"
+                            className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-amber-400 text-[11px] font-semibold text-slate-700"
                           >
                             {label} {g.phone ? `· ${g.phone}` : ''}
                           </button>
@@ -1261,7 +1261,7 @@ export function WebPosView({
                             className="text-left p-3 rounded-xl border border-amber-200 bg-amber-50/40 hover:border-amber-400 transition"
                           >
                             <p className="text-xs font-bold text-slate-900 truncate">{c.name}</p>
-                            <p className="text-[11px] font-black text-emerald-700 mt-1">
+                            <p className="text-[11px] font-black text-amber-700 mt-1">
                               KES {Number(c.price || 0).toLocaleString()}
                             </p>
                           </button>
@@ -1284,7 +1284,7 @@ export function WebPosView({
                           key={item.id}
                           type="button"
                           onClick={() => openCustomize(item)}
-                          className="text-left rounded-xl border border-slate-200 hover:border-emerald-600 hover:shadow-sm bg-white p-2.5 flex flex-col justify-between transition group"
+                          className="text-left rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-sm bg-white p-2.5 flex flex-col justify-between transition group"
                         >
                           <div>
                             {item.image_url ? (
@@ -1298,13 +1298,13 @@ export function WebPosView({
                                 {(item.category || 'ITEM').slice(0, 14)}
                               </div>
                             )}
-                            <p className="text-xs font-bold text-slate-900 line-clamp-2 group-hover:text-emerald-800">
+                            <p className="text-xs font-bold text-slate-900 line-clamp-2 group-hover:text-slate-900">
                               {item.name}
                             </p>
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-1">
                             <div>
-                              <span className="text-xs font-black text-emerald-700">
+                              <span className="text-xs font-black text-amber-700">
                                 KES {effPrice.toLocaleString()}
                               </span>
                               {hasSpecial && (
@@ -1340,7 +1340,7 @@ export function WebPosView({
                   <button
                     type="button"
                     onClick={() => setStep('build')}
-                    className="text-xs font-bold text-emerald-700 hover:underline"
+                    className="text-xs font-bold text-amber-700 hover:underline"
                   >
                     Edit Items
                   </button>
@@ -1358,7 +1358,7 @@ export function WebPosView({
                         type="button"
                         onClick={() => handleSelectChannel(ch)}
                         className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${active
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          ? 'bg-amber-400 text-black border-amber-400 shadow-xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
                       >
@@ -1433,7 +1433,7 @@ export function WebPosView({
                         type="button"
                         onClick={() => setDiningMode(opt.id)}
                         className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${active
-                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          ? 'bg-amber-400 text-black border-amber-400'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
                       >
@@ -1482,10 +1482,10 @@ export function WebPosView({
                             type="button"
                             onClick={() => setTableNumber(tLabel)}
                             className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition ${active
-                              ? 'bg-emerald-700 text-white border-emerald-700'
+                              ? 'bg-amber-400 text-black border-amber-400'
                               : tbl.status === 'occupied'
                                 ? 'bg-amber-50 text-amber-800 border-amber-200 hover:border-amber-400'
-                                : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-600'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-amber-400'
                               }`}
                           >
                             {tLabel}
@@ -1551,7 +1551,7 @@ export function WebPosView({
                 </div>
                 {promoError && <p className="text-xs text-rose-600 mt-1">{promoError}</p>}
                 {appliedDiscount && (
-                  <p className="text-xs text-emerald-700 font-bold mt-1">
+                  <p className="text-xs text-amber-700 font-bold mt-1">
                     Applied {appliedDiscount.code}: -KES {promoDiscountAmount.toLocaleString()}
                   </p>
                 )}
@@ -1561,7 +1561,7 @@ export function WebPosView({
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5" data-testid="webpos-manual-discount">
                 <div className="flex items-center justify-between gap-2">
                   <label className="text-[11px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-emerald-700" />
+                    <Tag className="w-3.5 h-3.5 text-amber-700" />
                     Order Discount
                   </label>
                   <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
@@ -1572,7 +1572,7 @@ export function WebPosView({
                         setManualDiscountValue('');
                       }}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${manualDiscountType === 'percent'
-                        ? 'bg-emerald-700 text-white'
+                        ? 'bg-amber-400 text-black'
                         : 'text-slate-600 hover:text-slate-900'
                         }`}
                     >
@@ -1585,7 +1585,7 @@ export function WebPosView({
                         setManualDiscountValue('');
                       }}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${manualDiscountType === 'amount'
-                        ? 'bg-emerald-700 text-white'
+                        ? 'bg-amber-400 text-black'
                         : 'text-slate-600 hover:text-slate-900'
                         }`}
                     >
@@ -1601,8 +1601,8 @@ export function WebPosView({
                       type="button"
                       onClick={() => setManualDiscountValue(String(preset))}
                       className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition ${Number(manualDiscountValue) === preset
-                        ? 'bg-emerald-700 text-white border-emerald-700'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
+                        ? 'bg-amber-400 text-black border-amber-400'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
                         }`}
                     >
                       {manualDiscountType === 'percent' ? `${preset}%` : `KES ${preset}`}
@@ -1649,7 +1649,7 @@ export function WebPosView({
                 </div>
 
                 {manualDiscountAmount > 0 && (
-                  <p className="text-xs text-emerald-700 font-bold">
+                  <p className="text-xs text-amber-700 font-bold">
                     Discount applied: -KES {manualDiscountAmount.toLocaleString()}
                     {manualDiscountType === 'percent' ? ` (${manualDiscountValue}%)` : ''}
                   </p>
@@ -1669,7 +1669,7 @@ export function WebPosView({
                         type="button"
                         onClick={() => setPaymentTender(tender.id)}
                         className={`p-2.5 rounded-xl border text-left text-xs font-bold flex items-center gap-2 transition cursor-pointer ${active
-                          ? 'bg-emerald-50 border-emerald-700 text-emerald-900 ring-1 ring-emerald-700'
+                          ? 'bg-amber-50 border-amber-400 text-slate-950 ring-1 ring-amber-400'
                           : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                           }`}
                       >
@@ -1702,7 +1702,7 @@ export function WebPosView({
                             type="checkbox"
                             checked={sendStk}
                             onChange={(e) => setSendStk(e.target.checked)}
-                            className="rounded border-slate-300 text-emerald-700"
+                            className="rounded border-slate-300 text-amber-700"
                           />
                           Send M-Pesa STK Push to customer phone on Place Order
                         </label>
@@ -1722,7 +1722,7 @@ export function WebPosView({
                       const diff = grandTotal - entered;
                       return entered > 0 ? (
                         <span
-                          className={`text-[11px] font-bold ${diff === 0 ? 'text-emerald-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
+                          className={`text-[11px] font-bold ${diff === 0 ? 'text-amber-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
                             }`}
                         >
                           {diff === 0
@@ -1797,7 +1797,7 @@ export function WebPosView({
                   </button>
                 )}
                 <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                  <ShoppingBag className="w-4 h-4 text-emerald-700" />
+                  <ShoppingBag className="w-4 h-4 text-amber-700" />
                   Order Cart ({cart.reduce((s, c) => s + Number(c.quantity || 1), 0)})
                 </h3>
               </div>
@@ -1834,7 +1834,7 @@ export function WebPosView({
                             <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{item.summary}</p>
                           )}
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            <span className="text-[11px] font-bold text-emerald-700">
+                            <span className="text-[11px] font-bold text-amber-700">
                               KES {(item.unitPrice * item.quantity).toLocaleString()}
                             </span>
                             {item.quantity > 1 && (
@@ -1976,7 +1976,7 @@ export function WebPosView({
                       type="button"
                       onClick={() => setOrderDate(todayStr)}
                       className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition ${orderDate === todayStr
-                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        ? 'bg-amber-400 text-black border-amber-400'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                     >
@@ -2014,7 +2014,7 @@ export function WebPosView({
                 value={orderInstructions}
                 onChange={(e) => setOrderInstructions(e.target.value)}
                 placeholder="Kitchen notes, cutlery, allergies..."
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400/25"
               />
             </div>
           </div>
@@ -2026,7 +2026,7 @@ export function WebPosView({
                 <span className="font-bold">KES {subtotal.toLocaleString()}</span>
               </div>
               {discountAmount > 0 && (
-                <div className="flex justify-between text-emerald-700">
+                <div className="flex justify-between text-amber-700">
                   <span>Discount</span>
                   <span className="font-bold">-KES {discountAmount.toLocaleString()}</span>
                 </div>
@@ -2072,7 +2072,7 @@ export function WebPosView({
                   type="button"
                   disabled={cart.length === 0}
                   onClick={() => { setStep('settle'); setMobilePane('cart'); }}
-                  className="py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold disabled:opacity-50"
+                  className="py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold disabled:opacity-50"
                 >
                   Continue to Settle →
                 </button>
@@ -2083,7 +2083,7 @@ export function WebPosView({
                   type="button"
                   disabled={submitting || cart.length === 0}
                   onClick={() => handleSubmitOrder({ saveAsOpen: false })}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-black flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-3 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-sm font-black flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   {initialOrder ? `Settle Tab · KES ${grandTotal.toLocaleString()}` : `Place Order · KES ${grandTotal.toLocaleString()}`}
@@ -2114,7 +2114,7 @@ export function WebPosView({
           <button
             type="button"
             onClick={() => setMobilePane('cart')}
-            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+            className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
             <span>{cart.length > 0 ? 'View Cart & Pay →' : 'Open Cart'}</span>
@@ -2155,12 +2155,12 @@ export function WebPosView({
                           type="button"
                           onClick={() => setSelectedVariation(v)}
                           className={`p-2.5 rounded-xl border text-left text-xs font-bold ${active
-                            ? 'border-emerald-700 bg-emerald-50 text-emerald-900'
+                            ? 'border-amber-400 bg-amber-50 text-slate-950'
                             : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                         >
                           <div>{v.name}</div>
-                          <div className="text-[11px] text-emerald-700">KES {Number(v.price || 0).toLocaleString()}</div>
+                          <div className="text-[11px] text-amber-700">KES {Number(v.price || 0).toLocaleString()}</div>
                         </button>
                       );
                     })}
@@ -2196,14 +2196,14 @@ export function WebPosView({
                               }
                             }}
                             className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${qty > 0
-                              ? 'border-emerald-600 bg-emerald-50/50'
+                              ? 'border-amber-400 bg-amber-50/50'
                               : 'border-slate-200 hover:bg-slate-50'
                               }`}
                           >
                             <div>
                               <span className="font-bold text-slate-900">{optName}</span>
                               {Number(opt.price || 0) > 0 && (
-                                <span className="ml-2 text-emerald-700 font-semibold">
+                                <span className="ml-2 text-amber-700 font-semibold">
                                   +KES {Number(opt.price).toLocaleString()}
                                 </span>
                               )}
@@ -2233,7 +2233,7 @@ export function WebPosView({
                                 </button>
                               </div>
                             ) : (
-                              <input type="checkbox" readOnly checked={qty > 0} className="rounded text-emerald-700" />
+                              <input type="checkbox" readOnly checked={qty > 0} className="rounded text-amber-700" />
                             )}
                           </div>
                         );
@@ -2254,13 +2254,13 @@ export function WebPosView({
                       return (
                         <label
                           key={add.name}
-                          className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${checked ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200'
+                          className={`p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${checked ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200'
                             }`}
                         >
                           <span className="font-bold text-slate-900">
                             {add.name}{' '}
                             {Number(add.price || 0) > 0 && (
-                              <span className="text-emerald-700">+KES {Number(add.price).toLocaleString()}</span>
+                              <span className="text-amber-700">+KES {Number(add.price).toLocaleString()}</span>
                             )}
                           </span>
                           <input
@@ -2271,7 +2271,7 @@ export function WebPosView({
                                 checked ? prev.filter((x) => x !== add.name) : [...prev, add.name]
                               )
                             }
-                            className="rounded text-emerald-700"
+                            className="rounded text-amber-700"
                           />
                         </label>
                       );
@@ -2362,7 +2362,7 @@ export function WebPosView({
               <button
                 type="button"
                 onClick={confirmCustomItem}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
               >
                 Add to Order · KES {(finalModalUnitPrice * itemQty).toLocaleString()}
               </button>

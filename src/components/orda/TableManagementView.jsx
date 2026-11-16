@@ -116,7 +116,7 @@ export function TableManagementView({
             type="button"
             onClick={toggleMicrositeTableSelection}
             className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border font-black ${
-              enableMicrositeTables ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-600'
+              enableMicrositeTables ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-slate-50 border-slate-200 text-slate-600'
             }`}
           >
             <Power size={13} /> Microsite Table Picker: {enableMicrositeTables ? 'ON' : 'OFF'}
@@ -125,7 +125,7 @@ export function TableManagementView({
             <button
               type="button"
               onClick={onOpenFloorPlan}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black"
             >
               <Armchair size={14} /> Open Interactive Floor Canvas →
             </button>
@@ -134,7 +134,7 @@ export function TableManagementView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
           <button type="button" onClick={() => setNotice('')} className="hover:underline">Dismiss</button>
         </div>
@@ -199,7 +199,7 @@ export function TableManagementView({
               placeholder="Seats"
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono"
             />
-            <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-700 text-white font-black">+ Add Table</button>
+            <button type="submit" className="px-4 py-2 rounded-xl bg-amber-400 text-black font-black">+ Add Table</button>
           </form>
 
           <div className="overflow-x-auto">
@@ -222,7 +222,7 @@ export function TableManagementView({
                       <td className="py-2.5 px-3">{t.zone || 'Main floor'}</td>
                       <td className="py-2.5 px-3 text-right font-mono">{t.seats || 2}</td>
                       <td className="py-2.5 px-3">
-                        <a href={qrUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-emerald-700 font-bold hover:underline">
+                        <a href={qrUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-amber-700 font-bold hover:underline">
                           <QrCode size={12} /> Open QR Menu
                         </a>
                       </td>

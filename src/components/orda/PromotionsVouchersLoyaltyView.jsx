@@ -367,7 +367,7 @@ export function PromotionsVouchersLoyaltyView({
                   key={t.id}
                   type="button"
                   onClick={() => setSubTab(t.id)}
-                  className={`px-3 py-1 rounded-lg ${subTab === t.id ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+                  className={`px-3 py-1 rounded-lg ${subTab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
                 >
                   {t.label}
                 </button>
@@ -384,7 +384,7 @@ export function PromotionsVouchersLoyaltyView({
             <button
               type="button"
               onClick={() => openPromoDrawer(null)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
             >
               <Plus size={14} /> Add New Promotion
             </button>
@@ -393,7 +393,7 @@ export function PromotionsVouchersLoyaltyView({
             <button
               type="button"
               onClick={() => setVoucherDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
             >
               <Plus size={14} /> Add New Voucher
             </button>
@@ -402,7 +402,7 @@ export function PromotionsVouchersLoyaltyView({
             <button
               type="button"
               onClick={() => setLoyaltyDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
             >
               <Plus size={14} /> Add Loyalty Program
             </button>
@@ -411,7 +411,7 @@ export function PromotionsVouchersLoyaltyView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
           <button type="button" onClick={() => setNotice('')} className="hover:underline">Dismiss</button>
         </div>
@@ -450,7 +450,7 @@ export function PromotionsVouchersLoyaltyView({
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900">{d.name || d.code}</div>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="font-mono text-[11px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                            <span className="font-mono text-[11px] bg-amber-50 text-slate-900 px-2 py-0.5 rounded font-bold">
                               {d.code}
                             </span>
                             {d.influencer_name && (
@@ -480,7 +480,7 @@ export function PromotionsVouchersLoyaltyView({
                             onClick={() => toggleDiscountActive(d)}
                             className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                               d.is_active !== false
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                ? 'bg-amber-50 border-amber-200 text-amber-700'
                                 : 'bg-slate-100 border-slate-200 text-slate-500'
                             }`}
                           >
@@ -546,9 +546,9 @@ export function PromotionsVouchersLoyaltyView({
                         <p className="font-bold text-slate-900">{v.name}</p>
                         {v.description && <p className="text-[11px] text-slate-400">{v.description}</p>}
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-emerald-700">{v.code}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-amber-700">{v.code}</td>
                       <td className="py-3 px-4 text-right font-mono font-bold">KES {Number(v.amount || 0).toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700">KES {Number(v.remaining_amount ?? v.amount ?? 0).toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-amber-700">KES {Number(v.remaining_amount ?? v.amount ?? 0).toLocaleString()}</td>
                       <td className="py-3 px-4 text-slate-500">
                         {v.has_expiry && v.expires_at ? `Expires ${new Date(v.expires_at).toLocaleDateString('en-KE')}` : 'No expiry'}
                       </td>
@@ -556,7 +556,7 @@ export function PromotionsVouchersLoyaltyView({
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                           v.is_redeemed
                             ? 'bg-slate-100 border-slate-200 text-slate-500'
-                            : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            : 'bg-amber-50 border-amber-200 text-amber-700'
                         }`}>
                           {v.is_redeemed ? 'Redeemed' : 'Active'}
                         </span>
@@ -612,7 +612,7 @@ export function PromotionsVouchersLoyaltyView({
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          lp.is_active !== false ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                          lp.is_active !== false ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-100 text-slate-500'
                         }`}>
                           {lp.is_active !== false ? 'Active' : 'Paused'}
                         </span>
@@ -743,7 +743,7 @@ export function PromotionsVouchersLoyaltyView({
                     onClick={() => setPromoForm((p) => ({ ...p, fulfilment_types: toggleArrayItem(p.fulfilment_types, f) }))}
                     className={`px-2.5 py-1 rounded-lg border font-bold ${
                       promoForm.fulfilment_types.includes(f)
-                        ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                        ? 'bg-amber-50 border-amber-400 text-slate-900'
                         : 'bg-white border-slate-200 text-slate-600'
                     }`}
                   >
@@ -770,7 +770,7 @@ export function PromotionsVouchersLoyaltyView({
                     onClick={() => setPromoForm((p) => ({ ...p, payment_options: toggleArrayItem(p.payment_options, po) }))}
                     className={`px-2.5 py-1 rounded-lg border font-bold ${
                       promoForm.payment_options.includes(po)
-                        ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                        ? 'bg-amber-50 border-amber-400 text-slate-900'
                         : 'bg-white border-slate-200 text-slate-600'
                     }`}
                   >
@@ -855,7 +855,7 @@ export function PromotionsVouchersLoyaltyView({
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Promotion'}
           </button>
@@ -939,7 +939,7 @@ export function PromotionsVouchersLoyaltyView({
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black disabled:opacity-50"
           >
             {saving ? 'Issuing...' : 'Issue Voucher'}
           </button>
@@ -1004,7 +1004,7 @@ export function PromotionsVouchersLoyaltyView({
                   type="button"
                   onClick={() => setLoyaltyForm((p) => ({ ...p, fulfilment_types: toggleArrayItem(p.fulfilment_types, f) }))}
                   className={`px-2.5 py-1 rounded-lg border font-bold ${
-                    loyaltyForm.fulfilment_types.includes(f) ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-white border-slate-200'
+                    loyaltyForm.fulfilment_types.includes(f) ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-white border-slate-200'
                   }`}
                 >
                   {f}
@@ -1029,7 +1029,7 @@ export function PromotionsVouchersLoyaltyView({
                   type="button"
                   onClick={() => setLoyaltyForm((p) => ({ ...p, category_names: toggleArrayItem(p.category_names, cat) }))}
                   className={`px-2.5 py-1 rounded-lg border font-bold ${
-                    loyaltyForm.category_names.includes(cat) ? 'bg-emerald-50 border-emerald-600 text-emerald-800' : 'bg-white border-slate-200'
+                    loyaltyForm.category_names.includes(cat) ? 'bg-amber-50 border-amber-400 text-slate-900' : 'bg-white border-slate-200'
                   }`}
                 >
                   {cat}
@@ -1058,7 +1058,7 @@ export function PromotionsVouchersLoyaltyView({
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Create Loyalty Program'}
           </button>

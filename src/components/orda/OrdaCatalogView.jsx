@@ -8,7 +8,7 @@ import { SlideOverDrawer } from './SlideOverDrawer';
 import { fetchPojCatalogEnrichment, syncPojCatalogAndModifiersToManiPos } from '../../services/data/pojSyncService';
 
 const inputCls =
-  'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600';
+  'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400/25 focus:border-amber-400';
 const labelCls = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1';
 
 export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged, canDelete = true }) {
@@ -57,10 +57,10 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
         onCatalogChanged?.();
       }
       if (!silent && summary?.error) {
-        alert('POJ modifier sync warning: ' + summary.error);
+        alert('External modifier sync warning: ' + summary.error);
       }
     } catch (err) {
-      if (!silent) alert('POJ modifier sync failed: ' + err.message);
+      if (!silent) alert('External modifier sync failed: ' + err.message);
     } finally {
       setSyncingPojMods(false);
     }
@@ -502,7 +502,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <Layers size={15} className="text-emerald-700" />
+            <Layers size={15} className="text-amber-700" />
             <span>Menu Group:</span>
           </div>
           <select
@@ -518,7 +518,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
           <button
             type="button"
             onClick={() => setGroupDrawer({ name: '', description: '', location_ids: [], is_active: true })}
-            className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-bold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-amber-50 text-slate-900 hover:bg-amber-100 text-xs font-bold cursor-pointer"
           >
             + New Group
           </button>
@@ -537,7 +537,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               onClick={() => setCatalogTab(tab.id)}
               className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 catalogTab === tab.id
-                  ? 'bg-white text-emerald-800 shadow-xs'
+                  ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -558,7 +558,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               <button
                 type="button"
                 onClick={() => setAddingCat((v) => !v)}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
+                className="text-xs font-bold text-amber-700 hover:text-slate-900 cursor-pointer"
               >
                 + Add Category
               </button>
@@ -571,9 +571,9 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                   placeholder="New Category"
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-600"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-400"
                 />
-                <button type="submit" disabled={saving} className="px-2.5 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer">
+                <button type="submit" disabled={saving} className="px-2.5 py-1.5 bg-amber-400 text-black rounded-lg text-xs font-bold cursor-pointer">
                   Save
                 </button>
               </form>
@@ -583,7 +583,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               type="button"
               onClick={() => setSelectedCategory('all')}
               className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between cursor-pointer ${
-                selectedCategory === 'all' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'
+                selectedCategory === 'all' ? 'bg-amber-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
               <span>All Products</span>
@@ -595,7 +595,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 <div
                   key={cat.id}
                   className={`group flex items-center justify-between gap-1 px-3 py-2 rounded-xl text-xs ${
-                    selectedCategory === cat.name ? 'bg-emerald-50 text-emerald-800 font-bold' : 'text-slate-700 hover:bg-slate-50 font-semibold'
+                    selectedCategory === cat.name ? 'bg-amber-50 text-slate-900 font-bold' : 'text-slate-700 hover:bg-slate-50 font-semibold'
                   }`}
                 >
                   {editingCat?.id === cat.id ? (
@@ -604,7 +604,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                       defaultValue={cat.name}
                       onBlur={(e) => handleRenameCategory(cat, e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleRenameCategory(cat, e.currentTarget.value)}
-                      className="flex-1 bg-white border border-emerald-500 rounded px-2 py-0.5 text-xs"
+                      className="flex-1 bg-white border border-amber-400 rounded px-2 py-0.5 text-xs"
                     />
                   ) : (
                     <button
@@ -641,7 +641,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search menu items..."
-                    className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-56 focus:outline-none focus:border-emerald-600"
+                    className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-56 focus:outline-none focus:border-amber-400"
                   />
                 </div>
                 {branches.length > 0 && (
@@ -669,7 +669,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 <button
                   type="button"
                   onClick={openNewItem}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
                 >
                   <Plus size={14} /> Add New Item
                 </button>
@@ -678,7 +678,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
 
             {loading ? (
               <div className="p-12 flex justify-center">
-                <Loader2 className="animate-spin text-emerald-700" size={24} />
+                <Loader2 className="animate-spin text-amber-700" size={24} />
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -717,14 +717,14 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                         <td className="py-3 px-4 font-mono font-bold text-slate-900">
                           KES {Number(item.price || 0).toLocaleString()}
                           {item.is_special_price_active && item.special_price != null && (
-                            <span className="block text-[10px] text-emerald-700">Special: KES {Number(item.special_price).toLocaleString()}</span>
+                            <span className="block text-[10px] text-amber-700">Special: KES {Number(item.special_price).toLocaleString()}</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex flex-wrap gap-1">
                             {item.is_featured && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">Featured</span>}
                             {item.is_upsell && <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-bold">Upsell</span>}
-                            {item.show_on_microsite !== false && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">Microsite</span>}
+                            {item.show_on_microsite !== false && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">Microsite</span>}
                           </div>
                         </td>
                         <td className="py-3 px-4">
@@ -733,7 +733,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                             onClick={() => toggleItemFlag(item, 'is_available', item.is_available === false)}
                             className={`px-2.5 py-1 rounded-full text-[11px] font-bold border cursor-pointer ${
                               item.is_available !== false
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
                                 : 'bg-rose-50 text-rose-700 border-rose-200'
                             }`}
                           >
@@ -791,15 +791,15 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 type="button"
                 onClick={() => handleSyncPojModifiers({ silent: false })}
                 disabled={syncingPojMods}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-slate-900 text-xs font-bold cursor-pointer disabled:opacity-50"
               >
                 {syncingPojMods ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                <span>{syncingPojMods ? 'Syncing POJ…' : 'Sync POJ Modifiers'}</span>
+                <span>{syncingPojMods ? 'Syncing Modifiers…' : 'Sync External Modifiers'}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setModDrawer({ name: '', is_required: false, allow_multiple: false, min_selected: 0, max_selected: 1, options: [{ name: '', price: 0, is_available: true }], menu_item_ids: [] })}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
               >
                 <Plus size={14} /> Add New Modifier
               </button>
@@ -828,7 +828,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                   </td>
                   <td className="py-3 px-4 font-mono text-slate-600">{mod.min_selected ?? 0} / {mod.max_selected ?? 1}</td>
                   <td className="py-3 px-4 text-slate-600">{(mod.options || []).map((o) => o.name).join(', ') || '—'}</td>
-                  <td className="py-3 px-4 font-bold text-emerald-700">{(mod.menu_item_ids || []).length}</td>
+                  <td className="py-3 px-4 font-bold text-amber-700">{(mod.menu_item_ids || []).length}</td>
                   <td className="py-3 px-4 text-right space-x-1">
                     <button type="button" onClick={() => setModDrawer({ ...mod })} className="p-1.5 text-slate-500 hover:text-slate-900 cursor-pointer"><Edit3 size={14} /></button>
                     {canDelete && (
@@ -860,7 +860,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             <button
               type="button"
               onClick={() => setComboDrawer({ name: '', description: '', price: '', image_url: null, time_limit_enabled: false, starts_at: '', expires_at: '', items: [{ menu_item_id: '', name: '', quantity: 1, is_free: false }], is_available: true, show_on_microsite: true })}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
             >
               <Plus size={14} /> Add New Combo
             </button>
@@ -881,7 +881,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 <tr key={c.id} className="hover:bg-slate-50">
                   <td className="py-3 px-4 font-bold text-slate-900">{c.name}</td>
                   <td className="py-3 px-4 text-slate-600">{(c.items || []).map((i) => `${i.quantity || 1}x ${i.name}${i.is_free ? ' (Free)' : ''}`).join(', ') || '—'}</td>
-                  <td className="py-3 px-4 font-mono font-bold text-emerald-700">KES {Number(c.price || 0).toLocaleString()}</td>
+                  <td className="py-3 px-4 font-mono font-bold text-amber-700">KES {Number(c.price || 0).toLocaleString()}</td>
                   <td className="py-3 px-4 text-slate-500">{c.time_limit_enabled ? 'Scheduled' : 'Always On'}</td>
                   <td className="py-3 px-4 text-right space-x-1">
                     <button type="button" onClick={() => setComboDrawer({ ...c })} className="p-1.5 text-slate-500 hover:text-slate-900 cursor-pointer"><Edit3 size={14} /></button>
@@ -917,7 +917,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               <button type="button" onClick={() => setItemDrawer(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
                 Cancel
               </button>
-              <button type="button" disabled={saving || !itemDrawer?.name?.trim()} onClick={saveItem} className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50 cursor-pointer">
+              <button type="button" disabled={saving || !itemDrawer?.name?.trim()} onClick={saveItem} className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50 cursor-pointer">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save Item
               </button>
             </div>
@@ -1024,7 +1024,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 <button
                   type="button"
                   onClick={() => setItemDrawer({ ...itemDrawer, variations: [...(itemDrawer.variations || []), { title: '', price: '' }] })}
-                  className="text-xs font-bold text-emerald-700 cursor-pointer"
+                  className="text-xs font-bold text-amber-700 cursor-pointer"
                 >
                   + Add Variation
                 </button>
@@ -1055,7 +1055,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 <button
                   type="button"
                   onClick={() => setItemDrawer({ ...itemDrawer, additions: [...(itemDrawer.additions || []), { name: '', price: '' }] })}
-                  className="text-xs font-bold text-emerald-700 cursor-pointer"
+                  className="text-xs font-bold text-amber-700 cursor-pointer"
                 >
                   + Add Addition
                 </button>
@@ -1120,7 +1120,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             <span />
             <div className="flex gap-2">
               <button type="button" onClick={() => setModDrawer(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold cursor-pointer">Cancel</button>
-              <button type="button" disabled={saving || !modDrawer?.name?.trim()} onClick={saveModifier} className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50 cursor-pointer">
+              <button type="button" disabled={saving || !modDrawer?.name?.trim()} onClick={saveModifier} className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50 cursor-pointer">
                 Save Modifier
               </button>
             </div>
@@ -1135,11 +1135,11 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <label className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer ${!modDrawer.is_required ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200'}`}>
+              <label className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer ${!modDrawer.is_required ? 'border-amber-400 bg-amber-50 text-slate-900' : 'border-slate-200'}`}>
                 <input type="radio" checked={!modDrawer.is_required} onChange={() => setModDrawer({ ...modDrawer, is_required: false })} />
                 Optional
               </label>
-              <label className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer ${modDrawer.is_required ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200'}`}>
+              <label className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer ${modDrawer.is_required ? 'border-amber-400 bg-amber-50 text-slate-900' : 'border-slate-200'}`}>
                 <input type="radio" checked={modDrawer.is_required === true} onChange={() => setModDrawer({ ...modDrawer, is_required: true })} />
                 Mandatory
               </label>
@@ -1167,7 +1167,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                 <button
                   type="button"
                   onClick={() => setModDrawer({ ...modDrawer, options: [...(modDrawer.options || []), { name: '', price: 0, is_available: true }] })}
-                  className="text-xs font-bold text-emerald-700 cursor-pointer"
+                  className="text-xs font-bold text-amber-700 cursor-pointer"
                 >
                   + Add Choice
                 </button>
@@ -1205,7 +1205,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             <span />
             <div className="flex gap-2">
               <button type="button" onClick={() => setComboDrawer(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold cursor-pointer">Cancel</button>
-              <button type="button" disabled={saving || !comboDrawer?.name?.trim()} onClick={saveCombo} className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50 cursor-pointer">
+              <button type="button" disabled={saving || !comboDrawer?.name?.trim()} onClick={saveCombo} className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50 cursor-pointer">
                 Save Combo
               </button>
             </div>
@@ -1252,7 +1252,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             <div className="space-y-2 border border-slate-200 rounded-2xl p-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800">Combo Menu Items</span>
-                <button type="button" onClick={() => setComboDrawer({ ...comboDrawer, items: [...(comboDrawer.items || []), { menu_item_id: '', name: '', quantity: 1, is_free: false }] })} className="text-xs font-bold text-emerald-700 cursor-pointer">
+                <button type="button" onClick={() => setComboDrawer({ ...comboDrawer, items: [...(comboDrawer.items || []), { menu_item_id: '', name: '', quantity: 1, is_free: false }] })} className="text-xs font-bold text-amber-700 cursor-pointer">
                   + Add Item
                 </button>
               </div>
@@ -1304,7 +1304,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             <span />
             <div className="flex gap-2">
               <button type="button" onClick={() => setGroupDrawer(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold cursor-pointer">Cancel</button>
-              <button type="button" disabled={saving || !groupDrawer?.name?.trim()} onClick={saveGroup} className="px-5 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black cursor-pointer">Save Group</button>
+              <button type="button" disabled={saving || !groupDrawer?.name?.trim()} onClick={saveGroup} className="px-5 py-2 rounded-xl bg-amber-400 text-black text-xs font-black cursor-pointer">Save Group</button>
             </div>
           </>
         )}
@@ -1339,10 +1339,10 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
                   <Download size={14} /> Download Current Menu
                 </button>
               </div>
-              <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+              <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
                 <p className="text-xs font-bold text-slate-900">Upload New Menu (CSV)</p>
                 <p className="text-[11px] text-slate-500">Columns: Name, Category, Subcategory, Price, Description, Available, ShowOnMicrosite.</p>
-                <input type="file" accept=".csv" onChange={handleCsvImport} className="text-xs text-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-700 file:text-white file:font-bold cursor-pointer" />
+                <input type="file" accept=".csv" onChange={handleCsvImport} className="text-xs text-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-400 file:text-white file:font-bold cursor-pointer" />
               </div>
             </div>
           </div>

@@ -59,7 +59,7 @@ function greetingText() {
 function badgeStyle(status) {
   const s = String(status || 'Pending').toLowerCase();
   if (s === 'approved' || s === 'completed' || s === 'signed' || s === 'logged') {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    return 'bg-amber-50 text-amber-700 border-amber-200';
   }
   if (s === 'rejected' || s === 'declined') {
     return 'bg-rose-50 text-rose-700 border-rose-200';
@@ -171,7 +171,7 @@ function SignatureModal({ docTitle, onClose, onSave, saving }) {
               type="button"
               disabled={saving}
               onClick={() => onSave(canvasRef.current.toDataURL('image/png'))}
-              className="px-4 py-2 rounded-xl bg-[#0B3B24] hover:bg-emerald-800 text-white text-xs font-black cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-xl bg-[#0d0d0d] hover:bg-amber-300 text-white text-xs font-black cursor-pointer disabled:opacity-50"
             >
               {saving ? 'Signing…' : 'Sign & Accept'}
             </button>
@@ -589,15 +589,15 @@ export function HrAndStaffPortalView({
       )}
 
       {!isAdminMode && (
-        <header className="bg-[#0B3B24] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <header className="bg-[#0d0d0d] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
-              {restaurantName} · POJ Staff Portal
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">
+              {restaurantName} · Staff Portal
             </p>
             <h1 className="text-lg font-black">
               {greetingText()}, {selfProfile?.name || actorName}
             </h1>
-            <p className="text-[11px] text-emerald-200">
+            <p className="text-[11px] text-amber-300">
               {selfProfile?.job_title || String(staffUser?.role || 'staff').toUpperCase()} · ID:{' '}
               {selfProfile?.staff_code || (actorId ? String(actorId).slice(0, 8).toUpperCase() : 'MANI-STAFF')}
             </p>
@@ -606,14 +606,14 @@ export function HrAndStaffPortalView({
             <button
               type="button"
               onClick={() => printStaffIdCard()}
-              className="px-3 py-2 rounded-xl bg-emerald-900/70 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-slate-900/70 hover:bg-amber-300 text-white text-xs font-bold cursor-pointer"
             >
               ID Card
             </button>
             <button
               type="button"
               onClick={() => setSubTab('profile')}
-              className="px-3 py-2 rounded-xl bg-emerald-900/70 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-slate-900/70 hover:bg-amber-300 text-white text-xs font-bold cursor-pointer"
             >
               Profile &amp; Settings
             </button>
@@ -630,7 +630,7 @@ export function HrAndStaffPortalView({
               <button
                 type="button"
                 onClick={onSignOut}
-                className="px-3.5 py-2 rounded-xl bg-emerald-900 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <LogOut size={14} /> Sign Out
               </button>
@@ -654,7 +654,7 @@ export function HrAndStaffPortalView({
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Loans Disbursed</p>
-                <p className="text-2xl font-black text-emerald-700 mt-1">KES {loansDisbursedKes.toLocaleString()}</p>
+                <p className="text-2xl font-black text-amber-700 mt-1">KES {loansDisbursedKes.toLocaleString()}</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending Requests</p>
@@ -665,7 +665,7 @@ export function HrAndStaffPortalView({
             <>
               <div className="bg-white border border-slate-200 rounded-2xl p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Annual Leave Used</p>
-                <p className="text-2xl font-black text-emerald-700 mt-1">
+                <p className="text-2xl font-black text-amber-700 mt-1">
                   {annualUsed} / {annualLimit} <span className="text-xs font-bold text-slate-400">days</span>
                 </p>
               </div>
@@ -677,7 +677,7 @@ export function HrAndStaffPortalView({
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Approved Requests</p>
-                <p className="text-2xl font-black text-emerald-700 mt-1">
+                <p className="text-2xl font-black text-amber-700 mt-1">
                   {unifiedRequests.filter((r) => String(r.status).toLowerCase() === 'approved').length}
                 </p>
               </div>
@@ -703,7 +703,7 @@ export function HrAndStaffPortalView({
                 onClick={() => setSubTab(t.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer border ${
                   subTab === t.id
-                    ? 'bg-[#0B3B24] text-white border-[#0B3B24]'
+                    ? 'bg-[#0d0d0d] text-white border-[#0B3B24]'
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
@@ -714,7 +714,7 @@ export function HrAndStaffPortalView({
         </div>
 
         {notice && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl">
+          <div className="bg-amber-50 border border-amber-200 text-slate-900 text-xs font-bold px-4 py-3 rounded-xl">
             {notice}
           </div>
         )}
@@ -748,7 +748,7 @@ export function HrAndStaffPortalView({
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { id: 'leave', label: 'Request Leave', sub: 'Annual or sick leave', Icon: Calendar, color: 'text-emerald-700 bg-emerald-50' },
+                { id: 'leave', label: 'Request Leave', sub: 'Annual or sick leave', Icon: Calendar, color: 'text-amber-700 bg-amber-50' },
                 { id: 'advance', label: 'Salary Advance', sub: 'Get paid early', Icon: Wallet, color: 'text-sky-700 bg-sky-50' },
                 { id: 'loan', label: 'Apply for Loan', sub: 'Installment repayment', Icon: CreditCard, color: 'text-violet-700 bg-violet-50' },
                 { id: 'overtime', label: 'Log Overtime', sub: 'Submit extra hours', Icon: Clock, color: 'text-amber-700 bg-amber-50' },
@@ -757,7 +757,7 @@ export function HrAndStaffPortalView({
                   key={q.id}
                   type="button"
                   onClick={() => setSubTab(q.id)}
-                  className="bg-white border border-slate-200 hover:border-emerald-400 rounded-2xl p-4 text-left transition-all cursor-pointer space-y-2"
+                  className="bg-white border border-slate-200 hover:border-amber-400 rounded-2xl p-4 text-left transition-all cursor-pointer space-y-2"
                 >
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${q.color}`}>
                     <q.Icon size={17} />
@@ -778,7 +778,7 @@ export function HrAndStaffPortalView({
                       type="button"
                       onClick={() => setReqFilter(f)}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
-                        reqFilter === f ? 'bg-[#0B3B24] text-white' : 'bg-slate-100 text-slate-600'
+                        reqFilter === f ? 'bg-[#0d0d0d] text-white' : 'bg-slate-100 text-slate-600'
                       }`}
                     >
                       {f}
@@ -833,7 +833,7 @@ export function HrAndStaffPortalView({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-black text-slate-900">Unified Staff Requests Queue</h3>
-                <p className="text-[11px] text-slate-500">Leave, Salary Advances &amp; Loans across team (plus imported POJ history).</p>
+                <p className="text-[11px] text-slate-500">Leave, Salary Advances &amp; Loans across team (plus imported history).</p>
               </div>
               <div className="flex gap-1.5">
                 {['Pending', 'Approved', 'Rejected', 'All'].map((f) => (
@@ -842,7 +842,7 @@ export function HrAndStaffPortalView({
                     type="button"
                     onClick={() => setReqFilter(f)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
-                      reqFilter === f ? 'bg-[#0B3B24] text-white' : 'bg-slate-100 text-slate-700'
+                      reqFilter === f ? 'bg-[#0d0d0d] text-white' : 'bg-slate-100 text-slate-700'
                     }`}
                   >
                     {f}
@@ -886,7 +886,7 @@ export function HrAndStaffPortalView({
                                   type="button"
                                   disabled={saving}
                                   onClick={() => reviewRequest(r._table, r.id, 'Approved')}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold cursor-pointer"
+                                  className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-[11px] font-bold cursor-pointer"
                                 >
                                   Approve
                                 </button>
@@ -931,7 +931,7 @@ export function HrAndStaffPortalView({
                     type="button"
                     onClick={() => setDirFilter(f.id)}
                     className={`px-3 py-1 rounded-xl text-xs font-bold cursor-pointer ${
-                      dirFilter === f.id ? 'bg-[#0B3B24] text-white' : 'bg-slate-100 text-slate-700'
+                      dirFilter === f.id ? 'bg-[#0d0d0d] text-white' : 'bg-slate-100 text-slate-700'
                     }`}
                   >
                     {f.label}
@@ -959,13 +959,13 @@ export function HrAndStaffPortalView({
                           <p className="text-[11px] text-slate-500">{s.job_title || s.role}</p>
                           {s.email && <p className="text-[10px] text-slate-400">{s.email}</p>}
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${s.active !== false ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${s.active !== false ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                           {s.role}
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {pills.map((p) => (
-                          <span key={p.k} className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${p.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-slate-400 border-slate-200'}`}>
+                          <span key={p.k} className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${p.ok ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-400 border-slate-200'}`}>
                             {p.k}
                           </span>
                         ))}
@@ -977,7 +977,7 @@ export function HrAndStaffPortalView({
                         <button
                           type="button"
                           onClick={() => printStaffIdCard(s)}
-                          className="font-black text-emerald-700 hover:underline cursor-pointer"
+                          className="font-black text-amber-700 hover:underline cursor-pointer"
                         >
                           ID Card
                         </button>
@@ -1017,7 +1017,7 @@ export function HrAndStaffPortalView({
                       type="button"
                       onClick={() => setRosterDept(d)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
-                        rosterDept === d ? 'bg-[#0B3B24] text-white' : 'bg-slate-100 text-slate-700'
+                        rosterDept === d ? 'bg-[#0d0d0d] text-white' : 'bg-slate-100 text-slate-700'
                       }`}
                     >
                       {d} Roster
@@ -1068,7 +1068,7 @@ export function HrAndStaffPortalView({
                             ) : (
                               <span
                                 className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-                                  val === 'Off' ? 'bg-slate-100 text-slate-400' : 'bg-emerald-50 text-emerald-700'
+                                  val === 'Off' ? 'bg-slate-100 text-slate-400' : 'bg-amber-50 text-amber-700'
                                 }`}
                               >
                                 {val}
@@ -1131,7 +1131,7 @@ export function HrAndStaffPortalView({
                 <input type="text" value={profileForm.bank_name} onChange={(e) => setProfileForm((p) => ({ ...p, bank_name: e.target.value }))} placeholder="Bank Name" className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                 <input type="text" value={profileForm.bank_account_number} onChange={(e) => setProfileForm((p) => ({ ...p, bank_account_number: e.target.value }))} placeholder="Bank Account Number" className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
               </div>
-              <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-xl bg-[#0B3B24] hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+              <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-xl bg-[#0d0d0d] hover:bg-amber-300 text-white text-xs font-black cursor-pointer">
                 Save All Details
               </button>
             </form>
@@ -1158,7 +1158,7 @@ export function HrAndStaffPortalView({
               className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3"
             >
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Lock size={15} className="text-emerald-700" /> Security &amp; Password
+                <Lock size={15} className="text-amber-700" /> Security &amp; Password
               </h3>
               <input type="password" value={pwdForm.password} onChange={(e) => setPwdForm((p) => ({ ...p, password: e.target.value }))} placeholder="New Password" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
               <input type="password" value={pwdForm.confirm} onChange={(e) => setPwdForm((p) => ({ ...p, confirm: e.target.value }))} placeholder="Confirm New Password" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
@@ -1227,7 +1227,7 @@ export function HrAndStaffPortalView({
                   </div>
                   <input type="number" min="0.5" step="0.5" value={leaveForm.days_count} onChange={(e) => setLeaveForm((p) => ({ ...p, days_count: Number(e.target.value) || 1 }))} placeholder="Days" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                   <textarea rows={2} value={leaveForm.reason} onChange={(e) => setLeaveForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Reason / Handover notes" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer">
                     Submit Leave Request
                   </button>
                 </form>
@@ -1263,7 +1263,7 @@ export function HrAndStaffPortalView({
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black text-slate-900">Log Overtime Hours</h3>
-                    <span className="text-[11px] font-black text-emerald-700">Total: {totalOtDraftHours.toFixed(2)}h</span>
+                    <span className="text-[11px] font-black text-amber-700">Total: {totalOtDraftHours.toFixed(2)}h</span>
                   </div>
                   {otEntries.map((row, idx) => (
                     <div key={idx} className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
@@ -1318,7 +1318,7 @@ export function HrAndStaffPortalView({
                   >
                     + Add Another Day
                   </button>
-                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer">
                     Confirm Overtime Submission
                   </button>
                 </form>
@@ -1341,7 +1341,7 @@ export function HrAndStaffPortalView({
                   <input type="number" min="100" required value={advForm.amount} onChange={(e) => setAdvForm((p) => ({ ...p, amount: e.target.value }))} placeholder="Amount in KES" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                   <input type="month" value={advForm.repayment_month} onChange={(e) => setAdvForm((p) => ({ ...p, repayment_month: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                   <textarea rows={2} value={advForm.reason} onChange={(e) => setAdvForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Reason" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer">
                     Request Advance
                   </button>
                 </form>
@@ -1364,13 +1364,13 @@ export function HrAndStaffPortalView({
                   <input type="number" min="500" required value={loanForm.amount} onChange={(e) => setLoanForm((p) => ({ ...p, amount: e.target.value }))} placeholder="Loan Amount (KES)" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                   <input type="number" min="1" max="24" value={loanForm.installments_months} onChange={(e) => setLoanForm((p) => ({ ...p, installments_months: Number(e.target.value) || 3 }))} placeholder="Repayment Months" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                   {Number(loanForm.amount) > 0 && (
-                    <p className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
+                    <p className="text-[11px] font-bold text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
                       Est. Monthly Deduction: KES {Math.ceil(Number(loanForm.amount) / Math.max(1, Number(loanForm.installments_months || 3))).toLocaleString()}/mo
                     </p>
                   )}
                   <input type="text" value={loanForm.repayment_plan} onChange={(e) => setLoanForm((p) => ({ ...p, repayment_plan: e.target.value }))} placeholder="Repayment Plan" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                   <textarea rows={2} value={loanForm.reason} onChange={(e) => setLoanForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Reason for Loan" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer">
+                  <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer">
                     Submit Loan Application
                   </button>
                 </form>
@@ -1393,7 +1393,7 @@ export function HrAndStaffPortalView({
                           onChange={() =>
                             setChecklistTicks((prev) => prev.map((it, i) => (i === idx ? { ...it, done: !it.done } : it)))
                           }
-                          className="mt-0.5 rounded text-emerald-700"
+                          className="mt-0.5 rounded text-amber-700"
                         />
                         <span>{item.label}</span>
                       </label>
@@ -1416,7 +1416,7 @@ export function HrAndStaffPortalView({
                         'Daily checklist saved.'
                       )
                     }
-                    className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black cursor-pointer"
+                    className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"
                   >
                     Submit Checklist
                   </button>
@@ -1512,7 +1512,7 @@ export function HrAndStaffPortalView({
                     <input type="text" required value={docForm.title} onChange={(e) => setDocForm((p) => ({ ...p, title: e.target.value }))} placeholder="Document Title / Subject" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                     <input type="url" value={docForm.file_url} onChange={(e) => setDocForm((p) => ({ ...p, file_url: e.target.value }))} placeholder="Optional PDF / File Link" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                     <textarea rows={3} value={docForm.notes} onChange={(e) => setDocForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Letter Body / Terms & Conditions" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
-                    <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-1 cursor-pointer">
+                    <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1 cursor-pointer">
                       <Plus size={14} /> Issue &amp; Send Document
                     </button>
                   </form>
@@ -1529,7 +1529,7 @@ export function HrAndStaffPortalView({
             <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-black text-slate-900 capitalize flex items-center gap-2">
-                  <Users size={15} className="text-emerald-700" />
+                  <Users size={15} className="text-amber-700" />
                   <span>{isAdminMode ? 'Team Queue & Records' : 'My History'}</span>
                 </h3>
               </div>
@@ -1675,7 +1675,7 @@ export function HrAndStaffPortalView({
                           <button
                             type="button"
                             onClick={() => setSigningDoc(d)}
-                            className="px-3 py-1.5 rounded-lg bg-[#0B3B24] hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 rounded-lg bg-[#0d0d0d] hover:bg-amber-300 text-white text-xs font-black flex items-center gap-1 cursor-pointer"
                           >
                             <PenTool size={12} /> Sign &amp; Accept
                           </button>

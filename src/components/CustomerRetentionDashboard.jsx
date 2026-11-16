@@ -146,7 +146,7 @@ export function CustomerRetentionDashboard() {
                 p.firstOrderDate = order.created_at;
             }
 
-            const brand = order.brand || 'POJ';
+            const brand = order.brand || 'Store';
             const channel = order.order_channel || order.dining_option || 'Direct';
             p.brands[brand] = (p.brands[brand] || 0) + 1;
             p.channels[channel] = (p.channels[channel] || 0) + 1;

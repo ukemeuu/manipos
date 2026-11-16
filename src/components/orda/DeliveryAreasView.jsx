@@ -272,7 +272,7 @@ export function DeliveryAreasView({
             onClick={toggleMasterZones}
             className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-black ${
               enableZones
-                ? 'bg-emerald-50 border-emerald-600 text-emerald-800'
+                ? 'bg-amber-50 border-amber-400 text-slate-900'
                 : 'bg-slate-50 border-slate-200 text-slate-600'
             }`}
           >
@@ -281,7 +281,7 @@ export function DeliveryAreasView({
           <button
             type="button"
             onClick={() => openDrawer(null)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
           >
             <Plus size={14} /> Add New Delivery Area
           </button>
@@ -289,7 +289,7 @@ export function DeliveryAreasView({
       </div>
 
       {notice && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 text-slate-900 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-between">
           <span className="flex items-center gap-2"><CheckCircle2 size={15} /> {notice}</span>
           <button type="button" onClick={() => setNotice('')} className="hover:underline">Dismiss</button>
         </div>
@@ -313,7 +313,7 @@ export function DeliveryAreasView({
 
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
           <p className="font-black text-slate-900 uppercase text-[11px] tracking-wider flex items-center gap-1.5">
-            <Compass size={13} className="text-emerald-700" /> Live Point-in-Polygon Fee Tester
+            <Compass size={13} className="text-amber-700" /> Live Point-in-Polygon Fee Tester
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
             <input
@@ -330,7 +330,7 @@ export function DeliveryAreasView({
               placeholder="Longitude e.g. 36.816"
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900"
             />
-            <div className="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 font-bold text-emerald-900">
+            <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 font-bold text-slate-950">
               {simulationMatch.matchedType === 'polygon'
                 ? `${simulationMatch.zoneCaption}: KES ${simulationMatch.fee.toLocaleString()}`
                 : `Fallback Fee: KES ${simulationMatch.fee.toLocaleString()}`}
@@ -371,16 +371,16 @@ export function DeliveryAreasView({
                   return (
                     <tr key={z.id} className="hover:bg-slate-50/70">
                       <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
-                        <MapPin size={14} className="text-emerald-700" /> {z.caption}
+                        <MapPin size={14} className="text-amber-700" /> {z.caption}
                       </td>
                       <td className="py-3 px-4 text-slate-600">{branchName}</td>
-                      <td className="py-3 px-4 text-right font-mono font-black text-emerald-700">
+                      <td className="py-3 px-4 text-right font-mono font-black text-amber-700">
                         KES {Number(z.delivery_fee || 0).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-slate-500">{pts.length} pts</td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          z.is_active !== false ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                          z.is_active !== false ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-100 text-slate-500'
                         }`}>
                           {z.is_active !== false ? 'Active' : 'Disabled'}
                         </span>
@@ -437,7 +437,7 @@ export function DeliveryAreasView({
                       verticesText: formatVerticesText(preset.polygon),
                     }))
                   }
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 font-bold text-slate-700"
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 font-bold text-slate-700"
                 >
                   {preset.caption} (KES {preset.fee})
                 </button>
@@ -527,7 +527,7 @@ export function DeliveryAreasView({
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Delivery Area'}
           </button>

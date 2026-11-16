@@ -226,7 +226,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
         return (
             <form onSubmit={handleVerifyReset} className="space-y-4 text-left">
                 {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold p-3.5 rounded-2xl">{error}</div>}
-                {notice && <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold p-3 rounded-2xl">{notice}</div>}
+                {notice && <div className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-semibold p-3 rounded-2xl">{notice}</div>}
                 <div className="space-y-1.5">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                         <KeyRound size={14} className="text-orange-500" />
@@ -256,7 +256,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                         className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none text-white font-bold text-sm"
                     />
                 </div>
-                <button type="submit" disabled={loading} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm py-3.5 rounded-2xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                <button type="submit" disabled={loading} className="w-full bg-amber-400 hover:bg-emerald-400 text-slate-950 font-black text-sm py-3.5 rounded-2xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
                     {loading ? <Loader2 className="animate-spin" size={18} /> : <><span>Set New Password</span><CheckCircle2 size={16} /></>}
                 </button>
                 <button type="button" onClick={() => { setMode('login'); setError(''); }} className="w-full text-xs font-bold text-slate-400 hover:text-white py-1">
@@ -300,7 +300,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                 </div>
             )}
             {notice && (
-                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold p-3.5 rounded-2xl">
+                <div className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-semibold p-3.5 rounded-2xl">
                     {notice}
                 </div>
             )}
@@ -318,7 +318,7 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                                 type="text"
                                 required
                                 readOnly={Boolean(initialTenantSlug)}
-                                placeholder="e.g. potofjollof"
+                                placeholder="e.g. yourstore"
                                 value={storeSlug}
                                 onChange={(e) => setStoreSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                                 className={`w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl focus:border-orange-500 focus:outline-none text-white font-bold text-sm placeholder:text-slate-600 ${initialTenantSlug ? 'opacity-85 cursor-default' : ''}`}
@@ -477,10 +477,6 @@ export function PinLogin({ tenantSlug: initialTenantSlug, onLoginSuccess }) {
                             </>
                         )}
                     </button>
-
-                    <p className="text-[11px] text-slate-400 text-center leading-relaxed">
-                        Supports both ManiPOS accounts and existing <span className="text-slate-200 font-semibold">pojmanagement.com</span> Admin &amp; Staff passwords.
-                    </p>
                 </form>
             )}
 

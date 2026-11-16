@@ -451,7 +451,7 @@ export function OrdaReportsView({
               type="button"
               onClick={() => onSelectReport && onSelectReport(t.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${reportKey === t.id
-                ? 'bg-emerald-700 text-white shadow-xs'
+                ? 'bg-amber-400 text-black shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
                 }`}
             >
@@ -468,7 +468,7 @@ export function OrdaReportsView({
                 type="button"
                 onClick={() => applyDatePreset(p.id)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${datePreset === p.id
-                  ? 'bg-emerald-700 text-white shadow-xs'
+                  ? 'bg-amber-400 text-black shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
@@ -511,13 +511,13 @@ export function OrdaReportsView({
                 label: 'Total Sales',
                 value: `KES ${execMetrics.totalSales.toLocaleString()}`,
                 sub: `${execMetrics.validCount} active / valid orders`,
-                accent: 'text-emerald-700',
+                accent: 'text-amber-700',
               },
               {
                 label: 'Collected / Paid',
                 value: `KES ${execMetrics.paidSales.toLocaleString()}`,
                 sub: `${execMetrics.paidCount} paid · Unpaid KES ${execMetrics.unpaidSales.toLocaleString()}`,
-                accent: 'text-emerald-800',
+                accent: 'text-slate-900',
               },
               {
                 label: 'Total Net Sales',
@@ -547,7 +547,7 @@ export function OrdaReportsView({
                 label: 'Avg Order Value',
                 value: `KES ${execMetrics.avgOrder.toLocaleString()}`,
                 sub: 'Across valid orders',
-                accent: 'text-emerald-700',
+                accent: 'text-amber-700',
               },
               {
                 label: 'Ideal Food Cost',
@@ -567,7 +567,7 @@ export function OrdaReportsView({
                 label: 'Processed Rate',
                 value: `${execMetrics.totalCount ? Math.round((execMetrics.processedCount / execMetrics.totalCount) * 100) : 0}%`,
                 sub: `${execMetrics.processedCount} of ${execMetrics.totalCount} kitchen/done`,
-                accent: 'text-emerald-700',
+                accent: 'text-amber-700',
               },
             ].map((k) => (
               <div key={k.label} className="bg-white border border-slate-200 rounded-2xl p-4">
@@ -622,7 +622,7 @@ export function OrdaReportsView({
             <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5" data-testid="exec-payment-breakdown">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-black uppercase text-slate-500">Payment Method Breakdown</h4>
-                <span className="text-[11px] font-bold text-emerald-700">KES {execMetrics.totalSales.toLocaleString()}</span>
+                <span className="text-[11px] font-bold text-amber-700">KES {execMetrics.totalSales.toLocaleString()}</span>
               </div>
               {execMetrics.byPayment.length === 0 ? (
                 <p className="text-xs text-slate-400">No valid sales in selected range.</p>
@@ -637,7 +637,7 @@ export function OrdaReportsView({
                         <span className="font-black text-slate-900">KES {p.amount.toLocaleString()}</span>
                       </div>
                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-600" style={{ width: `${p.sharePct}%` }} />
+                        <div className="h-full bg-amber-400" style={{ width: `${p.sharePct}%` }} />
                       </div>
                       {p.pendingAmount > 0 && (
                         <p className="text-[10px] font-semibold text-amber-700">
@@ -653,7 +653,7 @@ export function OrdaReportsView({
             <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5" data-testid="exec-channel-breakdown">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-black uppercase text-slate-500">Sales Channels Breakdown</h4>
-                <span className="text-[11px] font-bold text-emerald-700">{execMetrics.validCount} orders</span>
+                <span className="text-[11px] font-bold text-amber-700">{execMetrics.validCount} orders</span>
               </div>
               {execMetrics.byChannel.length === 0 ? (
                 <p className="text-xs text-slate-400">No valid sales in selected range.</p>
@@ -771,7 +771,7 @@ export function OrdaReportsView({
                       <td className="py-2.5 px-3 font-semibold">{o.customer_name || 'Guest'}</td>
                       <td className="py-2.5 px-3">{normalizePaymentMethodLabel(o)}</td>
                       <td className="py-2.5 px-3"><span className="px-2 py-0.5 rounded-full bg-slate-100 font-bold">{o.status}</span></td>
-                      <td className="py-2.5 px-3 font-bold text-emerald-700">{formatChannelDisplayName(normalizeChannelLabel(o))}</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-700">{formatChannelDisplayName(normalizeChannelLabel(o))}</td>
                       <td className="py-2.5 px-3">{branchName(o.branch_id)}</td>
                       <td className="py-2.5 px-3 font-black">KES {Number(o.total_amount || 0).toLocaleString()}</td>
                       <td className="py-2.5 px-3 text-slate-500">{o.cashier_name || '—'}</td>
@@ -839,7 +839,7 @@ export function OrdaReportsView({
                       salesBreakdown.combos.map((c) => [c.name, c.orderCount, c.qty, c.total, c.location]));
                   }
                 }}
-                className="px-3 py-1.5 rounded-xl bg-emerald-700 text-white text-xs font-bold flex items-center gap-1"
+                className="px-3 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-bold flex items-center gap-1"
               >
                 <Download size={13} /> Export Sales
               </button>
@@ -869,7 +869,7 @@ export function OrdaReportsView({
                       <td className="py-2.5 px-4">{r.location}</td>
                       <td className="py-2.5 px-4 font-bold">{r.qty}</td>
                       <td className="py-2.5 px-4">{r.orderCount}</td>
-                      <td className="py-2.5 px-4 font-black text-emerald-700">KES {r.total.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 font-black text-amber-700">KES {r.total.toLocaleString()}</td>
                       <td className="py-2.5 px-4 text-slate-500">KES {r.cost.toLocaleString()}</td>
                       <td className="py-2.5 px-4 font-bold">KES {r.margin.toLocaleString()}</td>
                     </tr>
@@ -895,7 +895,7 @@ export function OrdaReportsView({
                     <tr key={idx}>
                       <td className="py-2.5 px-4 font-bold text-slate-900">{m.title}</td>
                       <td className="py-2.5 px-4 text-slate-700">{m.option}</td>
-                      <td className="py-2.5 px-4 font-black text-emerald-700">{m.count}</td>
+                      <td className="py-2.5 px-4 font-black text-amber-700">{m.count}</td>
                       <td className="py-2.5 px-4">{m.location}</td>
                     </tr>
                   ))}
@@ -925,7 +925,7 @@ export function OrdaReportsView({
                         <td className="py-2.5 px-4 font-bold">{c.name}</td>
                         <td className="py-2.5 px-4">{c.orderCount}</td>
                         <td className="py-2.5 px-4 font-bold">{c.qty}</td>
-                        <td className="py-2.5 px-4 font-black text-emerald-700">KES {c.total.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 font-black text-amber-700">KES {c.total.toLocaleString()}</td>
                         <td className="py-2.5 px-4">{c.location}</td>
                       </tr>
                     ))
@@ -943,7 +943,7 @@ export function OrdaReportsView({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase text-slate-400">Total Tax & Charges Collected</p>
-              <p className="text-2xl font-black text-emerald-700">
+              <p className="text-2xl font-black text-amber-700">
                 KES {taxRows.reduce((s, r) => s + Number(r.charge_value || 0), 0).toLocaleString()}
               </p>
             </div>
@@ -996,7 +996,7 @@ export function OrdaReportsView({
                       <td className="py-2.5 px-4 font-bold text-slate-900">{r.title}</td>
                       <td className="py-2.5 px-4">{r.is_tax_charge ? 'Tax' : 'Additional Fee'}</td>
                       <td className="py-2.5 px-4">{r.charge_percent ? `${r.charge_percent}%` : 'Fixed'}</td>
-                      <td className="py-2.5 px-4 font-black text-emerald-700">KES {Number(r.charge_value || 0).toLocaleString()}</td>
+                      <td className="py-2.5 px-4 font-black text-amber-700">KES {Number(r.charge_value || 0).toLocaleString()}</td>
                       <td className="py-2.5 px-4">KES {Number(r.base_grand_total || 0).toLocaleString()}</td>
                       <td className="py-2.5 px-4">{r.source}</td>
                     </tr>
@@ -1019,7 +1019,7 @@ export function OrdaReportsView({
             <button
               type="button"
               onClick={() => setCustomModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center gap-1.5"
             >
               <FileText size={14} /> Generate Custom Reports
             </button>
@@ -1046,7 +1046,7 @@ export function OrdaReportsView({
                       <td className="py-2.5 px-4 text-slate-500">{new Date(h.created_at).toLocaleTimeString('en-KE')}</td>
                       <td className="py-2.5 px-4 font-mono">{h.file_name}</td>
                       <td className="py-2.5 px-4">{branchName(h.branch_id)}</td>
-                      <td className="py-2.5 px-4 font-bold text-emerald-700">
+                      <td className="py-2.5 px-4 font-bold text-amber-700">
                         {h.summary_json?.completed || 0} orders · KES {Number(h.summary_json?.gross_sales || 0).toLocaleString()}
                       </td>
                     </tr>
@@ -1196,7 +1196,7 @@ export function OrdaReportsView({
                       <td className="py-2.5 px-4 font-bold">{o.status}</td>
                       <td className="py-2.5 px-4">{o.payment_method}</td>
                       <td className="py-2.5 px-4">{o.sync_to_kds !== false ? 'Synced' : 'Off'}</td>
-                      <td className="py-2.5 px-4 font-black text-emerald-700">KES {Number(o.total_amount || 0).toLocaleString()}</td>
+                      <td className="py-2.5 px-4 font-black text-amber-700">KES {Number(o.total_amount || 0).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1247,7 +1247,7 @@ export function OrdaReportsView({
                 })}
               </div>
             </div>
-            <button type="submit" disabled={generatingPdf || selectedSections.length === 0} className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50">
+            <button type="submit" disabled={generatingPdf || selectedSections.length === 0} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50">
               {generatingPdf ? 'Building PDF...' : 'Generate & Download PDF Report'}
             </button>
           </form>
