@@ -319,3 +319,19 @@ export function buildOrderCreatedAtForDate(orderDateStr, now = new Date()) {
   if (Number.isNaN(localEnd.getTime())) return null;
   return localEnd.toISOString();
 }
+
+/**
+ * Computes a manual WebPOS order discount in KES from either a percentage
+ * ('percent', clamped 0–100) or a fixed KES amount ('amount', clamped 0–subtotal).
+ */
+export function computeManualOrderDiscount(subtotal, discountType = 'amount', discountValue = 0) {
+  const base = Math.max(0, Number(subtotal) || 0);
+  if (base <= 0) return 0;
+  const raw = Number(discountValue);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  if (discountType === 'percent') {
+    const pct = Math.min(100, Math.max(0, raw));
+    return Math.min(base, Math.round((base * pct) / 100));
+  }
+  return Math.min(base, Math.round(raw));
+}

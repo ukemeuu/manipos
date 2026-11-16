@@ -13,6 +13,7 @@ import {
   getLocalDateString,
   getRelativeLocalDateString,
   buildOrderCreatedAtForDate,
+  computeManualOrderDiscount,
 } from '../webPosCatalog';
 
 describe('webPosCatalog helpers', () => {
@@ -210,5 +211,15 @@ describe('webPosCatalog helpers', () => {
     expect(getLocalDateString(parsedBack)).toBe('2026-11-15');
     expect(parsedBack.getHours()).toBe(23);
     expect(parsedBack.getMinutes()).toBe(59);
+  });
+
+  it('computes percentage-based and amount-based manual order discounts cleanly with clamping', () => {
+    expect(computeManualOrderDiscount(2000, 'percent', 10)).toBe(200);
+    expect(computeManualOrderDiscount(2000, 'percent', 150)).toBe(2000);
+    expect(computeManualOrderDiscount(2000, 'percent', -5)).toBe(0);
+    expect(computeManualOrderDiscount(2000, 'amount', 350)).toBe(350);
+    expect(computeManualOrderDiscount(2000, 'amount', 5000)).toBe(2000);
+    expect(computeManualOrderDiscount(0, 'percent', 20)).toBe(0);
+    expect(computeManualOrderDiscount(2000, 'amount', '')).toBe(0);
   });
 });
