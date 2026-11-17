@@ -103,7 +103,6 @@ export function FloorPlanView({ tenant, staffName = 'Manager', onBack, onOpenPos
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   useEffect(() => {

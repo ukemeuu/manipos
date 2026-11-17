@@ -4,28 +4,19 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
+  { ignores: ['dist', 'node_modules', 'release', 'supabase/functions', 'android', 'ios'] },
   {
-    ignores: [
-      'dist/**',
-      'android/**',
-      'electron/**',
-      'node_modules/**',
-      'supabase/functions/**',
-      'public/**',
-      'scripts/**',
-    ],
-  },
-  {
-    files: ['src/**/*.{js,jsx}'],
+    files: ['**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-      },
       globals: {
         ...globals.browser,
-        ...globals.es2021,
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
       },
     },
     plugins: {
@@ -34,30 +25,17 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
-      'no-undef': 'error',
-      'no-dupe-keys': 'error',
-      'no-unreachable': 'error',
-      'no-self-assign': 'error',
-      'no-empty': ['warn', { allowEmptyCatch: true }],
-      'no-unused-vars': 'off',
-      'no-useless-escape': 'off',
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'off',
+      ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': 'off',
-    },
-  },
-  {
-    files: ['src/**/__tests__/**/*.js', 'vitest.config.js'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-        describe: 'readonly',
-        it: 'readonly',
-        expect: 'readonly',
-        beforeEach: 'readonly',
-        afterEach: 'readonly',
-        vi: 'readonly',
-      },
+      'no-unused-vars': 'off',
+      'no-empty': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/set-state-in-render': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/refs': 'off',
     },
   },
 ];

@@ -34,7 +34,6 @@ const KitchenDisplay = lazy(() => import('./components/KitchenDisplay').then(m =
 const FloorPlanView = lazy(() => import('./components/FloorPlanView').then(m => ({ default: m.FloorPlanView })));
 const InventoryView = lazy(() => import('./components/InventoryView').then(m => ({ default: m.InventoryView })));
 const RestaurantDirectory = lazy(() => import('./components/RestaurantDirectory').then(m => ({ default: m.RestaurantDirectory })));
-const MenuBuilder = lazy(() => import('./components/MenuBuilder').then(m => ({ default: m.MenuBuilder })));
 const HrAndStaffPortalView = lazy(() => import('./components/orda/HrAndStaffPortalView').then(m => ({ default: m.HrAndStaffPortalView })));
 const PojOperationsView = lazy(() => import('./components/orda/PojOperationsView').then(m => ({ default: m.PojOperationsView })));
 
@@ -111,7 +110,14 @@ function resolveRoute() {
 }
 
 const OPERATIONAL_ROUTES = new Set(['kds', 'floor', 'inventory']);
-const POJ_PORTAL_ROUTES = new Set(['staff-portal', 'accountant', 'expenses', 'receiving', 'waste', 'store-ops', 'qr-vault']);
+
+// Legacy #menu-builder route: the catalog now lives in the Orda admin menu.
+function LegacyMenuBuilderRedirect() {
+  useEffect(() => {
+    window.location.replace('/?page=dashboard&tab=menu');
+  }, []);
+  return null;
+}const POJ_PORTAL_ROUTES = new Set(['staff-portal', 'accountant', 'expenses', 'receiving', 'waste', 'store-ops', 'qr-vault']);
 const ROLE_HOME_ROUTE = {
   kds: 'kds',
   staff: 'staff-portal',
@@ -688,40 +694,9 @@ function App() {
     );
   }
 
-  // ROUTE 0.65: Menu builder (categories, items, images, microsite visibility)
-  // Staff-only: without this guard anonymous visitors can render the admin UI
-  // (RLS blocks the data, but the screen should not be reachable at all).
+  // ROUTE 0.65: Legacy menu builder redirect (consolidated into Orda catalog)
   if (currentRoute === 'menu-builder') {
-    const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
-    const menuRestaurantId =
-      session?.staffUser?.restaurantId || pinUser?.restaurantId || pinUser?.restaurant_id;
-
-    if (!menuRestaurantId) {
-      return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-sm text-center shadow-sm">
-            <h1 className="text-lg font-semibold text-slate-900">Sign in required</h1>
-            <p className="text-sm text-slate-600 mt-2">
-              The menu builder is only available to signed-in staff.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigateToLogin(tenantInfo.tenantSlug)}
-              className="mt-5 inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
-            >
-              Sign in
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <MenuBuilder
-        restaurantId={menuRestaurantId}
-        onBack={() => goTo('app', '/?page=app')}
-      />
-    );
+    return <LegacyMenuBuilderRedirect />;
   }
 
   // ROUTE 0.7: Trust, legal and status pages

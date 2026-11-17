@@ -257,13 +257,6 @@ export function WalletBillingView({
                 Volume: KES {paystackTransactions.reduce((s, o) => s + Number(o.total_amount || 0), 0).toLocaleString()}
               </p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-2xl p-5">
-              <p className="text-[11px] font-bold uppercase text-slate-400">Hardware / Loan Requests</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">{loanRequests.length}</p>
-              <p className="text-[11px] text-slate-500 mt-2">
-                Latest: {loanRequests[0]?.status || 'No active requests'}
-              </p>
-            </div>
           </div>
 
           <div className="flex flex-wrap gap-1.5 text-xs font-bold">
@@ -314,7 +307,7 @@ export function WalletBillingView({
                     );
                   })}
                 {ledger.length === 0 && (
-                  <tr><td colSpan={6} className="py-10 text-center text-slate-400">No wallet ledger transactions yet. Use <strong>Deposit Funds</strong> to record a Topup.</td></tr>
+                  <tr><td colSpan={6} className="py-10 text-center text-slate-400">No wallet ledger transactions yet. Verified payment callbacks will appear here.</td></tr>
                 )}
               </tbody>
             </table>

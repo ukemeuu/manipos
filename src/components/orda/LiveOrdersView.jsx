@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search, Clock, User, Package, MapPin, Truck, Store, UtensilsCrossed,
   Check, X, CheckCircle2, Ban, Printer, RefreshCw, ExternalLink, AlertCircle, Calendar, CreditCard
@@ -46,7 +46,11 @@ function classifyOrderBucket(order) {
     || status === 'accepted'
     || status === 'verifying'
   ) return 'processing';
-  if (status === 'pending' || status === 'new') return 'new';
+  if (status === 'pending' || status === 'new') {
+    // Microsite orders wait for acceptance; POS/walk-in/aggregator orders are
+    // already punched in and go straight to In Progress.
+    return isMicrositeOrder(order) ? 'new' : 'processing';
+  }
   return 'unknown';
 }
 

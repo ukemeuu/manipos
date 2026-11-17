@@ -88,7 +88,6 @@ export function InventoryView({ tenant, staffName = 'Manager', onBack }) {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   useEffect(() => {
