@@ -12,7 +12,7 @@ create table if not exists public.platform_admins (
 alter table public.platform_admins enable row level security;
 
 insert into public.platform_admins (email, name)
-values ('potofjollofke@gmail.com', 'Platform Owner')
+values ('ukemeuuuu@gmail.com', 'Platform Owner')
 on conflict (email) do nothing;
 
 -- 2. New restaurant signup events log (for real-time owner visibility & alerts)

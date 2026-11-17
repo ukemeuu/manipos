@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     }
 
     const resendKey = Deno.env.get('RESEND_API_KEY');
-    const alertEmail = Deno.env.get('PLATFORM_ALERT_EMAIL') || 'potofjollofke@gmail.com';
+    const alertEmail = Deno.env.get('PLATFORM_ALERT_EMAIL') || 'ukemeuuuu@gmail.com';
     const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'ManiPOS Alerts <alerts@manipos.com>';
     if (resendKey && alertEmail) {
       const emailResp = await fetch('https://api.resend.com/emails', {
