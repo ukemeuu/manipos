@@ -12,16 +12,16 @@ const DEFAULT_HOURS = Object.fromEntries(
 );
 
 export function IntegrationsAndOmnichannelView({
-  mode = 'integrations', // 'integrations' | 'omnichannel' | 'api-webhooks'
+  mode = 'integrations', // 'integrations' | 'api-webhooks'
   restaurantId,
   restaurantName = 'ManiPOS Store',
   tenantSlug = '',
   settings = {},
   onSettingsUpdated,
 }) {
-  const [subTab, setSubTab] = useState(mode);
+  const [subTab, setSubTab] = useState(mode === 'omnichannel' ? 'integrations' : mode);
   useEffect(() => {
-    setSubTab(mode);
+    setSubTab(mode === 'omnichannel' ? 'integrations' : mode);
   }, [mode]);
 
   const [integrations, setIntegrations] = useState({});
@@ -222,11 +222,10 @@ export function IntegrationsAndOmnichannelView({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-black text-slate-900">Integrations, Omnichannel & API Webhooks</h2>
+            <h2 className="text-lg font-black text-slate-900">M-Pesa Daraja &amp; API Webhooks</h2>
             <div className="inline-flex bg-slate-100 rounded-xl p-0.5 text-xs font-bold">
               {[
-                { id: 'integrations', label: 'Integrations Hub' },
-                { id: 'omnichannel', label: 'Omnichannel (Glovo/Bolt/Uber)' },
+                { id: 'integrations', label: 'Payments & M-Pesa Daraja' },
                 { id: 'api-webhooks', label: 'API Keys & Webhooks' },
               ].map((t) => (
                 <button
@@ -241,7 +240,7 @@ export function IntegrationsAndOmnichannelView({
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Connect Tevin KRA eTIMS, Leta & Little dispatch riders, M-Pesa Daraja/Paystack, aggregator menus, and outbound webhooks.
+            Configure per-tenant M-Pesa Daraja STK keys, custom tenders, merchant API keys, and outbound webhooks.
           </p>
         </div>
       </div>
@@ -256,78 +255,10 @@ export function IntegrationsAndOmnichannelView({
       {/* TAB 1: INTEGRATIONS HUB */}
       {subTab === 'integrations' && (
         <div className="space-y-6">
-          {/* ACCOUNTS: Tevin KRA */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">ACCOUNTS & FISCAL (KENYA KRA)</h3>
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 text-xs shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-black text-slate-900">Tevin KRA (eTIMS Fiscal Bridge)</h4>
-                  <p className="text-slate-500">Tax Invoice signing via local ESD/VSCU device endpoint</p>
-                </div>
-                <label className="inline-flex items-center gap-2 font-bold">
-                  <input type="checkbox" checked={tevin.is_enabled} onChange={(e) => setTevin((p) => ({ ...p, is_enabled: e.target.checked }))} />
-                  Enabled
-                </label>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <input placeholder="Device IP (e.g. 192.168.1.50)" value={tevin.device_ip} onChange={(e) => setTevin((p) => ({ ...p, device_ip: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <input placeholder="Port (8080)" value={tevin.port} onChange={(e) => setTevin((p) => ({ ...p, port: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <input placeholder="Serial Number" value={tevin.serial} onChange={(e) => setTevin((p) => ({ ...p, serial: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <input placeholder="KRA Pin (P05...)" value={tevin.kra_pin} onChange={(e) => setTevin((p) => ({ ...p, kra_pin: e.target.value.toUpperCase() }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono uppercase" />
-                <input placeholder="Sender ID" value={tevin.sender_id} onChange={(e) => setTevin((p) => ({ ...p, sender_id: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
-                <input placeholder="Tax Class (A)" value={tevin.tax_class} onChange={(e) => setTevin((p) => ({ ...p, tax_class: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
-                <input placeholder="Tax Rate (%)" value={tevin.tax_rate} onChange={(e) => setTevin((p) => ({ ...p, tax_rate: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <button type="button" disabled={saving} onClick={() => saveIntegration('tevin_kra', 'ACCOUNTS', tevin.is_enabled, tevin)} className="px-4 py-2 rounded-xl bg-amber-400 text-black font-black">
-                  Save Tevin KRA
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* DELIVERY: Leta & Little */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">DELIVERY LOGISTICS</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-sm">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-black text-slate-900">Leta Dispatch</h4>
-                  <label className="inline-flex items-center gap-2 font-bold">
-                    <input type="checkbox" checked={leta.is_enabled} onChange={(e) => setLeta((p) => ({ ...p, is_enabled: e.target.checked }))} />
-                    Enabled
-                  </label>
-                </div>
-                <input type="password" placeholder="Leta API Key" value={leta.api_key} onChange={(e) => setLeta((p) => ({ ...p, api_key: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <input type="text" placeholder="Depot Code" value={leta.depot_code} onChange={(e) => setLeta((p) => ({ ...p, depot_code: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <button type="button" disabled={saving} onClick={() => saveIntegration('leta', 'DELIVERY', leta.is_enabled, leta)} className="w-full py-2 rounded-xl bg-slate-900 text-white font-black">
-                  Save Leta Config
-                </button>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-sm">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-black text-slate-900">Little Delivery</h4>
-                  <label className="inline-flex items-center gap-2 font-bold">
-                    <input type="checkbox" checked={little.is_enabled} onChange={(e) => setLittle((p) => ({ ...p, is_enabled: e.target.checked }))} />
-                    Enabled
-                  </label>
-                </div>
-                <input type="password" placeholder="Little API Key" value={little.api_key} onChange={(e) => setLittle((p) => ({ ...p, api_key: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Corporate ID" value={little.corporate_id} onChange={(e) => setLittle((p) => ({ ...p, corporate_id: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                  <input type="password" placeholder="Callback Signature Secret" value={little.callback_secret} onChange={(e) => setLittle((p) => ({ ...p, callback_secret: e.target.value }))} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-                </div>
-                <button type="button" disabled={saving} onClick={() => saveIntegration('little', 'DELIVERY', little.is_enabled, little)} className="w-full py-2 rounded-xl bg-slate-900 text-white font-black">
-                  Save Little Config
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* PAYMENTS: MPESA Paybill (Daraja), Mpesa Paystack, Custom */}
+          {/* PAYMENTS: MPESA Paybill (Daraja), Custom */}
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">PAYMENTS & LIVE DARAJA</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
               <div className="bg-white border border-amber-200 rounded-2xl p-5 space-y-2.5 shadow-sm">
                 <div className="flex justify-between items-center">
                   <h4 className="text-sm font-black text-slate-900">M-Pesa Paybill / Till (Daraja STK)</h4>

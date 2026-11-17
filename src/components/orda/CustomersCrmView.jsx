@@ -824,7 +824,7 @@ export function CustomersCrmView({
                 required
                 value={campaignForm.message}
                 onChange={(e) => setCampaignForm((p) => ({ ...p, message: e.target.value }))}
-                placeholder="Get 15% off today with code JOLLOF15 on our microsite!"
+                placeholder="Get 15% off today with code WELCOME15 on our online menu!"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
               />
             </div>

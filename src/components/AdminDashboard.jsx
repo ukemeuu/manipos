@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { supabase, setTenantContext } from '../lib/supabase';
 import { loadTenant } from '../lib/tenantConfig';
 import {
@@ -76,26 +76,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
 import { PERMISSION_GROUPS, currentPermissions, roleDefaults } from '../lib/permissions';
 import { LiveOrdersView, computeOrderBucketCounts } from './orda/LiveOrdersView';
-import { OrdaCatalogView } from './orda/OrdaCatalogView';
-import { WebPosView } from './orda/WebPosView';
-import { LocationsManagerView, CloseStoreModal } from './orda/LocationsManagerView';
-import { OrdaReportsView } from './orda/OrdaReportsView';
-import { OrderAndPaymentSettingsView } from './orda/OrderAndPaymentSettingsView';
-import { CustomersCrmView } from './orda/CustomersCrmView';
-import { PromotionsVouchersLoyaltyView } from './orda/PromotionsVouchersLoyaltyView';
-import { DeliveryAreasView } from './orda/DeliveryAreasView';
-import { OrdaInventoryErpView } from './orda/OrdaInventoryErpView';
-import { WalletBillingView } from './orda/WalletBillingView';
-import { IntegrationsAndOmnichannelView } from './orda/IntegrationsAndOmnichannelView';
-import { TeamRolesAndAccountView } from './orda/TeamRolesAndAccountView';
-import { TableManagementView } from './orda/TableManagementView';
-import { HrAndStaffPortalView } from './orda/HrAndStaffPortalView';
-import { PojOperationsView } from './orda/PojOperationsView';
-import { PojSyncBridgeView } from './orda/PojSyncBridgeView';
-import { GuestCRMView } from './GuestCRMView';
-import { CustomerRetentionDashboard } from './CustomerRetentionDashboard';
+import { CloseStoreModal } from './orda/LocationsManagerView';
+const OrdaCatalogView = lazy(() => import('./orda/OrdaCatalogView').then(m => ({ default: m.OrdaCatalogView })));
+const WebPosView = lazy(() => import('./orda/WebPosView').then(m => ({ default: m.WebPosView })));
+const LocationsManagerView = lazy(() => import('./orda/LocationsManagerView').then(m => ({ default: m.LocationsManagerView })));
+const OrdaReportsView = lazy(() => import('./orda/OrdaReportsView').then(m => ({ default: m.OrdaReportsView })));
+const OrderAndPaymentSettingsView = lazy(() => import('./orda/OrderAndPaymentSettingsView').then(m => ({ default: m.OrderAndPaymentSettingsView })));
+const CustomersCrmView = lazy(() => import('./orda/CustomersCrmView').then(m => ({ default: m.CustomersCrmView })));
+const PromotionsVouchersLoyaltyView = lazy(() => import('./orda/PromotionsVouchersLoyaltyView').then(m => ({ default: m.PromotionsVouchersLoyaltyView })));
+const DeliveryAreasView = lazy(() => import('./orda/DeliveryAreasView').then(m => ({ default: m.DeliveryAreasView })));
+const OrdaInventoryErpView = lazy(() => import('./orda/OrdaInventoryErpView').then(m => ({ default: m.OrdaInventoryErpView })));
+const WalletBillingView = lazy(() => import('./orda/WalletBillingView').then(m => ({ default: m.WalletBillingView })));
+const IntegrationsAndOmnichannelView = lazy(() => import('./orda/IntegrationsAndOmnichannelView').then(m => ({ default: m.IntegrationsAndOmnichannelView })));
+const TeamRolesAndAccountView = lazy(() => import('./orda/TeamRolesAndAccountView').then(m => ({ default: m.TeamRolesAndAccountView })));
+const TableManagementView = lazy(() => import('./orda/TableManagementView').then(m => ({ default: m.TableManagementView })));
+const HrAndStaffPortalView = lazy(() => import('./orda/HrAndStaffPortalView').then(m => ({ default: m.HrAndStaffPortalView })));
+const PojOperationsView = lazy(() => import('./orda/PojOperationsView').then(m => ({ default: m.PojOperationsView })));
 import { getTenantInfo } from '../lib/tenant';
-import { FeedbackDashboardView } from './FeedbackDashboardView';
+const FeedbackDashboardView = lazy(() => import('./FeedbackDashboardView').then(m => ({ default: m.FeedbackDashboardView })));
 import { applyOrderStatusUpdate, fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 import { authenticateStaffQuickPin } from '../services/data/staffService';
 import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
@@ -1567,23 +1565,7 @@ export function AdminDashboard({
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'customers' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                   }`}
               >
-                <Users size={14} /> Customer List
-              </button>
-              <button
-                type="button"
-                onClick={() => selectModule('customers', 'guest-crm')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'guest-crm' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-              >
-                <UserCheck size={14} /> Guest CRM &amp; Tags
-              </button>
-              <button
-                type="button"
-                onClick={() => selectModule('customers', 'customer-retention')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold ${activeTab === 'customer-retention' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-              >
-                <TrendingUp size={14} /> Customer Retention &amp; VIP
+                <Users size={14} /> Customer Directory &amp; CRM
               </button>
               <button
                 type="button"
@@ -1703,15 +1685,7 @@ export function AdminDashboard({
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'integrations' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
-                    <Plug size={15} /> Integrations Hub
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => selectModule('settings', 'omnichannel')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'omnichannel' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
-                      }`}
-                  >
-                    <Globe size={15} /> Omnichannel (Glovo/Bolt/Uber)
+                    <Plug size={15} /> M-Pesa Daraja &amp; Payments
                   </button>
                   <button
                     type="button"
@@ -1719,7 +1693,7 @@ export function AdminDashboard({
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'api-webhooks' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                   >
-                    <KeyRound size={15} /> API Keys & Webhooks
+                    <KeyRound size={15} /> API Keys &amp; Webhooks
                   </button>
                 </>
               )}
@@ -1756,14 +1730,6 @@ export function AdminDashboard({
                       }`}
                   >
                     <QrCode size={15} /> QR Code Vault
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => selectModule('settings', 'poj-sync')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'poj-sync' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-amber-700 bg-amber-50/40 hover:bg-amber-100 border border-amber-200/70'
-                      }`}
-                  >
-                    <RefreshCw size={15} /> Data Migration &amp; Sync
                   </button>
                 </>
               )}
@@ -2190,6 +2156,7 @@ export function AdminDashboard({
             </div>
           )}
 
+          <Suspense fallback={<div className="py-16 flex items-center justify-center text-xs font-bold text-slate-400"><Loader2 size={20} className="animate-spin mr-2 text-amber-500" /> Loading module...</div>}>
           {showWebPos ? (
             <WebPosView
               restaurantId={activeRestaurantId}
@@ -2341,14 +2308,6 @@ export function AdminDashboard({
               onOpenCloseStore={() => setCloseStoreOpen(true)}
               onStaffUpdated={fetchDashboardData}
             />
-          ) : activeTab === 'guest-crm' ? (
-            <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
-              <GuestCRMView initialTab="directory" />
-            </div>
-          ) : activeTab === 'customer-retention' ? (
-            <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
-              <CustomerRetentionDashboard restaurantId={activeRestaurantId} />
-            </div>
           ) : activeTab === 'hr-admin' || activeTab === 'staff-portal' ? (
             <HrAndStaffPortalView
               mode={activeTab === 'hr-admin' ? 'hr-admin' : 'self-service'}
@@ -2361,14 +2320,6 @@ export function AdminDashboard({
                 email: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').email || '',
               }}
               staffList={staffList}
-            />
-          ) : activeTab === 'poj-sync' ? (
-            <PojSyncBridgeView
-              restaurantId={activeRestaurantId}
-              restaurantName={profileName || restaurantName}
-              actorId={JSON.parse(localStorage.getItem('pin_staff_user') || '{}').id || null}
-              actorName={pinStaffName}
-              onSyncCompleted={fetchDashboardData}
             />
           ) : activeTab === 'fpa-expenses' || activeTab === 'receiving' || activeTab === 'waste' || activeTab === 'store-ops' || activeTab === 'qr-vault' ? (
             <PojOperationsView
@@ -2383,6 +2334,7 @@ export function AdminDashboard({
               }}
             />
           ) : null}
+          </Suspense>
 
           {!showWebPos && (
             <div className={isLegacyDarkTab ? 'bg-slate-950 text-slate-100 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-sm' : ''}>
@@ -2793,7 +2745,7 @@ export function AdminDashboard({
                         <input
                           type="text"
                           required
-                          placeholder="e.g. Pot of Jollof Kitchen"
+                          placeholder="e.g. Mani Kitchen"
                           value={profileName}
                           onChange={(e) => setProfileName(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:border-amber-400 focus:outline-none transition-colors"
@@ -3048,7 +3000,7 @@ export function AdminDashboard({
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">SEO Page Title</label>
                             <input
                               type="text"
-                              placeholder="e.g. Pot of Jollof — Westlands"
+                              placeholder="e.g. Mani Kitchen — Westlands"
                               value={settings.seo_title || ''}
                               onChange={(e) => setSettings({ ...settings, seo_title: e.target.value })}
                               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"
@@ -3074,7 +3026,7 @@ export function AdminDashboard({
                           <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">SEO Meta Description</label>
                           <textarea
                             rows={2}
-                            placeholder="Order authentic smoky Jollof rice, suya & grilled chicken delivered fast in Nairobi..."
+                            placeholder="Order freshly prepared meals & drinks delivered fast in Nairobi..."
                             value={settings.seo_description || ''}
                             onChange={(e) => setSettings({ ...settings, seo_description: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 focus:outline-none"

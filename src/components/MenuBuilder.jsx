@@ -323,7 +323,7 @@ export function MenuBuilder({ restaurantId, onBack }) {
 
     try {
       const ext = file.name.split('.').pop() || 'png';
-      const path = `${kind === 'item' ? 'menu_items' : 'categories'}/${targetId}_${Date.now()}.${ext}`;
+      const path = `${restaurantId}/${kind === 'item' ? 'menu_items' : 'categories'}/${targetId}_${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(path);

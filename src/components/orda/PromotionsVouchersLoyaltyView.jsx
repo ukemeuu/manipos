@@ -811,7 +811,7 @@ export function PromotionsVouchersLoyaltyView({
                 type="text"
                 value={promoForm.code}
                 onChange={(e) => setPromoForm((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
-                placeholder="JOLLOF15"
+                placeholder="WELCOME15"
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono uppercase"
               />
             )}
@@ -961,7 +961,7 @@ export function PromotionsVouchersLoyaltyView({
               required
               value={loyaltyForm.name}
               onChange={(e) => setLoyaltyForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Jollof Rewards Club"
+              placeholder="e.g. VIP Rewards Club"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
             />
           </div>

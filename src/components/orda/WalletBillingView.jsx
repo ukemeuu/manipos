@@ -206,12 +206,12 @@ export function WalletBillingView({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-black text-slate-900">Wallet, Subscriptions & Payouts</h2>
+            <h2 className="text-lg font-black text-slate-900">Subscriptions &amp; Payouts</h2>
             <div className="inline-flex bg-slate-100 rounded-xl p-0.5 text-xs font-bold">
               {[
-                { id: 'payments', label: 'Wallet & Ledger' },
                 { id: 'subscriptions', label: 'Subscriptions & Billing' },
-                { id: 'paystack', label: 'Paystack Sub-Account' },
+                { id: 'payments', label: 'Wallet & Ledger' },
+                { id: 'paystack', label: 'Settlement & Payouts' },
               ].map((t) => (
                 <button
                   key={t.id}
@@ -225,25 +225,12 @@ export function WalletBillingView({
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Merchant wallet balance (KES), Paystack deposits, POS device loan requests, and SaaS billing history.
+            Active ManiPOS subscription plan, billing invoices, and settlement ledger.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setLoanModal(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800"
-          >
-            <Laptop size={14} className="text-amber-700" /> Request POS / Loan
-          </button>
-          <button
-            type="button"
-            onClick={() => setDepositModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
-          >
-            <Plus size={14} /> Deposit Funds
-          </button>
+        <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+          Billing Cycle: <span className="uppercase font-black text-slate-900">{billingCycle}</span>
         </div>
       </div>
 
@@ -467,74 +454,6 @@ export function WalletBillingView({
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* DEPOSIT FUNDS MODAL */}
-      {depositModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <form onSubmit={handleDeposit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-3 text-xs">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-black">Deposit Funds to Wallet</h3>
-              <button type="button" onClick={() => setDepositModal(false)}><X size={16} /></button>
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Amount (KES) *</label>
-              <input type="number" required min="100" value={depositForm.amount} onChange={(e) => setDepositForm((p) => ({ ...p, amount: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Channel</label>
-              <select value={depositForm.channel} onChange={(e) => setDepositForm((p) => ({ ...p, channel: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold">
-                <option value="Paystack">Paystack (Card / M-Pesa Express)</option>
-                <option value="MPESA Paybill">M-Pesa Paybill (542542 / Tenant Paybill)</option>
-                <option value="Bank Transfer">RTGS / Pesalink Bank Transfer</option>
-              </select>
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Transaction Reference</label>
-              <input type="text" value={depositForm.reference} onChange={(e) => setDepositForm((p) => ({ ...p, reference: e.target.value }))} placeholder="Auto-generated if blank" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-            </div>
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
-              {saving ? 'Recording...' : 'Confirm Topup'}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* HARDWARE / LOAN REQUEST MODAL */}
-      {loanModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <form onSubmit={handleSubmitLoan} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-3 text-xs">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-black">POS Hardware / Working Capital Request</h3>
-              <button type="button" onClick={() => setLoanModal(false)}><X size={16} /></button>
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Request Type</label>
-              <select value={loanForm.request_type} onChange={(e) => setLoanForm((p) => ({ ...p, request_type: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold">
-                <option value="POS Hardware">POS Hardware Bundle</option>
-                <option value="KDS Tablet">Kitchen Display Tablet + Mount</option>
-                <option value="Working Capital">Merchant Working Capital Advance</option>
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-bold mb-1">Device / Facility Model</label>
-                <input type="text" value={loanForm.device_model} onChange={(e) => setLoanForm((p) => ({ ...p, device_model: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
-              </div>
-              <div>
-                <label className="block font-bold mb-1">Quantity / Amount (KES)</label>
-                <input type="number" min="1" value={loanForm.amount_kes} onChange={(e) => setLoanForm((p) => ({ ...p, amount_kes: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
-              </div>
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Delivery / Deployment Notes</label>
-              <textarea rows={2} value={loanForm.notes} onChange={(e) => setLoanForm((p) => ({ ...p, notes: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
-            </div>
-            <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 text-black font-black">
-              {saving ? 'Submitting...' : 'Submit Hardware / Loan Request'}
-            </button>
-          </form>
         </div>
       )}
     </div>
