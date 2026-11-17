@@ -79,6 +79,17 @@ export async function provisionTenant(input) {
       const tenantId = data.restaurant_id;
       const meta = await enrichTenant(tenantId, { plan, trialDays, cuisine: input.cuisine });
       if (seedDemoData) await seedTenantData(tenantId, cleanSlug, menu);
+      supabase.functions.invoke('notify-new-signup', {
+        body: {
+          restaurant_name: name,
+          restaurant_slug: cleanSlug,
+          owner_name: managerName,
+          owner_email: cleanEmail,
+          owner_phone: phone || null,
+          plan,
+          business_type: input.businessType || 'restaurant',
+        },
+      }).catch(() => {});
       return { success: true, ...data, ...meta, mode: 'rpc' };
     }
     if (data?.success === false && data.error) {
