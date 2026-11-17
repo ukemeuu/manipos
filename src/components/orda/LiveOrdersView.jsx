@@ -242,6 +242,7 @@ export function LiveOrdersView({
   const [updatingId, setUpdatingId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [dbActiveCount, setDbActiveCount] = useState(0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -358,6 +359,19 @@ export function LiveOrdersView({
     () => filteredOrders.filter((o) => ['new', 'processing', 'ready'].includes(classifyOrderBucket(o))).length,
     [filteredOrders]
   );
+
+  // True active count from the database (the list may be limited to 1000 rows).
+  useEffect(() => {
+    if (!restaurantId) return;
+    setTenantContext(restaurantId);
+    supabase
+      .from('pos_orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('restaurant_id', restaurantId)
+      .in('status', ['Pending', 'New', 'Accepted', 'Preparing', 'Processing', 'Ready', 'Verifying'])
+      .then(({ count }) => setDbActiveCount(count || 0))
+      .catch(() => {});
+  }, [restaurantId, orders]);
   const pagedOrders = useMemo(() => {
     const safePage = Math.min(page, totalPages);
     const start = (safePage - 1) * PAGE_SIZE;
@@ -880,7 +894,7 @@ export function LiveOrdersView({
       {/* Bulk actions */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
         <span className="text-xs font-bold text-slate-500">
-          {activeInView} active order(s) in this view
+          {dbActiveCount} active order(s)
         </span>
         <button
           type="button"
@@ -888,7 +902,7 @@ export function LiveOrdersView({
           disabled={bulkBusy}
           className={`px-3 py-2 rounded-xl text-xs font-black disabled:opacity-50 cursor-pointer ${bulkConfirming ? 'bg-rose-500 hover:bg-rose-400 text-white' : 'bg-amber-400 hover:bg-amber-300 text-black'}`}
         >
-          {bulkBusy ? 'Completing…' : bulkConfirming ? (activeInView > 0 ? `Confirm complete ${activeInView}?` : 'Confirm bulk complete?') : 'Bulk Complete'}
+          {bulkBusy ? 'Completing…' : bulkConfirming ? (dbActiveCount > 0 ? `Confirm complete ${dbActiveCount}?` : 'Confirm bulk complete?') : 'Bulk Complete'}
         </button>
       </div>
 
