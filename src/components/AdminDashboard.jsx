@@ -2284,7 +2284,13 @@ export function AdminDashboard({
               restaurantId={activeRestaurantId}
               restaurantName={profileName || restaurantName}
               tenantSlug={tenantSlug}
-              onBranchesUpdated={fetchDashboardData}
+              onBranchesUpdated={(nextBranches) => {
+                if (Array.isArray(nextBranches)) {
+                  setBranches(nextBranches);
+                } else {
+                  fetchDashboardData({ silent: true });
+                }
+              }}
             />
           ) : activeTab === 'inventory' ? (
             <OrdaInventoryErpView

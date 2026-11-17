@@ -16,7 +16,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
   const [saving, setSaving] = useState(false);
   const [drawer, setDrawer] = useState(null);
 
-  const fetchBranches = async () => {
+  const fetchBranches = async ({ notifyParent = false } = {}) => {
     if (!restaurantId) return;
     setLoading(true);
     try {
@@ -28,7 +28,9 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
         .order('created_at', { ascending: true });
       if (!error && data) {
         setBranches(data);
-        onBranchesUpdated?.(data);
+        if (notifyParent) {
+          onBranchesUpdated?.(data);
+        }
       }
     } catch (err) {
       console.warn('Branches load notice:', err);
@@ -77,7 +79,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
       const { error } = await op;
       if (error) throw error;
       setDrawer(null);
-      await fetchBranches();
+      await fetchBranches({ notifyParent: true });
     } catch (err) {
       alert('Could not save location (ensure Wave 1 migration is applied): ' + err.message);
     } finally {
@@ -244,7 +246,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
                 { key: 'omnichannel_enabled', label: 'Omnichannel Gateway' },
               ].map((flag) => (
                 <label key={flag.key} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={drawer[flag.key] === true} onChange={(e) => setDrawer({ ...drawer, [flag.key]: e.target.checked })} className="accent-emerald-700 w-4 h-4" />
+                  <input type="checkbox" checked={drawer[flag.key] === true} onChange={(e) => setDrawer({ ...drawer, [flag.key]: e.target.checked })} className="accent-amber-400 w-4 h-4" />
                   <span>{flag.label}</span>
                 </label>
               ))}
@@ -261,7 +263,7 @@ export function LocationsManagerView({ restaurantId, restaurantName, tenantSlug,
                       const next = [...drawer.opening_hours];
                       next[idx] = { ...next[idx], enabled: e.target.checked };
                       setDrawer({ ...drawer, opening_hours: next });
-                    }} className="accent-emerald-700" />
+                    }} className="accent-amber-400" />
                     {row.day}
                   </label>
                   <input type="time" className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1" value={row.open || '08:00'} onChange={(e) => {
