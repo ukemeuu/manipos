@@ -71,6 +71,10 @@ const OPTIONAL_ORDER_COLS = [
   'mpesa_receipt_number',
   'guest_id',
   'discount',
+  'packaging_fee',
+  'discount_type',
+  'discount_value',
+  'staff_id',
 ];
 
 function findMissingOrderColumn(attempt, error) {
@@ -195,6 +199,15 @@ export function WebPosView({
   });
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(Number(initialOrder?.delivery_fee || 0));
+  const [packagingFee, setPackagingFee] = useState(Number(initialOrder?.packaging_fee || 0));
+  const [staffId] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('pin_staff_user') || '{}').id || null;
+    } catch (_) {
+      return null;
+    }
+  });
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [promoError, setPromoError] = useState('');
@@ -635,7 +648,7 @@ export function WebPosView({
 
   const grandTotal = Math.max(
     0,
-    subtotal - discountAmount + appliedDeliveryFee + chargesComputation.totalChargesAndTax
+    subtotal - discountAmount + appliedDeliveryFee + Number(packagingFee || 0) + chargesComputation.totalChargesAndTax
   );
 
   const handleApplyPromo = async () => {
@@ -729,6 +742,10 @@ export function WebPosView({
           status: saveAsOpen ? 'Open' : 'Completed',
           total_amount: grandTotal,
           discount: discountAmount,
+          packaging_fee: Number(packagingFee || 0),
+          discount_type: manualDiscountType,
+          discount_value: manualDiscountValue ? Number(manualDiscountValue) : 0,
+          staff_id: staffId,
           mpesa_receipt_number: paymentReference.trim() || initialOrder.mpesa_receipt_number || initialOrder.mpesa_receipt || null,
           notes: noteParts.join(' | ') || initialOrder.notes || null,
         });
@@ -785,6 +802,10 @@ export function WebPosView({
         sales_channel: salesChannel,
         branch_id: activeBranch?.id || null,
         delivery_fee: appliedDeliveryFee,
+        packaging_fee: Number(packagingFee || 0),
+        discount_type: manualDiscountType,
+        discount_value: manualDiscountValue ? Number(manualDiscountValue) : 0,
+        staff_id: staffId,
         tax_amount: chargesComputation.taxTotal,
         charges_amount: chargesComputation.otherChargesTotal,
         charges_breakdown: chargesComputation.lines,
@@ -1330,6 +1351,178 @@ export function WebPosView({
                   </div>
                 </div>
               )}
+              {/* Delivery & packaging charges while building the order */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {diningMode === 'Delivery' && (
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Address *</label>
+                    <input
+                      type="text"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder="Street, estate, landmark..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Fee (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    disabled={diningMode !== 'Delivery'}
+                    value={diningMode === 'Delivery' ? deliveryFee : 0}
+                    onChange={(e) => setDeliveryFee(Math.max(0, Number(e.target.value || 0)))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Packaging Fee (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={packagingFee}
+                    onChange={(e) => setPackagingFee(Math.max(0, Number(e.target.value || 0)))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Promo */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Promo / Discount Code</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder="Enter code..."
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyPromo}
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {promoError && <p className="text-xs text-rose-600 mt-1">{promoError}</p>}
+                {appliedDiscount && (
+                  <p className="text-xs text-amber-700 font-bold mt-1">
+                    Applied {appliedDiscount.code}: -KES {promoDiscountAmount.toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDiscountModalOpen(true)}
+                className="w-full py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100 flex items-center justify-center gap-1.5"
+              >
+                <Tag className="w-3.5 h-3.5" />
+                Apply Discount
+              </button>
+
+              {/* Manual Order Discount (% Percentage or KES Amount) */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5" data-testid="webpos-manual-discount">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-amber-700" />
+                    Order Discount
+                  </label>
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualDiscountType('percent');
+                        setManualDiscountValue('');
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${manualDiscountType === 'percent'
+                        ? 'bg-amber-400 text-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                    >
+                      % Percentage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualDiscountType('amount');
+                        setManualDiscountValue('');
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${manualDiscountType === 'amount'
+                        ? 'bg-amber-400 text-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                    >
+                      KES Amount
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(manualDiscountType === 'percent' ? [5, 10, 15, 20, 50] : [100, 200, 500, 1000]).map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setManualDiscountValue(String(preset))}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition ${Number(manualDiscountValue) === preset
+                        ? 'bg-amber-400 text-black border-amber-400'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
+                        }`}
+                    >
+                      {manualDiscountType === 'percent' ? `${preset}%` : `KES ${preset}`}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max={manualDiscountType === 'percent' ? '100' : String(subtotal)}
+                      value={manualDiscountValue}
+                      onChange={(e) => setManualDiscountValue(e.target.value)}
+                      placeholder={manualDiscountType === 'percent' ? 'Discount % (0–100)' : 'Discount amount (KES)'}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 pr-12"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-black text-slate-400">
+                      {manualDiscountType === 'percent' ? '%' : 'KES'}
+                    </span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={manualDiscountReason}
+                      onChange={(e) => setManualDiscountReason(e.target.value)}
+                      placeholder="Reason (optional, e.g. VIP)"
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                    />
+                    {(manualDiscountValue || manualDiscountReason) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualDiscountValue('');
+                          setManualDiscountReason('');
+                        }}
+                        className="px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 text-rose-600 text-xs font-bold cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {manualDiscountAmount > 0 && (
+                  <p className="text-xs text-amber-700 font-bold">
+                    Discount applied: -KES {manualDiscountAmount.toLocaleString()}
+                    {manualDiscountType === 'percent' ? ` (${manualDiscountValue}%)` : ''}
+                  </p>
+                )}
+              </div>
+
             </>
           ) : (
             /* SETTLE STEP */
@@ -1504,157 +1697,6 @@ export function WebPosView({
                   />
                 </div>
               )}
-
-              {diningMode === 'Delivery' && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Address *</label>
-                    <input
-                      type="text"
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="Street, estate, landmark..."
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Fee (KES)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={deliveryFee}
-                      onChange={(e) => setDeliveryFee(Math.max(0, Number(e.target.value || 0)))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Promo */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Promo / Discount Code</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Enter code..."
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 uppercase"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyPromo}
-                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
-                  >
-                    Apply
-                  </button>
-                </div>
-                {promoError && <p className="text-xs text-rose-600 mt-1">{promoError}</p>}
-                {appliedDiscount && (
-                  <p className="text-xs text-amber-700 font-bold mt-1">
-                    Applied {appliedDiscount.code}: -KES {promoDiscountAmount.toLocaleString()}
-                  </p>
-                )}
-              </div>
-
-              {/* Manual Order Discount (% Percentage or KES Amount) */}
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5" data-testid="webpos-manual-discount">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-[11px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-amber-700" />
-                    Order Discount
-                  </label>
-                  <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setManualDiscountType('percent');
-                        setManualDiscountValue('');
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${manualDiscountType === 'percent'
-                        ? 'bg-amber-400 text-black'
-                        : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                    >
-                      % Percentage
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setManualDiscountType('amount');
-                        setManualDiscountValue('');
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${manualDiscountType === 'amount'
-                        ? 'bg-amber-400 text-black'
-                        : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                    >
-                      KES Amount
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(manualDiscountType === 'percent' ? [5, 10, 15, 20, 50] : [100, 200, 500, 1000]).map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setManualDiscountValue(String(preset))}
-                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition ${Number(manualDiscountValue) === preset
-                        ? 'bg-amber-400 text-black border-amber-400'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
-                        }`}
-                    >
-                      {manualDiscountType === 'percent' ? `${preset}%` : `KES ${preset}`}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="0"
-                      max={manualDiscountType === 'percent' ? '100' : String(subtotal)}
-                      value={manualDiscountValue}
-                      onChange={(e) => setManualDiscountValue(e.target.value)}
-                      placeholder={manualDiscountType === 'percent' ? 'Discount % (0–100)' : 'Discount amount (KES)'}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 pr-12"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-black text-slate-400">
-                      {manualDiscountType === 'percent' ? '%' : 'KES'}
-                    </span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <input
-                      type="text"
-                      value={manualDiscountReason}
-                      onChange={(e) => setManualDiscountReason(e.target.value)}
-                      placeholder="Reason (optional, e.g. VIP)"
-                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
-                    />
-                    {(manualDiscountValue || manualDiscountReason) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setManualDiscountValue('');
-                          setManualDiscountReason('');
-                        }}
-                        className="px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 text-rose-600 text-xs font-bold cursor-pointer"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {manualDiscountAmount > 0 && (
-                  <p className="text-xs text-amber-700 font-bold">
-                    Discount applied: -KES {manualDiscountAmount.toLocaleString()}
-                    {manualDiscountType === 'percent' ? ` (${manualDiscountValue}%)` : ''}
-                  </p>
-                )}
-              </div>
 
               {/* Separated Payment Methods */}
               <div>
@@ -2037,6 +2079,12 @@ export function WebPosView({
                   <span className="font-bold">KES {appliedDeliveryFee.toLocaleString()}</span>
                 </div>
               )}
+              {Number(packagingFee || 0) > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Packaging Fee</span>
+                  <span className="font-bold">KES {Number(packagingFee || 0).toLocaleString()}</span>
+                </div>
+              )}
               {chargesComputation.lines.map((chg, idx) => (
                 <div key={chg.charge_id || idx} className="flex justify-between text-slate-600">
                   <span>
@@ -2365,6 +2413,99 @@ export function WebPosView({
                 className="flex-1 py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
               >
                 Add to Order · KES {(finalModalUnitPrice * itemQty).toLocaleString()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount modal */}
+      {discountModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                <Tag className="w-4 h-4 text-amber-700" /> Order Discount
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDiscountModalOpen(false)}
+                className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              <button
+                type="button"
+                onClick={() => { setManualDiscountType('percent'); setManualDiscountValue(''); }}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold ${manualDiscountType === 'percent' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
+              >
+                % Percentage
+              </button>
+              <button
+                type="button"
+                onClick={() => { setManualDiscountType('amount'); setManualDiscountValue(''); }}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold ${manualDiscountType === 'amount' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
+              >
+                KES Amount
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(manualDiscountType === 'percent' ? [5, 10, 15, 20, 50] : [100, 200, 500, 1000]).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setManualDiscountValue(String(preset))}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold ${Number(manualDiscountValue) === preset ? 'bg-amber-400 text-black border-amber-400' : 'bg-white text-slate-700 border-slate-200'}`}
+                >
+                  {manualDiscountType === 'percent' ? `${preset}%` : `KES ${preset}`}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                min="0"
+                max={manualDiscountType === 'percent' ? '100' : String(subtotal)}
+                value={manualDiscountValue}
+                onChange={(e) => setManualDiscountValue(e.target.value)}
+                placeholder={manualDiscountType === 'percent' ? 'Discount %' : 'Amount (KES)'}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900"
+              />
+              <input
+                type="text"
+                value={manualDiscountReason}
+                onChange={(e) => setManualDiscountReason(e.target.value)}
+                placeholder="Reason (optional)"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
+              />
+            </div>
+
+            {manualDiscountAmount > 0 && (
+              <p className="text-xs font-bold text-amber-700">
+                Discount: -KES {manualDiscountAmount.toLocaleString()}
+                {manualDiscountType === 'percent' ? ` (${manualDiscountValue}%)` : ''}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setManualDiscountValue(''); setManualDiscountReason(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setDiscountModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
+              >
+                Done
               </button>
             </div>
           </div>

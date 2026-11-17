@@ -30,20 +30,23 @@ const CHANNEL_OPTIONS = [
 
 function classifyOrderBucket(order) {
   const status = String(order?.status || 'Pending').toLowerCase().trim();
-  const pay = String(order?.payment_status || 'Pending').toLowerCase().trim();
 
   if (status === 'open' || status === 'saved') return 'open';
   if (status === 'returned' || status === 'refunded') return 'returned';
   if (status === 'void' || status === 'voided') return 'voided';
   if (status === 'cancelled' || status === 'canceled') return 'cancelled';
   if (status === 'declined' || status === 'rejected') return 'declined';
-  if (status === 'failed' || pay === 'failed') return 'failed';
-  if (status === 'completed' || status === 'settled' || status === 'delivered') return 'completed';
-  if (status === 'shipped' || status === 'dispatched') return 'shipped';
+  if (status === 'completed' || status === 'settled' || status === 'delivered' || status === 'shipped' || status === 'dispatched') return 'completed';
   if (status === 'ready') return 'ready';
-  if (status === 'preparing' || status === 'in progress' || status === 'in_progress' || status === 'processing' || status === 'accepted') return 'processing';
-  if (status === 'verifying') return isMicrositeOrder(order) ? 'verifying' : 'processing';
-  if (status === 'pending' || status === 'new') return isMicrositeOrder(order) ? 'new' : 'processing';
+  if (
+    status === 'preparing'
+    || status === 'in progress'
+    || status === 'in_progress'
+    || status === 'processing'
+    || status === 'accepted'
+    || status === 'verifying'
+  ) return 'processing';
+  if (status === 'pending' || status === 'new') return 'new';
   return 'unknown';
 }
 
@@ -94,13 +97,10 @@ export function computeOrderBucketCounts(orders = []) {
   const counts = {
     active: 0,
     new: 0,
-    verifying: 0,
     processing: 0,
     cancelled: 0,
     declined: 0,
-    failed: 0,
     ready: 0,
-    shipped: 0,
     completed: 0,
     returned: 0,
     voided: 0,
@@ -110,7 +110,7 @@ export function computeOrderBucketCounts(orders = []) {
   orders.forEach((o) => {
     const b = classifyOrderBucket(o);
     if (counts[b] !== undefined) counts[b] += 1;
-    if (['new', 'verifying', 'processing', 'ready', 'shipped'].includes(b)) {
+    if (['new', 'processing', 'ready'].includes(b)) {
       counts.active += 1;
     }
   });
@@ -155,14 +155,10 @@ function statusPillMeta(bucket, order) {
         label: pay === 'paid' ? 'New · Online Prepayment Successful' : 'New',
         cls: 'bg-amber-50 text-amber-800 border-amber-200',
       };
-    case 'verifying':
-      return { label: 'Verifying Payment', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
     case 'processing':
       return { label: 'In Progress', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
     case 'ready':
       return { label: 'Ready for Pickup / Dispatch', cls: 'bg-teal-50 text-teal-700 border-teal-200' };
-    case 'shipped':
-      return { label: 'Out for Delivery', cls: 'bg-cyan-50 text-cyan-800 border-cyan-200' };
     case 'completed':
       return { label: 'Completed', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     case 'declined':
@@ -173,8 +169,6 @@ function statusPillMeta(bucket, order) {
       return { label: 'Returned', cls: 'bg-orange-50 text-orange-800 border-orange-200' };
     case 'voided':
       return { label: 'Voided', cls: 'bg-slate-200 text-slate-700 border-slate-300' };
-    case 'failed':
-      return { label: 'Payment Failed', cls: 'bg-red-50 text-red-700 border-red-200' };
     case 'open':
       return { label: 'Open Tab (Unsettled)', cls: 'bg-purple-50 text-purple-700 border-purple-200' };
     default:
@@ -229,6 +223,7 @@ export function LiveOrdersView({
   tenantSlug = '',
   activeBranch,
   statusFilter = 'active',
+  restrictToToday = false,
   voidCompletedAllowed = true,
   voidWindowHours = 168,
   onRefresh,
@@ -245,6 +240,7 @@ export function LiveOrdersView({
   const [rangeLoading, setRangeLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -299,7 +295,14 @@ export function LiveOrdersView({
       list = list.filter((o) => !o.branch_id || o.branch_id === activeBranch.id);
     }
 
-    if (datePreset !== 'all') {
+    if (restrictToToday) {
+      const startMs = new Date(getBusinessDayStartIso()).getTime();
+      const nowMs = Date.now();
+      list = list.filter((o) => {
+        const ts = new Date(o.created_at || 0).getTime();
+        return !Number.isNaN(ts) && ts >= startMs && ts <= nowMs;
+      });
+    } else if (datePreset !== 'all') {
       const { startIso, endIso } = computeDateWindow(datePreset, customStart, customEnd);
       if (startIso && endIso) {
         const startMs = new Date(startIso).getTime();
@@ -314,7 +317,7 @@ export function LiveOrdersView({
     list = list.filter((o) => {
       const bucket = classifyOrderBucket(o);
       if (statusFilter === 'active') {
-        return ['new', 'verifying', 'processing', 'ready', 'shipped'].includes(bucket);
+        return ['new', 'processing', 'ready'].includes(bucket);
       }
       return bucket === statusFilter;
     });
@@ -343,18 +346,55 @@ export function LiveOrdersView({
       const tb = new Date(b.created_at || 0).getTime();
       return sortOrder === 'newest' ? tb - ta : ta - tb;
     });
-  }, [orders, activeBranch, datePreset, customStart, customEnd, statusFilter, channelFilter, searchQuery, sortOrder]);
+  }, [orders, activeBranch, datePreset, customStart, customEnd, statusFilter, channelFilter, searchQuery, sortOrder, restrictToToday]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
   const cumulativeTotals = useMemo(
     () => summarizeOrdersCumulativeTotals(filteredOrders, statusFilter),
     [filteredOrders, statusFilter]
   );
+  const activeInView = useMemo(
+    () => filteredOrders.filter((o) => ['new', 'processing', 'ready'].includes(classifyOrderBucket(o))).length,
+    [filteredOrders]
+  );
   const pagedOrders = useMemo(() => {
     const safePage = Math.min(page, totalPages);
     const start = (safePage - 1) * PAGE_SIZE;
     return filteredOrders.slice(start, start + PAGE_SIZE);
   }, [filteredOrders, page, totalPages]);
+
+  const bulkCompleteActive = async () => {
+    if (!restaurantId) return;
+    const targets = filteredOrders.filter(
+      (o) => !o?._fromPoj && ['new', 'processing', 'ready'].includes(classifyOrderBucket(o))
+    );
+    if (targets.length === 0) return;
+    if (!window.confirm(`Mark ${targets.length} order(s) as Completed?`)) return;
+    setBulkBusy(true);
+    setTenantContext(restaurantId);
+    try {
+      const ids = targets.map((o) => o.id).filter(Boolean);
+      const batches = [];
+      for (let i = 0; i < ids.length; i += 100) batches.push(ids.slice(i, i + 100));
+      for (const batch of batches) {
+        const { error } = await supabase
+          .from('pos_orders')
+          .update({
+            status: 'Completed',
+            payment_status: 'Paid',
+            completed_at: new Date().toISOString(),
+          })
+          .in('id', batch)
+          .eq('restaurant_id', restaurantId);
+        if (error) throw error;
+      }
+      await onRefresh?.();
+    } catch (err) {
+      alert('Bulk complete failed: ' + (err.message || err));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const updateOrderStatus = async (order, nextStatus, extraPatch = {}) => {
     if (!order?.id || !restaurantId) return;
@@ -747,14 +787,11 @@ export function LiveOrdersView({
   const titles = {
     active: 'Active Orders',
     new: 'New Orders',
-    verifying: 'Verifying Payment Orders',
     processing: 'Orders In Progress',
     ready: 'Ready Orders',
-    shipped: 'Out for Delivery',
     completed: 'Completed Orders',
     cancelled: 'Cancelled Orders',
     declined: 'Declined Orders',
-    failed: 'Failed Payment Orders',
     returned: 'Returned Orders',
     voided: 'Voided Orders',
     open: 'Open Pending Orders',
@@ -818,57 +855,74 @@ export function LiveOrdersView({
         </div>
       </div>
 
-      {/* Business-Day & Historical Date Filter Bar */}
+      {/* Bulk actions */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">
-            <Calendar size={12} /> Window:
-          </span>
-          {[
-            { id: 'all', label: 'All Loaded' },
-            { id: 'today', label: 'Today' },
-            { id: 'yesterday', label: 'Yesterday' },
-            { id: '7days', label: '7 Days' },
-            { id: 'month', label: 'This Month' },
-          ].map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => handleSelectDatePreset(preset.id)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${datePreset === preset.id
-                ? 'bg-amber-400 text-black border-amber-400'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <input
-            type="date"
-            value={customStart}
-            onChange={(e) => setCustomStart(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700"
-          />
-          <span className="text-slate-400 font-bold">–</span>
-          <input
-            type="date"
-            value={customEnd}
-            onChange={(e) => setCustomEnd(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700"
-          />
-          <button
-            type="button"
-            onClick={applyCustomDateRange}
-            disabled={rangeLoading}
-            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-          >
-            {rangeLoading ? 'Loading…' : 'Apply'}
-          </button>
-        </div>
+        <span className="text-xs font-bold text-slate-500">
+          {activeInView} active order(s) in this view
+        </span>
+        <button
+          type="button"
+          onClick={bulkCompleteActive}
+          disabled={bulkBusy || activeInView === 0}
+          className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50 cursor-pointer"
+        >
+          {bulkBusy ? 'Completing…' : 'Bulk Complete'}
+        </button>
       </div>
+
+      {/* Business-Day & Historical Date Filter Bar */}
+      {!restrictToToday && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">
+              <Calendar size={12} /> Window:
+            </span>
+            {[
+              { id: 'all', label: 'All Loaded' },
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: '7days', label: '7 Days' },
+              { id: 'month', label: 'This Month' },
+            ].map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handleSelectDatePreset(preset.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${datePreset === preset.id
+                  ? 'bg-amber-400 text-black border-amber-400'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700"
+            />
+            <span className="text-slate-400 font-bold">–</span>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700"
+            />
+            <button
+              type="button"
+              onClick={applyCustomDateRange}
+              disabled={rangeLoading}
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+            >
+              {rangeLoading ? 'Loading…' : 'Apply'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cumulative Orders Totals Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="orders-cumulative-totals">
@@ -1057,7 +1111,7 @@ export function LiveOrdersView({
                 </div>
 
                 {/* Orda-style Full-Height Action Buttons */}
-                {(bucket === 'new' || bucket === 'verifying') && isMicrositeOrder(order) && (
+                {(bucket === 'new') && isMicrositeOrder(order) && (
                   <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-32 shrink-0">
                     <button
                       type="button"
@@ -1078,7 +1132,7 @@ export function LiveOrdersView({
                   </div>
                 )}
 
-                {(bucket === 'processing' || ((bucket === 'new' || bucket === 'verifying') && !isMicrositeOrder(order))) && (
+                {(bucket === 'processing' || (bucket === 'new' && !isMicrositeOrder(order))) && (
                   <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-32 shrink-0">
                     <button
                       type="button"
@@ -1099,7 +1153,7 @@ export function LiveOrdersView({
                   </div>
                 )}
 
-                {(bucket === 'ready' || bucket === 'shipped') && (
+                {(bucket === 'ready') && (
                   <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-36 shrink-0">
                     <button
                       type="button"
@@ -1227,7 +1281,7 @@ export function LiveOrdersView({
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {(classifyOrderBucket(selectedOrder) === 'new' || classifyOrderBucket(selectedOrder) === 'verifying') && isMicrositeOrder(selectedOrder) && (
+              {(classifyOrderBucket(selectedOrder) === 'new') && isMicrositeOrder(selectedOrder) && (
                 <>
                   <button
                     type="button"

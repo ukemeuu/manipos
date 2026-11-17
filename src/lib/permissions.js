@@ -15,6 +15,7 @@ export const PERMISSIONS = [
   { key: 'view_analytics', label: 'View analytics & reports', group: 'Insights' },
   { key: 'view_orders', label: 'View order history', group: 'Sales' },
   { key: 'void_orders', label: 'Void & refund orders', group: 'Sales' },
+  { key: 'view_previous_days', label: 'View previous days orders & sales', group: 'Sales' },
   { key: 'manage_discounts', label: 'Manage discounts', group: 'Sales' },
   { key: 'manage_offers', label: 'Manage offers & promotions', group: 'Sales' },
   { key: 'manage_menu', label: 'Edit menu & categories', group: 'Catalogue' },
@@ -45,7 +46,7 @@ export function roleDefaults(role) {
     case 'admin':
       return PERMISSION_KEYS;
     case 'manager':
-      return PERMISSION_KEYS.filter((k) => k !== 'manage_staff');
+      return PERMISSION_KEYS.filter((k) => k !== 'manage_staff' && k !== 'view_previous_days');
     case 'cashier':
       return ['view_orders', 'manage_menu'];
     case 'waiter':

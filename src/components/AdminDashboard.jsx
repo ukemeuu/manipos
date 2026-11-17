@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense, lazy } from 'react';
 import { supabase, setTenantContext } from '../lib/supabase';
 import { loadTenant } from '../lib/tenantConfig';
 import {
@@ -74,7 +74,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLocalAuditLogs } from '../lib/auditLogger';
-import { PERMISSION_GROUPS, currentPermissions, roleDefaults } from '../lib/permissions';
+import { PERMISSION_GROUPS, currentPermissions, roleDefaults, can } from '../lib/permissions';
 import { LiveOrdersView, computeOrderBucketCounts } from './orda/LiveOrdersView';
 import { CloseStoreModal } from './orda/LocationsManagerView';
 const OrdaCatalogView = lazy(() => import('./orda/OrdaCatalogView').then(m => ({ default: m.OrdaCatalogView })));
@@ -140,6 +140,35 @@ export function AdminDashboard({
   });
   const effectiveStaffUser = propStaffUser || sessionStaffUser;
   const isAdmin = useMemo(() => isAdminAccount(effectiveStaffUser), [effectiveStaffUser]);
+  const canViewPreviousDays = useMemo(
+    () => isAdmin || can('view_previous_days', effectiveStaffUser),
+    [isAdmin, effectiveStaffUser]
+  );
+
+  // Staff members only see the current business day and only the orders they
+  // punched in. Admins (or users granted "view_previous_days") see everything.
+  const filterStaffOrders = useCallback(
+    (list) => {
+      if (!Array.isArray(list)) return [];
+      const staff = effectiveStaffUser;
+      const dayStartMs = new Date(getBusinessDayStartIso()).getTime();
+      return list.filter((o) => {
+        if (!o) return false;
+        if (!canViewPreviousDays) {
+          const ts = new Date(o.created_at || 0).getTime();
+          if (Number.isNaN(ts) || ts < dayStartMs) return false;
+        }
+        if (!isAdmin) {
+          const sid = o.staff_id || o.cashier_id;
+          if (sid && staff?.id) return String(sid) === String(staff.id);
+          const name = o.cashier_name || o.staff_name;
+          return name === staff?.name;
+        }
+        return true;
+      });
+    },
+    [canViewPreviousDays, effectiveStaffUser, isAdmin]
+  );
 
   const initialEntry = useMemo(() => {
     let tabParam = '';
@@ -279,7 +308,7 @@ export function AdminDashboard({
     const refreshOrdersOnly = (evt) => {
       const eventDetail = evt && evt.detail ? evt.detail : null;
       if (eventDetail?.updatedOrder || eventDetail?.orderId || eventDetail?.sourcePojId) {
-        setOrders((prev) => applyOrderStatusUpdate(prev, eventDetail));
+        setOrders((prev) => filterStaffOrders(applyOrderStatusUpdate(prev, eventDetail)));
       }
 
       setTenantContext(restId);
@@ -315,7 +344,7 @@ export function AdminDashboard({
           if (eventDetail?.updatedOrder) {
             merged = applyOrderStatusUpdate(merged, eventDetail);
           }
-          return merged;
+          return filterStaffOrders(merged);
         });
       });
     };
@@ -441,8 +470,10 @@ export function AdminDashboard({
       )
     ).then(() => {
       setOrders((prev) =>
-        prev.map((o) =>
-          pendingMicrosite.some((p) => p.id === o.id) ? { ...o, status: 'Preparing' } : o
+        filterStaffOrders(
+          prev.map((o) =>
+            pendingMicrosite.some((p) => p.id === o.id) ? { ...o, status: 'Preparing' } : o
+          )
         )
       );
     });
@@ -480,7 +511,7 @@ export function AdminDashboard({
           .select('*, items:pos_order_items(*)')
           .eq('restaurant_id', currentRestaurantId)
           .order('created_at', { ascending: false })
-          .limit(350),
+          .limit(1000),
         supabase
           .from('pos_menu')
           .select('*')
@@ -506,9 +537,11 @@ export function AdminDashboard({
         const [ordersRes, menuRes, settingsRes] = phase1Results;
         const fetchedOrders = ordersRes?.status === 'fulfilled' ? ordersRes.value?.data || [] : [];
         setOrders((prev) =>
-          mergeOrdersWithPoj(
-            fetchedOrders,
-            prev.filter((o) => o?._fromPoj)
+          filterStaffOrders(
+            mergeOrdersWithPoj(
+              fetchedOrders,
+              prev.filter((o) => o?._fromPoj)
+            )
           )
         );
 
@@ -615,7 +648,7 @@ export function AdminDashboard({
         const [pojRes, discountsRes, branchesRes, staffRes, feedbackRes, linksRes, suppliersRes, auditRes] = p2;
 
         if (pojRes?.status === 'fulfilled' && Array.isArray(pojRes.value)) {
-          setOrders((prev) => mergeOrdersWithPoj(prev, pojRes.value));
+          setOrders((prev) => filterStaffOrders(mergeOrdersWithPoj(prev, pojRes.value)));
         }
         if (discountsRes?.status === 'fulfilled' && !discountsRes.value?.error) {
           setDiscounts(discountsRes.value?.data || []);
@@ -685,7 +718,7 @@ export function AdminDashboard({
       setOrders((prev) => {
         const existingMap = new Map(prev.map((o) => [String(o.id), o]));
         mpRows.forEach((r) => existingMap.set(String(r.id), r));
-        return mergeOrdersWithPoj(Array.from(existingMap.values()), pojRows);
+        return filterStaffOrders(mergeOrdersWithPoj(Array.from(existingMap.values()), pojRows));
       });
     } catch (err) {
       console.warn('Date range load note:', err);
@@ -1319,14 +1352,11 @@ export function AdminDashboard({
   const ORDER_BUCKETS = [
     { id: 'active', label: 'Active Orders', count: bucketCounts.active },
     { id: 'new', label: 'New', count: bucketCounts.new },
-    { id: 'verifying', label: 'Verifying', count: bucketCounts.verifying },
     { id: 'processing', label: 'In Progress', count: bucketCounts.processing },
     { id: 'ready', label: 'Ready', count: bucketCounts.ready },
-    { id: 'shipped', label: 'Shipped', count: bucketCounts.shipped },
     { id: 'completed', label: 'Completed', count: bucketCounts.completed },
     { id: 'cancelled', label: 'Cancelled', count: bucketCounts.cancelled },
     { id: 'declined', label: 'Declined', count: bucketCounts.declined },
-    { id: 'failed', label: 'Payment Failed', count: bucketCounts.failed },
     { id: 'returned', label: 'Returned', count: bucketCounts.returned },
     { id: 'voided', label: 'Voided', count: bucketCounts.voided },
     { id: 'open', label: 'Pending Open', count: bucketCounts.open },
@@ -2122,13 +2152,13 @@ export function AdminDashboard({
 
         {/* WORKSPACE MAIN */}
         <main className="flex-1 p-3 sm:p-5 md:p-6 pb-24 md:pb-6 overflow-y-auto overflow-x-hidden bg-slate-50">
-          {(bucketCounts.new + bucketCounts.verifying) > 0 && (activeTab !== 'orders' || showWebPos) && (
+          {(bucketCounts.new) > 0 && (activeTab !== 'orders' || showWebPos) && (
             <div className="mb-5 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-3">
                 <span className="w-8 h-8 rounded-xl bg-amber-500 text-white font-black flex items-center justify-center animate-pulse">!</span>
                 <div>
                   <p className="text-xs font-black text-amber-950 uppercase tracking-wider">
-                    {bucketCounts.new + bucketCounts.verifying} New Incoming Order{(bucketCounts.new + bucketCounts.verifying) > 1 ? 's' : ''} Waiting Approval
+                    {bucketCounts.new} New Incoming Order{bucketCounts.new > 1 ? 's' : ''} Waiting Approval
                   </p>
                   <p className="text-xs text-amber-800">
                     Review and click Accept or Decline in Live Orders.
@@ -2186,6 +2216,7 @@ export function AdminDashboard({
               tenantSlug={tenantSlug}
               activeBranch={activeBranchObj}
               statusFilter={orderBucket}
+              restrictToToday={!canViewPreviousDays}
               voidCompletedAllowed={settings.void_completed_allowed !== false}
               voidWindowHours={settings.void_window_hours ?? 168}
               onRefresh={() => fetchDashboardData({ silent: true })}

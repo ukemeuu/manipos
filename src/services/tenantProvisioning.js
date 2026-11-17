@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, setTenantContext } from '../lib/supabase';
 import { getRegistryTenant } from '../data/tenantRegistry';
 
 export function slugify(value) {
@@ -77,6 +77,8 @@ export async function provisionTenant(input) {
     });
     if (!error && data?.success) {
       const tenantId = data.restaurant_id;
+      // Tenant-scoped RLS: seed writes must carry the new store's x-tenant-id.
+      setTenantContext(tenantId);
       const meta = await enrichTenant(tenantId, { plan, trialDays, cuisine: input.cuisine });
       if (seedDemoData) await seedTenantData(tenantId, cleanSlug, menu);
       supabase.functions.invoke('notify-new-signup', {
@@ -125,6 +127,9 @@ export async function provisionTenant(input) {
     if (retry.error) return { success: false, error: retry.error.message };
     store = retry.data;
   }
+
+  // Tenant-scoped RLS: subsequent seed writes must carry the new store's x-tenant-id.
+  setTenantContext(store.id);
 
   const staffRow = {
     restaurant_id: store.id,

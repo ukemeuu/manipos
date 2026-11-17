@@ -1487,6 +1487,40 @@ function orderTicketSignature(order) {
 }
 
 /**
+ * Status precedence used when merging ManiPOS and POJ records for the same
+ * ticket. The more advanced kitchen/sales state wins so a "Completed" status
+ * is never overwritten by a stale "Ready" from the other system.
+ */
+const ORDER_STATUS_RANK = {
+  pending: 0,
+  new: 0,
+  verifying: 1,
+  accepted: 2,
+  preparing: 3,
+  'in progress': 3,
+  'in_progress': 3,
+  processing: 3,
+  ready: 4,
+  shipped: 4,
+  dispatched: 4,
+  completed: 5,
+  settled: 5,
+  delivered: 5,
+  declined: 6,
+  rejected: 6,
+  cancelled: 6,
+  canceled: 6,
+  voided: 6,
+  void: 6,
+  returned: 6,
+  refunded: 6,
+};
+
+function orderStatusRank(status) {
+  return ORDER_STATUS_RANK[String(status || '').toLowerCase().trim()] ?? 0;
+}
+
+/**
  * Applies an optimistic order update event (e.g. immediately after Accept/Decline
  * or Ready/Complete) into the in-memory orders array so the UI moves the order
  * immediately without requiring a browser refresh.
@@ -1566,8 +1600,21 @@ export function mergeOrdersWithPoj(maniOrders = [], pojOrders = []) {
         !orderHasLineItems(existing) && poItems.length > 0
           ? poItems
           : existing.items;
+      const existingRank = orderStatusRank(existing.status);
+      const pojRank = orderStatusRank(po.status);
+      const usePojStatus = pojRank > existingRank;
       merged[matchIdx] = {
         ...existing,
+        ...(usePojStatus
+          ? {
+              status: po.status,
+              payment_status: po.payment_status || existing.payment_status,
+              accepted_at: po.accepted_at || existing.accepted_at,
+              kitchen_started_at: po.kitchen_started_at || existing.kitchen_started_at,
+              kitchen_ready_at: po.kitchen_ready_at || existing.kitchen_ready_at,
+              completed_at: po.completed_at || existing.completed_at,
+            }
+          : {}),
         source_poj_id: existing.source_poj_id || srcId || poId || null,
         _fromPoj: Boolean(existing._fromPoj || po._fromPoj),
         ...(nextItems !== existing.items ? { items: nextItems, pos_order_items: nextItems } : {}),
