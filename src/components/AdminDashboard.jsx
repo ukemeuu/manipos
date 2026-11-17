@@ -690,6 +690,14 @@ export function AdminDashboard({
     }
   };
 
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) fetchDashboardData({ silent: true });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   const handleFetchDateRange = async (startIso, endIso) => {
     const restId = getActiveRestaurantId();
     if (!restId) return;
@@ -2109,9 +2117,10 @@ export function AdminDashboard({
               type="button"
               onClick={() => fetchDashboardData({ silent: true })}
               title="Refresh data"
-              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer"
             >
               <RefreshCw size={14} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </header>

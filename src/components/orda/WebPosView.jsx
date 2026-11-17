@@ -208,6 +208,7 @@ export function WebPosView({
     }
   });
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [chargesModalOpen, setChargesModalOpen] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [promoError, setPromoError] = useState('');
@@ -1262,95 +1263,6 @@ export function WebPosView({
                 </div>
               )}
 
-              {loading ? (
-                <div className="py-16 flex items-center justify-center text-slate-400 text-sm gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading catalog...
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {filteredCombos.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-                        <Gift className="w-3.5 h-3.5 text-amber-500" /> Combos
-                      </h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                        {filteredCombos.map((c) => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => addComboToCart(c)}
-                            className="text-left p-3 rounded-xl border border-amber-200 bg-amber-50/40 hover:border-amber-400 transition"
-                          >
-                            <p className="text-xs font-bold text-slate-900 truncate">{c.name}</p>
-                            <p className="text-[11px] font-black text-amber-700 mt-1">
-                              KES {Number(c.price || 0).toLocaleString()}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {filteredItems.map((item) => {
-                      const effPrice = resolveBrandItemPrice(item, selectedBrand, resolveEffectivePrice);
-                      const hasSpecial = effPrice !== Number(item.price || 0);
-                      const itemLinkedMods = getLinkedModifierGroupsForItem(item, modifierGroups);
-                      const hasCustoms =
-                        (item.variations?.length || 0) > 0 ||
-                        (item.additions?.length || 0) > 0 ||
-                        itemLinkedMods.length > 0;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => openCustomize(item)}
-                          className="text-left rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-sm bg-white p-2.5 flex flex-col justify-between transition group"
-                        >
-                          <div>
-                            {item.image_url ? (
-                              <img
-                                src={item.image_url}
-                                alt={item.name}
-                                className="w-full h-24 object-cover rounded-lg mb-2 bg-slate-100"
-                              />
-                            ) : (
-                              <div className="w-full h-16 rounded-lg mb-2 bg-slate-100 flex items-center justify-center text-slate-400 text-[11px] font-bold">
-                                {(item.category || 'ITEM').slice(0, 14)}
-                              </div>
-                            )}
-                            <p className="text-xs font-bold text-slate-900 line-clamp-2 group-hover:text-slate-900">
-                              {item.name}
-                            </p>
-                          </div>
-                          <div className="mt-2 flex items-center justify-between gap-1">
-                            <div>
-                              <span className="text-xs font-black text-amber-700">
-                                KES {effPrice.toLocaleString()}
-                              </span>
-                              {hasSpecial && (
-                                <span className="ml-1 text-[10px] line-through text-slate-400">
-                                  {Number(item.price).toLocaleString()}
-                                </span>
-                              )}
-                            </div>
-                            {hasCustoms && (
-                              <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                                Options
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    {filteredItems.length === 0 && filteredCombos.length === 0 && (
-                      <div className="col-span-full py-12 text-center text-slate-400 text-xs">
-                        No catalog items match "{search || selectedCategory}".
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
               {/* Delivery & packaging charges while building the order */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {diningMode === 'Delivery' && (
@@ -1415,14 +1327,24 @@ export function WebPosView({
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setDiscountModalOpen(true)}
-                className="w-full py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100 flex items-center justify-center gap-1.5"
-              >
-                <Tag className="w-3.5 h-3.5" />
-                Apply Discount
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDiscountModalOpen(true)}
+                  className="w-full py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100 flex items-center justify-center gap-1.5"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  Discount
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChargesModalOpen(true)}
+                  className="w-full py-2 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold hover:bg-sky-100 flex items-center justify-center gap-1.5"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  Delivery & Pack
+                </button>
+              </div>
 
               {/* Manual Order Discount (% Percentage or KES Amount) */}
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5" data-testid="webpos-manual-discount">
@@ -1523,6 +1445,96 @@ export function WebPosView({
                 )}
               </div>
 
+
+              {loading ? (
+                <div className="py-16 flex items-center justify-center text-slate-400 text-sm gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading catalog...
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {filteredCombos.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                        <Gift className="w-3.5 h-3.5 text-amber-500" /> Combos
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {filteredCombos.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => addComboToCart(c)}
+                            className="text-left p-3 rounded-xl border border-amber-200 bg-amber-50/40 hover:border-amber-400 transition"
+                          >
+                            <p className="text-xs font-bold text-slate-900 truncate">{c.name}</p>
+                            <p className="text-[11px] font-black text-amber-700 mt-1">
+                              KES {Number(c.price || 0).toLocaleString()}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {filteredItems.map((item) => {
+                      const effPrice = resolveBrandItemPrice(item, selectedBrand, resolveEffectivePrice);
+                      const hasSpecial = effPrice !== Number(item.price || 0);
+                      const itemLinkedMods = getLinkedModifierGroupsForItem(item, modifierGroups);
+                      const hasCustoms =
+                        (item.variations?.length || 0) > 0 ||
+                        (item.additions?.length || 0) > 0 ||
+                        itemLinkedMods.length > 0;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => openCustomize(item)}
+                          className="text-left rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-sm bg-white p-2.5 flex flex-col justify-between transition group"
+                        >
+                          <div>
+                            {item.image_url ? (
+                              <img
+                                src={item.image_url}
+                                alt={item.name}
+                                className="w-full h-24 object-cover rounded-lg mb-2 bg-slate-100"
+                              />
+                            ) : (
+                              <div className="w-full h-16 rounded-lg mb-2 bg-slate-100 flex items-center justify-center text-slate-400 text-[11px] font-bold">
+                                {(item.category || 'ITEM').slice(0, 14)}
+                              </div>
+                            )}
+                            <p className="text-xs font-bold text-slate-900 line-clamp-2 group-hover:text-slate-900">
+                              {item.name}
+                            </p>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-1">
+                            <div>
+                              <span className="text-xs font-black text-amber-700">
+                                KES {effPrice.toLocaleString()}
+                              </span>
+                              {hasSpecial && (
+                                <span className="ml-1 text-[10px] line-through text-slate-400">
+                                  {Number(item.price).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            {hasCustoms && (
+                              <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                Options
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {filteredItems.length === 0 && filteredCombos.length === 0 && (
+                      <div className="col-span-full py-12 text-center text-slate-400 text-xs">
+                        No catalog items match "{search || selectedCategory}".
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             /* SETTLE STEP */
@@ -2062,6 +2074,14 @@ export function WebPosView({
           </div>
 
           <div className="pt-4 mt-4 border-t border-slate-200 space-y-3">
+            <button
+              type="button"
+              onClick={() => setChargesModalOpen(true)}
+              className="w-full py-2 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold hover:bg-sky-100 flex items-center justify-center gap-1.5"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Edit Delivery, Packaging & Discount
+            </button>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal</span>
@@ -2504,6 +2524,67 @@ export function WebPosView({
                 type="button"
                 onClick={() => setDiscountModalOpen(false)}
                 className="flex-1 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery & packaging modal */}
+      {chargesModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-sky-700" /> Delivery & Packaging
+              </h3>
+              <button
+                type="button"
+                onClick={() => setChargesModalOpen(false)}
+                className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Fee (KES)</label>
+                <input
+                  type="number"
+                  min="0"
+                  disabled={diningMode !== 'Delivery'}
+                  value={diningMode === 'Delivery' ? deliveryFee : 0}
+                  onChange={(e) => setDeliveryFee(Math.max(0, Number(e.target.value || 0)))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Packaging Fee (KES)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={packagingFee}
+                  onChange={(e) => setPackagingFee(Math.max(0, Number(e.target.value || 0)))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setDeliveryFee(0); setPackagingFee(0); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setChargesModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-black"
               >
                 Done
               </button>

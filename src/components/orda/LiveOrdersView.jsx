@@ -241,6 +241,7 @@ export function LiveOrdersView({
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkConfirming, setBulkConfirming] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -365,15 +366,25 @@ export function LiveOrdersView({
 
   const bulkCompleteActive = async () => {
     if (!restaurantId) return;
-    const targets = filteredOrders.filter(
-      (o) => !o?._fromPoj && ['new', 'processing', 'ready'].includes(classifyOrderBucket(o))
-    );
-    if (targets.length === 0) return;
-    if (!window.confirm(`Mark ${targets.length} order(s) as Completed?`)) return;
     setBulkBusy(true);
     setTenantContext(restaurantId);
     try {
-      const ids = targets.map((o) => o.id).filter(Boolean);
+      // Complete every active order for this tenant, not just the rows
+      // currently loaded in the list. This clears large backlogs reliably.
+      const { data, error: fetchError } = await supabase
+        .from('pos_orders')
+        .select('id')
+        .eq('restaurant_id', restaurantId)
+        .in('status', ['Pending', 'New', 'Accepted', 'Preparing', 'Processing', 'Ready', 'Verifying'])
+        .limit(5000);
+      if (fetchError) throw fetchError;
+
+      const ids = (data || []).map((row) => row.id).filter(Boolean);
+      if (ids.length === 0) {
+        await onRefresh?.();
+        return;
+      }
+
       const batches = [];
       for (let i = 0; i < ids.length; i += 100) batches.push(ids.slice(i, i + 100));
       for (const batch of batches) {
@@ -394,6 +405,17 @@ export function LiveOrdersView({
     } finally {
       setBulkBusy(false);
     }
+  };
+
+  const handleBulkClick = () => {
+    if (bulkBusy) return;
+    if (bulkConfirming) {
+      setBulkConfirming(false);
+      bulkCompleteActive();
+      return;
+    }
+    setBulkConfirming(true);
+    setTimeout(() => setBulkConfirming(false), 5000);
   };
 
   const updateOrderStatus = async (order, nextStatus, extraPatch = {}) => {
@@ -862,11 +884,11 @@ export function LiveOrdersView({
         </span>
         <button
           type="button"
-          onClick={bulkCompleteActive}
-          disabled={bulkBusy || activeInView === 0}
-          className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black disabled:opacity-50 cursor-pointer"
+          onClick={handleBulkClick}
+          disabled={bulkBusy}
+          className={`px-3 py-2 rounded-xl text-xs font-black disabled:opacity-50 cursor-pointer ${bulkConfirming ? 'bg-rose-500 hover:bg-rose-400 text-white' : 'bg-amber-400 hover:bg-amber-300 text-black'}`}
         >
-          {bulkBusy ? 'Completing…' : 'Bulk Complete'}
+          {bulkBusy ? 'Completing…' : bulkConfirming ? (activeInView > 0 ? `Confirm complete ${activeInView}?` : 'Confirm bulk complete?') : 'Bulk Complete'}
         </button>
       </div>
 
