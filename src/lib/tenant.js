@@ -205,7 +205,7 @@ export function getPosLoginUrl(tenantSlug = null) {
   }
 
   if (tenantSlug) {
-    return `https://${tenantSlug}.pos.manipos.com`;
+    return `https://pos.manipos.com/?tenant=${encodeURIComponent(tenantSlug)}`;
   }
 
   return `https://pos.manipos.com`;

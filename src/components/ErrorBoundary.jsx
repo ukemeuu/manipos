@@ -15,8 +15,10 @@ export class ErrorBoundary extends React.Component {
 
     componentDidCatch(error, errorInfo) {
         console.error("Uncaught error:", error, errorInfo);
+        // A missing hashed chunk after a deploy is self-healing: reload once
+        // and do NOT page the owner for it. Real bugs still get reported.
+        if (recoverFromChunkError(error)) return;
         reportError(error, { componentStack: errorInfo?.componentStack, severity: 'react-error-boundary' });
-        recoverFromChunkError(error);
     }
 
     render() {

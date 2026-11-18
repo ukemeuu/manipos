@@ -17,6 +17,7 @@ import {
     awardLoyaltyPointsForOrder,
 } from '../lib/promoEngine';
 import { computeEffectiveMinSelected } from '../lib/webPosCatalog';
+import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -854,6 +855,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     const [orderNote, setOrderNote] = useState('');
     // Address autocomplete (Google Places, with OpenStreetMap fallbacks)
     const [addressSuggestions, setAddressSuggestions] = useState([]);
+    const [addressSource, setAddressSource] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isSearchingAddress, setIsSearchingAddress] = useState(false);
     const selectedAddressRef = useRef(false);
@@ -883,8 +885,6 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     const [isGeocoding, setIsGeocoding] = useState(false);
     const [geocodingError, setGeocodingError] = useState('');
 
-    const GOOGLE_PLACES_API_KEY = 'AIzaSyDhwk7tNH19ACOUo0WUIJsVGSUtVLji_yM';
-
     // Load the Google Maps JS SDK once so the geocoder is available.
     useEffect(() => {
         if (window.google && window.google.maps) return;
@@ -892,7 +892,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
         if (document.getElementById(scriptId)) return;
         const script = document.createElement('script');
         script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_PLACES_API_KEY}&libraries=places`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
         script.async = true;
         script.defer = true;
         document.head.appendChild(script);
@@ -1110,6 +1110,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 }
 
                 setAddressSuggestions(suggestions);
+                setAddressSource(suggestions.length > 0 ? (suggestions[0].provider || '') : '');
                 setShowSuggestions(suggestions.length > 0);
             } catch (e) {
                 console.error('Address autocomplete failed:', e);
@@ -3103,7 +3104,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                                         {showSuggestions && addressSuggestions.length > 0 && (
                                                             <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border-2 border-black rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-[#f0f0f0] text-left">
                                                                 <div className="px-3 py-1.5 bg-[#f9f9f9] text-[10px] font-black text-[#545454] uppercase tracking-wider flex items-center justify-between">
-                                                                    <span>📍 Select your address</span>
+                                                                    <span>📍 Select your address{addressSource ? ` · ${addressSource}` : ''}</span>
                                                                     <span className="text-[9px] font-normal text-[#a3a3a3]">calculates distance & fee</span>
                                                                 </div>
                                                                 {addressSuggestions.map((s, idx) => (

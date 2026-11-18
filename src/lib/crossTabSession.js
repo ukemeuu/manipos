@@ -12,7 +12,9 @@
  */
 
 const ACTIVE_PORTAL_COOKIE = 'manipos_active_portal';
+const PENDING_HANDOFF_COOKIE = 'manipos_handoff_v1';
 const PORTAL_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const HANDOFF_TTL_SEC = 60;
 const AUTH_CHANNEL_NAME = 'manipos_auth_sync';
 
 function getCookieDomainAttr(hostname = '') {
@@ -97,6 +99,45 @@ export function clearActivePortalCookie() {
     }
   } catch (_) {
     // Ignore cookie clear errors
+  }
+}
+
+export function writePendingSessionHandoffCookie(transferPayload) {
+  if (typeof document === 'undefined' || typeof window === 'undefined' || !transferPayload) return;
+  try {
+    const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(transferPayload)))));
+    const domainAttr = getCookieDomainAttr(window.location?.hostname);
+    const secureAttr = window.location?.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${PENDING_HANDOFF_COOKIE}=${encoded}; Path=/; Max-Age=${HANDOFF_TTL_SEC}; SameSite=Lax${domainAttr}${secureAttr}`;
+  } catch (_) {
+    // Ignore cookie write errors
+  }
+}
+
+export function consumePendingSessionHandoffCookie() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+  try {
+    const pairs = String(document.cookie || '').split(';');
+    let raw = null;
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=');
+      if (idx <= 0) continue;
+      const key = pair.slice(0, idx).trim();
+      if (key === PENDING_HANDOFF_COOKIE) {
+        raw = pair.slice(idx + 1).trim();
+        break;
+      }
+    }
+    if (!raw) return null;
+    const domainAttr = getCookieDomainAttr(window.location?.hostname);
+    const secureAttr = window.location?.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${PENDING_HANDOFF_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttr}`;
+    if (domainAttr) {
+      document.cookie = `${PENDING_HANDOFF_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${domainAttr}${secureAttr}`;
+    }
+    return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(raw)))));
+  } catch (_) {
+    return null;
   }
 }
 

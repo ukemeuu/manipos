@@ -4,6 +4,7 @@ import { Clock, ShoppingCart, Search, Utensils, Award, CheckCircle, ArrowLeft, L
 import { motion, AnimatePresence } from 'framer-motion';
 import { recordQrScan } from '../lib/qrScanService';
 import { loadTenant } from '../lib/tenantConfig';
+import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
 
 export const BRAND_CONFIGS = {
     'POT OF JOLLOF': {
@@ -796,8 +797,6 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
         };
     }, []);
 
-    const GOOGLE_PLACES_API_KEY = 'AIzaSyDhwk7tNH19ACOUo0WUIJsVGSUtVLji_yM';
-
     // 1. Preload / Ensure Google Maps JS SDK is active
     useEffect(() => {
         if (window.google && window.google.maps) return;
@@ -806,7 +805,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
 
         const script = document.createElement('script');
         script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_PLACES_API_KEY}&libraries=places`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
         script.async = true;
         script.defer = true;
         document.head.appendChild(script);
