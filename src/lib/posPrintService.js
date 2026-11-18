@@ -15,6 +15,18 @@ export function getReceiptBrand() {
   return receiptBrand;
 }
 
+/**
+ * The receipt header should carry the brand the cashier actually selected
+ * (e.g. "LITTLE LAGOS"), not the legal store name. Contact details and the
+ * logo stay from the store profile.
+ */
+function brandOverrideFromReceipt(receipt) {
+  const raw = String(receipt?.brand || '').trim();
+  if (!raw || ['MANIPOS', 'ALL'].includes(raw.toUpperCase())) return null;
+  const base = getReceiptBrand() || {};
+  return { ...base, name: raw };
+}
+
 export function getPrinterPrefs() {
   try {
     return {
@@ -522,20 +534,21 @@ async function openPrintPopup(html) {
 
 export async function printCashierSlips(receipt, printerName = null) {
   const target = printerName ?? getPrinterPrefs().frontDeskPrinter;
-  const html = buildCashierSlipsHTML(receipt);
+  const html = buildCashierSlipsHTML(receipt, brandOverrideFromReceipt(receipt));
   return printOrFallback(target, html, () => openPrintPopup(html));
 }
 
 export async function printKitchenSlips(receipt, printerName = null) {
   const target = printerName ?? getPrinterPrefs().kitchenPrinter;
-  const html = buildKitchenSlipsHTML(receipt);
+  const html = buildKitchenSlipsHTML(receipt, brandOverrideFromReceipt(receipt));
   return printOrFallback(target, html, () => openPrintPopup(html));
 }
 
 export async function printAllOrderSlips(receipt, prefs = null) {
   const { frontDeskPrinter, kitchenPrinter } = prefs || getPrinterPrefs();
+  const brandOverride = brandOverrideFromReceipt(receipt);
   if (!frontDeskPrinter && !kitchenPrinter) {
-    const combinedHtml = buildCashierSlipsHTML(receipt, null, { includeKot: true });
+    const combinedHtml = buildCashierSlipsHTML(receipt, brandOverride, { includeKot: true });
     return openPrintPopup(combinedHtml);
   }
   const cashierPrinted = await printCashierSlips(receipt, frontDeskPrinter).catch(() => false);

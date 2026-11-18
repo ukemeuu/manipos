@@ -693,7 +693,7 @@ export function SuperAdminDashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       <a
-                        href={`https://${ev.restaurant_slug}.pos.manipos.com`}
+                        href={`https://pos.manipos.com/?tenant=${encodeURIComponent(ev.restaurant_slug)}&page=dashboard`}
                         target="_blank"
                         rel="noreferrer"
                         className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
@@ -801,7 +801,7 @@ export function SuperAdminDashboard() {
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="font-mono text-xs text-amber-700 font-bold">{store.slug}</span>
                                 <a
-                                  href={`https://${store.slug}.pos.manipos.com`}
+                                  href={`https://pos.manipos.com/?tenant=${encodeURIComponent(store.slug)}&page=dashboard`}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="text-slate-400 hover:text-slate-950"
@@ -917,7 +917,7 @@ export function SuperAdminDashboard() {
             <div className="p-6 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-black text-slate-950">{selectedStore.name}</h3>
-                <p className="text-xs font-mono text-slate-500">{selectedStore.slug}.pos.manipos.com</p>
+                <p className="text-xs font-mono text-slate-500">pos.manipos.com/?tenant={selectedStore.slug}</p>
               </div>
               <button onClick={() => setSelectedStore(null)} className="p-2 text-slate-400 hover:text-slate-950">
                 <X size={18} />
@@ -999,7 +999,7 @@ export function SuperAdminDashboard() {
                   Open Menu
                 </a>
                 <a
-                  href={`https://${selectedStore.slug}.pos.manipos.com`}
+                  href={`https://pos.manipos.com/?tenant=${encodeURIComponent(selectedStore.slug)}&page=dashboard`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 text-center py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50"

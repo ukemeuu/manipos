@@ -19,6 +19,8 @@ import {
   writeActivePortalCookie,
   readActivePortalCookie,
   clearActivePortalCookie,
+  writePendingSessionHandoffCookie,
+  consumePendingSessionHandoffCookie,
   broadcastAuthEvent,
   subscribeAuthEvents,
 } from './lib/crossTabSession';
@@ -131,7 +133,15 @@ const ROLE_HOME_ROUTE = {
 };
 
 function isGenericPosHost() {
-  return typeof window !== 'undefined' && window.location.hostname === 'pos.manipos.com';
+  if (typeof window === 'undefined' || window.location.hostname !== 'pos.manipos.com') return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('logout') === '1' || params.get('neutral') === '1') return true;
+    const tenantParam = (params.get('tenant') || '').toLowerCase().trim();
+    return !tenantParam || tenantParam === 'pos';
+  } catch (_) {
+    return true;
+  }
 }
 
 // manipos.com / www.manipos.com are the neutral SaaS marketing site. A staff
@@ -189,8 +199,9 @@ function App() {
         return null;
       }
 
-      // 1. Check URL hash/query for session transferred from pos.manipos.com login
+      // 1. Check short-lived .manipos.com handoff cookie (or legacy URL hash/query)
       if (typeof window !== 'undefined') {
+        const handoffPayload = consumePendingSessionHandoffCookie();
         const hash = window.location.hash || '';
         const params = new URLSearchParams(window.location.search);
         let sessionParam = params.get('session');
@@ -198,9 +209,9 @@ function App() {
           const match = hash.match(/session=([^&]+)/);
           if (match) sessionParam = decodeURIComponent(match[1]);
         }
-        if (sessionParam) {
+        if (handoffPayload || sessionParam) {
           try {
-            const parsed = JSON.parse(decodeURIComponent(escape(atob(sessionParam))));
+            const parsed = handoffPayload || JSON.parse(decodeURIComponent(escape(atob(sessionParam))));
             if (parsed && (parsed.staffUser || parsed.id || parsed.role)) {
               const staffUser = parsed.staffUser || parsed;
               localStorage.setItem('pin_staff_user', JSON.stringify(staffUser));
@@ -235,6 +246,23 @@ function App() {
             }
           } catch (e) {
             console.warn('Failed to parse transferred session:', e);
+          }
+        }
+
+        // On pos.manipos.com/?tenant=<slug>, enforce tenant isolation against any
+        // leftover localStorage session from a different store.
+        if (window.location.hostname === 'pos.manipos.com') {
+          const reqTenant = (params.get('tenant') || '').toLowerCase().trim();
+          const rawCached = localStorage.getItem('pin_staff_user');
+          if (reqTenant && rawCached) {
+            try {
+              const cachedUser = JSON.parse(rawCached);
+              const cachedSlug = (cachedUser?.tenantSlug || '').toLowerCase().trim();
+              if (cachedSlug && cachedSlug !== reqTenant) {
+                wipeLocalSessionStorage();
+                return null;
+              }
+            } catch (_) {}
           }
         }
       }
@@ -377,7 +405,11 @@ function App() {
       } catch (_) {}
     }
 
-    if (!slug || slug === 'pos' || host === `${slug}.pos.manipos.com`) return false;
+    if (!slug || slug === 'pos') return false;
+    const currentParams = new URLSearchParams(window.location.search);
+    const currentTenantParam = (currentParams.get('tenant') || '').toLowerCase().trim();
+    if (host === 'pos.manipos.com' && currentTenantParam === slug) return false;
+    if (host === `${slug}.pos.manipos.com`) return false;
 
     const updatedStaffUser = { ...staffUser, tenantSlug: slug };
     const transferPayload = { staffUser: updatedStaffUser };
@@ -407,16 +439,15 @@ function App() {
       role: updatedStaffUser.role,
       isAdmin: isAdminAccount(updatedStaffUser),
     });
+    writePendingSessionHandoffCookie(transferPayload);
     broadcastAuthEvent('login', { staffUser: updatedStaffUser });
 
-    const encodedSession = btoa(unescape(encodeURIComponent(JSON.stringify(transferPayload))));
-    const search = explicitRoute
-      ? `?page=${encodeURIComponent(explicitRoute)}`
-      : (window.location.search || '');
+    const destPage = explicitRoute || (isAdminAccount(updatedStaffUser) ? 'dashboard' : 'pos');
     const targetPath = window.location.pathname && window.location.pathname !== '/' ? window.location.pathname : '/';
-    // Keep the shared pos.manipos.com login host free of any tenant tokens after handoff.
-    wipeLocalSessionStorage();
-    window.location.replace(`https://${slug}.pos.manipos.com${targetPath}${search}#session=${encodeURIComponent(encodedSession)}`);
+    if (host !== 'pos.manipos.com') {
+      wipeLocalSessionStorage();
+    }
+    window.location.replace(`https://pos.manipos.com${targetPath}?tenant=${encodeURIComponent(slug)}&page=${encodeURIComponent(destPage)}`);
     return true;
   };
 
@@ -441,7 +472,7 @@ function App() {
         const portal = readActivePortalCookie();
         if (portal?.tenantSlug && portal.tenantSlug !== 'pos') {
           const destPage = portal.isAdmin ? 'dashboard' : 'pos';
-          window.location.replace(`https://${portal.tenantSlug}.pos.manipos.com/?page=${destPage}`);
+          window.location.replace(`https://pos.manipos.com/?tenant=${encodeURIComponent(portal.tenantSlug)}&page=${destPage}`);
           return () => clearTimeout(timer);
         }
       }
@@ -463,7 +494,7 @@ function App() {
         const portal = readActivePortalCookie();
         if (portal?.tenantSlug && portal.tenantSlug !== 'pos') {
           const destPage = portal.isAdmin ? 'dashboard' : 'pos';
-          window.location.replace(`https://${portal.tenantSlug}.pos.manipos.com/?page=${destPage}`);
+          window.location.replace(`https://pos.manipos.com/?tenant=${encodeURIComponent(portal.tenantSlug)}&page=${destPage}`);
           return () => clearTimeout(timer);
         }
       }

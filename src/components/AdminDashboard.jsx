@@ -1320,7 +1320,7 @@ export function AdminDashboard({
     setLogoUploading(true);
     try {
       const restaurantId = getActiveRestaurantId() || 'shared';
-      const path = `${restaurantId}/logos/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const path = `public/${restaurantId}/logos/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
       const { error: uploadError } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(path);

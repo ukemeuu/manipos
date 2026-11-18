@@ -32,7 +32,7 @@ import {
 import { authenticateStaffLogin } from '../services/data/staffService';
 import { provisionTenant, slugify } from '../services/tenantProvisioning';
 import { getMicrositeUrl, getTenantPosUrl } from '../lib/tenantConfig';
-import { readActivePortalCookie, writeActivePortalCookie } from '../lib/crossTabSession';
+import { readActivePortalCookie, writeActivePortalCookie, writePendingSessionHandoffCookie } from '../lib/crossTabSession';
 import { isAdminAccount } from '../lib/posRouting';
 
 const fadeUp = {
@@ -87,7 +87,7 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
       return `/?page=${page}&tenant=${encodeURIComponent(portal.tenantSlug)}`;
     }
-    return `https://${portal.tenantSlug}.pos.manipos.com/?page=${page}`;
+    return `https://pos.manipos.com/?tenant=${encodeURIComponent(portal.tenantSlug)}&page=${page}`;
   };
   const [onboardData, setOnboardData] = useState({ 
     name: '', 
@@ -1392,9 +1392,9 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
                             };
                           }
                         } catch (_) {}
-                        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(transferPayload))));
+                        writePendingSessionHandoffCookie(transferPayload);
                         const targetPage = staffIsAdmin ? 'dashboard' : 'pos';
-                        window.location.href = `https://${slug}.pos.manipos.com/?page=${targetPage}#session=${encodeURIComponent(encoded)}`;
+                        window.location.href = `https://pos.manipos.com/?tenant=${encodeURIComponent(slug)}&page=${targetPage}`;
                       } else {
                         window.location.href = staffIsAdmin ? '/?page=dashboard' : '/?page=pos';
                       }

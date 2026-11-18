@@ -149,7 +149,7 @@ export function OrdaMicrositeView({
     setUploading(kind);
     try {
       const restId = restaurantId || 'shared';
-      const path = `${restId}/microsite/${kind}-${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const path = `public/${restId}/microsite/${kind}-${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
       const { error: uploadError } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(path);

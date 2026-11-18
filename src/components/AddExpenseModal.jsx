@@ -451,7 +451,7 @@ export function AddExpenseModal({ onClose, onSuccess, capturedBy = null, initial
             if (file) {
                 const tid = getTenantContext() || 'shared';
                 const safeName = file.name.replace(/[^a-z0-9.]/gi, '_');
-                const storagePath = `receipts/${tid}/${Date.now()}-${safeName}`;
+                const storagePath = `public/receipts/${tid}/${Date.now()}-${safeName}`;
                 const { error: uploadErr } = await supabase.storage.from('menu_images').upload(storagePath, file, { upsert: true });
                 if (uploadErr) throw uploadErr;
                 const { data: urlData } = supabase.storage.from('menu_images').getPublicUrl(storagePath);

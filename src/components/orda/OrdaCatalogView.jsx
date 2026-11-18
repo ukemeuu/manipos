@@ -383,7 +383,7 @@ export function OrdaCatalogView({
     if (!file || !restaurantId) return;
     try {
       const ext = file.name.split('.').pop() || 'png';
-      const path = `${restaurantId}/${uploadTargetRef.current || 'items'}/${Date.now()}.${ext}`;
+      const path = `public/${restaurantId}/${uploadTargetRef.current || 'items'}/${Date.now()}.${ext}`;
       const { error: uploadErr } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
       if (uploadErr) throw uploadErr;
       const { data } = supabase.storage.from('menu_images').getPublicUrl(path);

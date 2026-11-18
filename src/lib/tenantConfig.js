@@ -284,7 +284,7 @@ export function getTenantPosUrl(slug) {
   const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
   const isApex = host === 'manipos.com' || host === 'www.manipos.com';
   if (isLocal || isApex) return `/?page=pos&tenant=${slug}`;
-  return `https://${slug}.pos.manipos.com`;
+  return `https://pos.manipos.com/?tenant=${encodeURIComponent(slug)}`;
 }
 
 export function applyTenantTheme(tenant) {
