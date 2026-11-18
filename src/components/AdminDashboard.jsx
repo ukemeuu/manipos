@@ -521,6 +521,15 @@ export function AdminDashboard({
       const staffNameForShift = pinUser.name || 'Staff';
 
       // PHASE 1: Fast Cashier/POS Critical Path (Orders + Menu + Settings + Shift)
+      // Start the linked-POJ fetch immediately so it overlaps the fast DB
+      // queries instead of adding its latency afterwards.
+      const pojOrdersPromise = fetchPojOrdersForRange({
+        tenantSlug: resolvedSlug,
+        restaurantId: currentRestaurantId,
+        limit: 250,
+        timeoutMs: 2500,
+      });
+
       const phase1Promise = Promise.allSettled([
         supabase
           .from('pos_orders')
@@ -578,12 +587,7 @@ export function AdminDashboard({
         // dropping out when POJ has already declined/completed it).
         let mergedPojOrders = [];
         try {
-          mergedPojOrders = await fetchPojOrdersForRange({
-            tenantSlug: resolvedSlug,
-            restaurantId: currentRestaurantId,
-            limit: 250,
-            timeoutMs: 2500,
-          }) || [];
+          mergedPojOrders = (await pojOrdersPromise) || [];
         } catch (_) { }
         setOrders((prev) =>
           filterStaffOrders(
