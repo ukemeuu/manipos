@@ -11,16 +11,18 @@ create table if not exists public.pos_brands (
     name text not null,
     is_active boolean not null default true,
     created_at timestamptz not null default timezone('utc', now()),
-    updated_at timestamptz not null default timezone('utc', now()),
-    unique (restaurant_id, lower(name))
+    updated_at timestamptz not null default timezone('utc', now())
 );
+
+create unique index if not exists pos_brands_tenant_name_key
+  on public.pos_brands (restaurant_id, lower(name));
 
 -- Seed brands from the distinct brand arrays already stored on menu items.
 insert into public.pos_brands (restaurant_id, name)
 select distinct m.restaurant_id, b
 from public.pos_menu m
 cross join lateral jsonb_array_elements_text(coalesce(m.brands, '[]'::jsonb)) as b
-on conflict (restaurant_id, lower(name)) do nothing;
+on conflict do nothing;
 
 alter table public.pos_brands enable row level security;
 

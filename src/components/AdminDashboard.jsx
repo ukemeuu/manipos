@@ -77,6 +77,7 @@ import { getLocalAuditLogs } from '../lib/auditLogger';
 import { PERMISSION_GROUPS, currentPermissions, roleDefaults, can } from '../lib/permissions';
 import { LiveOrdersView, computeOrderBucketCounts } from './orda/LiveOrdersView';
 import { CloseStoreModal } from './orda/LocationsManagerView';
+import { CatalogCategoriesCard } from './orda/CatalogCategoriesCard';
 const OrdaCatalogView = lazy(() => import('./orda/OrdaCatalogView').then(m => ({ default: m.OrdaCatalogView })));
 const WebPosView = lazy(() => import('./orda/WebPosView').then(m => ({ default: m.WebPosView })));
 const LocationsManagerView = lazy(() => import('./orda/LocationsManagerView').then(m => ({ default: m.LocationsManagerView })));
@@ -243,6 +244,11 @@ export function AdminDashboard({
   const [menuItems, setMenuItems] = useState([]);
   const [brands, setBrands] = useState([]);
   const [brandBusyId, setBrandBusyId] = useState(null);
+  const [catalogCategories, setCatalogCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [editingCat, setEditingCat] = useState(null);
   const [discounts, setDiscounts] = useState([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState(null);
@@ -529,6 +535,11 @@ export function AdminDashboard({
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .order('name'),
+        supabase
+          .from('pos_categories')
+          .select('*')
+          .eq('restaurant_id', currentRestaurantId)
+          .order('display_order', { ascending: true }),
       ]);
 
       let timeoutId = null;
@@ -541,7 +552,7 @@ export function AdminDashboard({
       if (timeoutId) clearTimeout(timeoutId);
 
       if (phase1Results) {
-        const [ordersRes, menuRes, settingsRes, brandsRes] = phase1Results;
+        const [ordersRes, menuRes, settingsRes, brandsRes, catsRes] = phase1Results;
         const fetchedOrders = ordersRes?.status === 'fulfilled' ? ordersRes.value?.data || [] : [];
         setOrders((prev) =>
           filterStaffOrders(
@@ -557,6 +568,9 @@ export function AdminDashboard({
 
         const fetchedBrands = brandsRes?.status === 'fulfilled' ? brandsRes.value?.data || [] : [];
         setBrands(fetchedBrands);
+
+        const fetchedCats = catsRes?.status === 'fulfilled' ? catsRes.value?.data || [] : [];
+        setCatalogCategories(fetchedCats);
 
         const fetchedSettings = settingsRes?.status === 'fulfilled' ? settingsRes.value?.data : null;
         if (fetchedSettings && fetchedSettings.length > 0) {
@@ -1133,6 +1147,70 @@ export function AdminDashboard({
   };
 
   // Settings Handlers
+  const handleAddInlineCategory = async (e) => {
+    e.preventDefault();
+    const name = newCatName.trim();
+    if (!name || !activeRestaurantId) return;
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('pos_categories')
+        .insert([{
+          restaurant_id: activeRestaurantId,
+          name,
+          display_order: catalogCategories.length + 1,
+          is_active: true,
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      setCatalogCategories((prev) => [...prev, data]);
+      setNewCatName('');
+      setAddingCat(false);
+      await fetchDashboardData({ silent: true });
+    } catch (err) {
+      alert('Could not create category: ' + (err.message || err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRenameCategory = async (cat, nextName) => {
+    const name = nextName.trim();
+    if (!name || !activeRestaurantId) return;
+    try {
+      const { error } = await supabase
+        .from('pos_categories')
+        .update({ name })
+        .eq('id', cat.id)
+        .eq('restaurant_id', activeRestaurantId);
+      if (error) throw error;
+      setCatalogCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, name } : c)));
+      if (selectedCategory === cat.name) setSelectedCategory(name);
+      setEditingCat(null);
+      await fetchDashboardData({ silent: true });
+    } catch (err) {
+      alert('Rename failed: ' + (err.message || err));
+    }
+  };
+
+  const handleDeleteCategory = async (cat) => {
+    if (!window.confirm(`Delete category "${cat.name}"?`)) return;
+    try {
+      const { error } = await supabase
+        .from('pos_categories')
+        .delete()
+        .eq('id', cat.id)
+        .eq('restaurant_id', activeRestaurantId);
+      if (error) throw error;
+      setCatalogCategories((prev) => prev.filter((c) => c.id !== cat.id));
+      if (selectedCategory === cat.name) setSelectedCategory('all');
+      await fetchDashboardData({ silent: true });
+    } catch (err) {
+      alert('Delete failed: ' + (err.message || err));
+    }
+  };
+
   const handleToggleBrand = async (brand) => {
     if (!activeRestaurantId) return;
     const nextActive = brand.is_active === false;
@@ -1693,14 +1771,33 @@ export function AdminDashboard({
           )}
 
           {activeModule === 'menu' && (
-            <button
-              type="button"
-              onClick={() => selectModule('menu', 'menu')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'menu' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-            >
-              <Package size={15} /> Catalog, Modifiers & Combos
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => selectModule('menu', 'menu')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'menu' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+              >
+                <Package size={15} /> Catalog, Modifiers & Combos
+              </button>
+              <CatalogCategoriesCard
+                categories={catalogCategories}
+                items={menuItems}
+                selectedCategory={selectedCategory}
+                onSelectCategory={setSelectedCategory}
+                addingCat={addingCat}
+                setAddingCat={setAddingCat}
+                newCatName={newCatName}
+                setNewCatName={setNewCatName}
+                editingCat={editingCat}
+                setEditingCat={setEditingCat}
+                onAdd={handleAddInlineCategory}
+                onRename={handleRenameCategory}
+                onDelete={handleDeleteCategory}
+                canDelete={isAdmin}
+                disabled={submitting}
+              />
+            </>
           )}
 
           {activeModule === 'settings' && (
@@ -2720,6 +2817,18 @@ export function AdminDashboard({
                       restaurantId={activeRestaurantId}
                       branches={branches}
                       brands={brands}
+                      categories={catalogCategories}
+                      selectedCategory={selectedCategory}
+                      onSelectCategory={setSelectedCategory}
+                      addingCat={addingCat}
+                      onAddCategoryToggle={() => setAddingCat((v) => !v)}
+                      newCatName={newCatName}
+                      onNewCatNameChange={setNewCatName}
+                      editingCat={editingCat}
+                      onEditCategory={setEditingCat}
+                      onAddCategory={handleAddInlineCategory}
+                      onRenameCategory={handleRenameCategory}
+                      onDeleteCategory={handleDeleteCategory}
                       onCatalogChanged={fetchDashboardData}
                       canDelete={isAdmin}
                     />
