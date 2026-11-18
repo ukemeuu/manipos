@@ -608,6 +608,21 @@ function App() {
     };
   }, []);
 
+  // A manipos.com tab that was already open when the user signed out on the
+  // tenant POS must also drop its cached staff session when it regains focus.
+  // (localStorage/BroadcastChannel are origin-scoped, so the logout tab cannot
+  // clear this origin directly.)
+  useEffect(() => {
+    if (!isNeutralMarketingHost()) return undefined;
+    const dropCachedStaffSession = () => {
+      if (currentRoute === 'superadmin') return;
+      wipeStaffSessionStorage();
+      setSession(null);
+    };
+    window.addEventListener('focus', dropCachedStaffSession);
+    return () => window.removeEventListener('focus', dropCachedStaffSession);
+  }, [currentRoute]);
+
   // Force migrated staff to set a new password on first sign-in.
   useEffect(() => {
     const staff = session?.staffUser || JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
