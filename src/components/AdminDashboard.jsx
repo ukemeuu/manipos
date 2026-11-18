@@ -2813,6 +2813,26 @@ export function AdminDashboard({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
                   >
+                    {/* Mobile category list (the sidebar is hidden below md) */}
+                    <div className="md:hidden mb-5">
+                      <CatalogCategoriesCard
+                        categories={catalogCategories}
+                        items={menuItems}
+                        selectedCategory={selectedCategory}
+                        onSelectCategory={setSelectedCategory}
+                        addingCat={addingCat}
+                        setAddingCat={setAddingCat}
+                        newCatName={newCatName}
+                        setNewCatName={setNewCatName}
+                        editingCat={editingCat}
+                        setEditingCat={setEditingCat}
+                        onAdd={handleAddInlineCategory}
+                        onRename={handleRenameCategory}
+                        onDelete={handleDeleteCategory}
+                        canDelete={isAdmin}
+                        disabled={submitting}
+                      />
+                    </div>
                     <OrdaCatalogView
                       restaurantId={activeRestaurantId}
                       branches={branches}
