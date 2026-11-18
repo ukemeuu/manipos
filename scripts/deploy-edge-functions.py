@@ -21,7 +21,28 @@ try:  # Homebrew python ships without a CA bundle; certifi fills the gap.
 
     SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
-    SSL_CONTEXT = ssl.create_default_context()
+    # Fall back to the OS trust store (macOS ships /etc/ssl/cert.pem).
+    import os
+
+    _ca_bundle = next(
+        (
+            path
+            for path in (
+                os.environ.get("SSL_CERT_FILE"),
+                "/etc/ssl/cert.pem",
+                "/etc/ssl/certs/ca-certificates.crt",
+                "/opt/homebrew/etc/ca-certificates/cert.pem",
+                "/usr/local/etc/openssl/cert.pem",
+            )
+            if path and os.path.exists(path)
+        ),
+        None,
+    )
+    SSL_CONTEXT = (
+        ssl.create_default_context(cafile=_ca_bundle)
+        if _ca_bundle
+        else ssl.create_default_context()
+    )
 
 PROJECT_REF = os.environ.get("SUPABASE_PROJECT_REF", "ptaqejtyhdbhmhrhuxcj")
 TOKEN = os.environ.get("SUPABASE_ACCESS_TOKEN", "")
