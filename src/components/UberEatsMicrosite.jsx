@@ -66,7 +66,7 @@ function normaliseTenantMenu(tenant) {
         });
     });
 
-    const categories = Array.from(groups.values()).map((g) => ({
+    let categories = Array.from(groups.values()).map((g) => ({
         name: g.subcategory ? `${g.category} · ${g.subcategory}` : g.category,
         items: g.items,
     }));
@@ -103,12 +103,38 @@ function normaliseTenantMenu(tenant) {
         });
     }
 
+    // Apply the owner's storefront presentation: hidden categories, custom tab
+    // order, and the default landing tab. "Most Popular" stays the default
+    // when the owner has not chosen one, so catalogue edits and equal
+    // display_order values cannot push it down the list.
+    const cfg = tenant?.micrositeConfig || {};
+    const hidden = new Set(Array.isArray(cfg.hiddenCategories) ? cfg.hiddenCategories : []);
+    if (hidden.size > 0) {
+        categories = categories.filter((c) => !hidden.has(c.name));
+    }
+    const order = Array.isArray(cfg.categoryOrder) ? cfg.categoryOrder : [];
+    if (order.length > 0) {
+        const rank = new Map(order.map((n, i) => [n, i]));
+        categories.sort((a, b) => {
+            const ra = rank.has(a.name) ? rank.get(a.name) : 999;
+            const rb = rank.has(b.name) ? rank.get(b.name) : 999;
+            if (ra !== rb) return ra - rb;
+            return String(a.name).localeCompare(String(b.name));
+        });
+    }
+    const defaultTab = cfg.defaultCategory || 'Most Popular';
+    const defaultIdx = categories.findIndex((c) => c.name === defaultTab);
+    if (defaultIdx > 0) {
+        const [def] = categories.splice(defaultIdx, 1);
+        categories.unshift(def);
+    }
+
     if (categories.length === 0) return null;
 
     return {
         store: {
             name: tenant.name,
-            subtitle: [tenant.cuisine, tenant.city].filter(Boolean).join(' • ') || 'Fresh food, made to order',
+            subtitle: tenant.tagline || [tenant.cuisine, tenant.city].filter(Boolean).join(' • ') || 'Fresh food, made to order',
             rating: tenant.rating || 4.8,
             delivery_time: `Delivery in ${tenant.etaMinutes || '30–45 min'}`,
             delivery_fee: '',

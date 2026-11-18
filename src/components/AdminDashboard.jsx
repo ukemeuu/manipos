@@ -60,6 +60,7 @@ import {
   LogOut,
   Building2,
   Globe,
+  Store,
   RefreshCw,
   ExternalLink,
   Plug,
@@ -93,6 +94,7 @@ const TeamRolesAndAccountView = lazy(() => import('./orda/TeamRolesAndAccountVie
 const TableManagementView = lazy(() => import('./orda/TableManagementView').then(m => ({ default: m.TableManagementView })));
 const HrAndStaffPortalView = lazy(() => import('./orda/HrAndStaffPortalView').then(m => ({ default: m.HrAndStaffPortalView })));
 const PojOperationsView = lazy(() => import('./orda/PojOperationsView').then(m => ({ default: m.PojOperationsView })));
+const OrdaMicrositeView = lazy(() => import('./orda/OrdaMicrositeView').then(m => ({ default: m.OrdaMicrositeView })));
 import { getTenantInfo } from '../lib/tenant';
 const FeedbackDashboardView = lazy(() => import('./FeedbackDashboardView').then(m => ({ default: m.FeedbackDashboardView })));
 import { applyOrderStatusUpdate, fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
@@ -344,6 +346,7 @@ export function AdminDashboard({
           tenantSlug: resolvedSlug,
           restaurantId: restId,
           limit: 120,
+          timeoutMs: 4000,
         }),
       ]).then(([mpRes, pojRes]) => {
         const hasMp = mpRes?.status === 'fulfilled' && Array.isArray(mpRes.value?.data);
@@ -559,14 +562,6 @@ export function AdminDashboard({
       if (phase1Results) {
         const [ordersRes, menuRes, settingsRes, brandsRes, catsRes] = phase1Results;
         const fetchedOrders = ordersRes?.status === 'fulfilled' ? ordersRes.value?.data || [] : [];
-        setOrders((prev) =>
-          filterStaffOrders(
-            mergeOrdersWithPoj(
-              fetchedOrders,
-              prev.filter((o) => o?._fromPoj)
-            )
-          )
-        );
 
         const fetchedMenu = menuRes?.status === 'fulfilled' ? menuRes.value?.data || [] : [];
         setMenuItems(fetchedMenu);
@@ -576,6 +571,28 @@ export function AdminDashboard({
 
         const fetchedCats = catsRes?.status === 'fulfilled' ? catsRes.value?.data || [] : [];
         setCatalogCategories(fetchedCats);
+
+        // Publish the order board only after the linked POJ orders are merged.
+        // Otherwise the bucket counts flash the un-merged ManiPOS number for a
+        // second before the POJ status wins (e.g. an active ticket briefly
+        // dropping out when POJ has already declined/completed it).
+        let mergedPojOrders = [];
+        try {
+          mergedPojOrders = await fetchPojOrdersForRange({
+            tenantSlug: resolvedSlug,
+            restaurantId: currentRestaurantId,
+            limit: 250,
+            timeoutMs: 2500,
+          }) || [];
+        } catch (_) { }
+        setOrders((prev) =>
+          filterStaffOrders(
+            mergeOrdersWithPoj(
+              fetchedOrders,
+              mergedPojOrders.length ? mergedPojOrders : prev.filter((o) => o?._fromPoj)
+            )
+          )
+        );
 
         const fetchedSettings = settingsRes?.status === 'fulfilled' ? settingsRes.value?.data : null;
         if (fetchedSettings && fetchedSettings.length > 0) {
@@ -638,21 +655,16 @@ export function AdminDashboard({
         .then((sh) => setActiveShift(sh))
         .catch(() => { });
 
-      // PHASE 2: Non-blocking POJ Sync Bridge + Discounts/Branches + Admin Back-Office Tables
+      // PHASE 2: Discounts/Branches + Admin Back-Office Tables
+      // (POJ orders are already merged into the order board in phase 1.)
       const phase2Tasks = [
-        // 0: Linked POJ Management Orders (always merged for unified order history)
-        fetchPojOrdersForRange({
-          tenantSlug: resolvedSlug,
-          restaurantId: currentRestaurantId,
-          limit: 250,
-        }),
-        // 1: Discounts / Promos (needed at POS settle)
+        // 0: Discounts / Promos (needed at POS settle)
         supabase
           .from('pos_discounts')
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .order('created_at', { ascending: false }),
-        // 2: Branches
+        // 1: Branches
         supabase
           .from('branches')
           .select('*')
@@ -674,11 +686,8 @@ export function AdminDashboard({
       }
 
       Promise.allSettled(phase2Tasks).then((p2) => {
-        const [pojRes, discountsRes, branchesRes, staffRes, feedbackRes, linksRes, suppliersRes, auditRes] = p2;
+        const [discountsRes, branchesRes, staffRes, feedbackRes, linksRes, suppliersRes, auditRes] = p2;
 
-        if (pojRes?.status === 'fulfilled' && Array.isArray(pojRes.value)) {
-          setOrders((prev) => filterStaffOrders(mergeOrdersWithPoj(prev, pojRes.value)));
-        }
         if (discountsRes?.status === 'fulfilled' && !discountsRes.value?.error) {
           setDiscounts(discountsRes.value?.data || []);
         }
@@ -1489,6 +1498,7 @@ export function AdminDashboard({
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
     { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
     { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu') },
+    { id: 'storefront', label: 'Storefront', icon: Store, tab: 'storefront', visible: canDo(TAB_PERMISSION.settings) || visibleRailIds.includes('storefront') },
     { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
     { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
     { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
@@ -1803,6 +1813,17 @@ export function AdminDashboard({
                 disabled={submitting}
               />
             </>
+          )}
+
+          {activeModule === 'storefront' && (
+            <button
+              type="button"
+              onClick={() => selectModule('storefront', 'storefront')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold ${activeTab === 'storefront' ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+            >
+              <Store size={15} /> Storefront &amp; Microsite
+            </button>
           )}
 
           {activeModule === 'settings' && (
@@ -2399,6 +2420,15 @@ export function AdminDashboard({
               restaurantId={activeRestaurantId}
               branches={branches}
               settings={settings}
+              onSettingsUpdated={fetchDashboardData}
+            />
+          ) : activeTab === 'storefront' ? (
+            <OrdaMicrositeView
+              restaurantId={activeRestaurantId}
+              restaurantName={profileName || restaurantName}
+              tenantSlug={tenantSlug}
+              settings={settings}
+              menuItems={menuItems}
               onSettingsUpdated={fetchDashboardData}
             />
           ) : activeTab === 'customers' || activeTab === 'store-credit' ? (

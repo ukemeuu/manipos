@@ -22,6 +22,7 @@ const CUSTOMER_TABS = new Set([
   'feedback',
 ]);
 const MENU_TABS = new Set(['menu']);
+const STOREFRONT_TABS = new Set(['storefront', 'microsite', 'storefront-editor']);
 const WALLET_TABS = new Set(['wallet', 'subscriptions', 'paystack']);
 const INVENTORY_TABS = new Set([
   'inventory',
@@ -59,6 +60,7 @@ export function resolveModuleForOrdaTab(tabParam = '') {
   if (DASHBOARD_TABS.has(tab)) return 'dashboard';
   if (CUSTOMER_TABS.has(tab)) return 'customers';
   if (MENU_TABS.has(tab)) return 'menu';
+  if (STOREFRONT_TABS.has(tab)) return 'storefront';
   if (WALLET_TABS.has(tab)) return 'wallet';
   if (INVENTORY_TABS.has(tab)) return 'inventory';
   if (HR_TABS.has(tab)) return 'hr';
@@ -129,7 +131,7 @@ export function resolveOrdaEntryState({ staffUser, requestedRoute = '', tabParam
 export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   const isAdmin = isAdminAccount(staffUser);
   if (isAdmin) {
-    return ['orders', 'dashboard', 'customers', 'menu', 'settings', 'wallet', 'inventory', 'hr', 'account'];
+    return ['orders', 'dashboard', 'customers', 'menu', 'storefront', 'settings', 'wallet', 'inventory', 'hr', 'account'];
   }
 
   const has = (perm) => Array.isArray(permissions) && permissions.includes(perm);
@@ -137,6 +139,7 @@ export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   if (has('view_analytics')) ids.push('dashboard');
   if (has('manage_offers') || has('manage_feedback') || has('manage_guests')) ids.push('customers');
   if (canAccessMenuModule({ staffUser, permissions })) ids.push('menu');
+  if (has('manage_settings')) ids.push('storefront');
   if (has('manage_settings') || has('manage_staff')) ids.push('settings');
   if (has('manage_inventory')) ids.push('inventory');
   if (has('manage_staff')) ids.push('hr');

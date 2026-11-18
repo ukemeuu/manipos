@@ -733,10 +733,6 @@ export function WebPosView({
       setErrorMsg('Add at least one item to the order first.');
       return;
     }
-    if (!saveAsOpen && diningMode === 'Delivery' && !deliveryAddress.trim()) {
-      setErrorMsg('Delivery orders require a delivery address.');
-      return;
-    }
     if (!saveAsOpen && paymentTender === 'Store Credit' && !selectedGuest?.id) {
       setErrorMsg('Select a registered customer first to pay using Store Credit.');
       return;
@@ -1310,7 +1306,7 @@ export function WebPosView({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {diningMode === 'Delivery' && (
                   <div>
-                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Address *</label>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Delivery Address (optional)</label>
                     <input
                       type="text"
                       value={deliveryAddress}

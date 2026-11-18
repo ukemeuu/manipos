@@ -112,6 +112,7 @@ describe('Interface B (Orda) Routing & RBAC', () => {
       'dashboard',
       'customers',
       'menu',
+      'storefront',
       'settings',
       'wallet',
       'inventory',
