@@ -10,7 +10,7 @@ import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
 import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
-import { attachLineCosting, insertOrderItems } from '../../lib/productCosting';
+import { attachLineCosting, insertOrderItems, resolveChannelCommission } from '../../lib/productCosting';
 import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
 import {
   extractBrandTabs,
@@ -163,6 +163,7 @@ export function WebPosView({
     return 'Dine-in';
   });
   const [showOpenTabsBar, setShowOpenTabsBar] = useState(false);
+  const [channelCommissions, setChannelCommissions] = useState([]);
 
   // Customer selection
   const [customerMode, setCustomerMode] = useState('guest'); // 'guest' | 'lookup'
@@ -254,7 +255,7 @@ export function WebPosView({
       setLoading(true);
       try {
         setTenantContext(restaurantId);
-        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList, tableRes, pojEnrichment] = await Promise.all([
+        const [catRes, menuRes, modRes, comboRes, guestRes, chargesList, tableRes, pojEnrichment, commissionRes] = await Promise.all([
           supabase
             .from('pos_categories')
             .select('*')
@@ -287,9 +288,14 @@ export function WebPosView({
             .eq('restaurant_id', restaurantId)
             .order('display_order', { ascending: true }),
           fetchPojCatalogEnrichment({ tenantSlug, restaurantId }),
+          supabase
+            .from('pos_channel_commissions')
+            .select('*')
+            .eq('restaurant_id', restaurantId),
         ]);
 
         if (!active) return;
+        if (!commissionRes.error) setChannelCommissions(commissionRes.data || []);
         if (!catRes.error) setCategories(catRes.data || []);
         if (!menuRes.error) {
           setMenuItems(mergeMenuItemsWithPoj(menuRes.data || [], pojEnrichment?.pojMenuItems || []));
@@ -883,6 +889,8 @@ export function WebPosView({
       const lineDiscountMap = new Map(
         (promoEval.valid ? promoEval.lineDiscounts || [] : []).map((d) => [String(d.id), Number(d.amount) || 0])
       );
+      const orderBrand = selectedBrand !== 'All' ? selectedBrand : String(restaurantName || '').toUpperCase();
+      const channelCommission = resolveChannelCommission(channelCommissions, salesChannel, orderBrand);
       const itemsPayload = attachLineCosting(cart.map((item) => ({
         order_id: orderData.id,
         item_name: item.title,
@@ -892,9 +900,9 @@ export function WebPosView({
         status: saveAsOpen ? 'Open' : 'Pending',
         cost_price: Number(item.cost_price) || 0,
         cogs_percent: Number(item.cogs_percent) || 0,
-        commission_percent: Number(item.commission_percent) || 0,
+        commission_percent: channelCommission,
         discount_amount: lineDiscountMap.get(String(item.id)) || 0,
-      })), { baseCogsPercent });
+      })), { baseCogsPercent, commissionPercent: channelCommission });
 
       if (appliedDeliveryFee > 0) {
         itemsPayload.push({

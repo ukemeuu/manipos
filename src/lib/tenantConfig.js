@@ -165,6 +165,7 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
   let settings = null;
   let branches = [];
   let combos = [];
+  let channelCommissions = [];
   // A restaurant's menu comes only from its own database rows. New tenants start
   // empty until they publish items — never inherit the static showcase menu.
   let menu = [];
@@ -236,11 +237,13 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
       }
 
       // Active branches & combos (safe no-op if Wave 1 migration not yet applied)
-      const [branchRes, comboRes] = await Promise.all([
+      const [branchRes, comboRes, commissionRes] = await Promise.all([
         supabase.from('branches').select('*').eq('restaurant_id', data.id).eq('status', 'active').order('is_default', { ascending: false }),
         supabase.from('menu_combos').select('*').eq('restaurant_id', data.id).eq('is_available', true).eq('show_on_microsite', true),
+        supabase.from('pos_channel_commissions').select('*').eq('restaurant_id', data.id),
       ]);
       if (!branchRes.error && Array.isArray(branchRes.data)) branches = branchRes.data;
+      if (!commissionRes.error && Array.isArray(commissionRes.data)) channelCommissions = commissionRes.data;
       if (!comboRes.error && Array.isArray(comboRes.data)) {
         const now = Date.now();
         combos = comboRes.data.filter((c) => {
@@ -259,6 +262,7 @@ export async function loadTenant(slug = getActiveTenantSlug(), { force = false }
   tenant.menu = menu;
   tenant.branches = branches;
   tenant.combos = combos;
+  tenant.channelCommissions = channelCommissions;
   tenant.source = restaurant ? 'database' : 'registry';
   writeCache(resolvedSlug, tenant);
   return tenant;

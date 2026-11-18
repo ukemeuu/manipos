@@ -18,7 +18,7 @@ import {
 } from '../lib/promoEngine';
 import { computeEffectiveMinSelected } from '../lib/webPosCatalog';
 import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
-import { attachLineCosting, insertOrderItems } from '../lib/productCosting';
+import { attachLineCosting, insertOrderItems, resolveChannelCommission } from '../lib/productCosting';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -1910,7 +1910,14 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 cogs_percent: Number(item.cogs_percent) || 0,
                 commission_percent: Number(item.commission_percent) || 0,
                 discount_amount: lineDiscountMap.get(String(item.id)) || 0,
-            })), { baseCogsPercent: Number(tenant?.baseCogsPercent) || 0 });
+            })), {
+                baseCogsPercent: Number(tenant?.baseCogsPercent) || 0,
+                commissionPercent: resolveChannelCommission(
+                    tenant?.channelCommissions || [],
+                    'Microsite',
+                    (tenant?.name || 'MANIPOS').toUpperCase()
+                ),
+            });
 
             if (diningMode === 'delivery' && deliveryFee > 0) {
                 itemPayloads.push({

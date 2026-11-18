@@ -27,8 +27,8 @@ PROJECT_REF = os.environ.get("SUPABASE_PROJECT_REF", "ptaqejtyhdbhmhrhuxcj")
 TOKEN = os.environ.get("SUPABASE_ACCESS_TOKEN", "")
 API = "https://api.supabase.com/v1"
 
-FUNCTIONS = ["mpesa-stk", "mpesa-callback", "mpesa-query"]
-PUBLIC_FUNCTIONS = {"mpesa-callback"}
+FUNCTIONS = ["mpesa-stk", "mpesa-callback", "mpesa-query", "daily-reports"]
+PUBLIC_FUNCTIONS = {"mpesa-callback", "daily-reports"}
 
 
 def request(method, path, payload=None):

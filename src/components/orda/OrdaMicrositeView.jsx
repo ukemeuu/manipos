@@ -59,6 +59,14 @@ export function OrdaMicrositeView({
   const [uploading, setUploading] = useState('');
   const [notice, setNotice] = useState('');
 
+  // Channel commissions & daily report subscribers
+  const [commissions, setCommissions] = useState([]);
+  const [commissionForm, setCommissionForm] = useState({ channel: '', brand: '', commission_percent: '' });
+  const [commissionBusy, setCommissionBusy] = useState(false);
+  const [subscribers, setSubscribers] = useState([]);
+  const [subscriberForm, setSubscriberForm] = useState({ email: '', sales_report: true, commission_report: true, inventory_report: false });
+  const [subscriberBusy, setSubscriberBusy] = useState(false);
+
   useEffect(() => {
     setForm({
       tagline: settings?.tagline || '',
@@ -81,6 +89,115 @@ export function OrdaMicrositeView({
     setHiddenCategories(Array.isArray(cfg.hiddenCategories) ? cfg.hiddenCategories : []);
     setDefaultCategory(cfg.defaultCategory || 'Most Popular');
   }, [settings]);
+
+  useEffect(() => {
+    if (!restaurantId) return;
+    setTenantContext(restaurantId);
+    supabase.from('pos_channel_commissions').select('*').eq('restaurant_id', restaurantId).order('channel')
+      .then(({ data }) => setCommissions(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    supabase.from('report_subscribers').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: true })
+      .then(({ data }) => setSubscribers(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [restaurantId]);
+
+  const normKey = (value) => String(value || '').trim().toLowerCase();
+
+  const saveCommission = async () => {
+    const channel = commissionForm.channel.trim();
+    if (!channel) {
+      alert('Channel is required (e.g. UberEats, Glovo, Bolt Food).');
+      return;
+    }
+    setCommissionBusy(true);
+    try {
+      setTenantContext(restaurantId);
+      const brand = commissionForm.brand.trim() || null;
+      const existing = commissions.find((c) => normKey(c.channel) === normKey(channel) && normKey(c.brand) === normKey(brand));
+      const payload = {
+        channel,
+        brand,
+        commission_percent: Number(commissionForm.commission_percent) || 0,
+        is_active: true,
+      };
+      let error = null;
+      if (existing) {
+        ({ error } = await supabase.from('pos_channel_commissions').update(payload).eq('id', existing.id).eq('restaurant_id', restaurantId));
+      } else {
+        ({ error } = await supabase.from('pos_channel_commissions').insert([{ restaurant_id: restaurantId, ...payload }]));
+      }
+      if (error) throw error;
+      setCommissionForm({ channel: '', brand: '', commission_percent: '' });
+      setNotice('Commission rate saved.');
+      const { data } = await supabase.from('pos_channel_commissions').select('*').eq('restaurant_id', restaurantId).order('channel');
+      setCommissions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      alert('Could not save commission: ' + (err.message || err));
+    } finally {
+      setCommissionBusy(false);
+    }
+  };
+
+  const toggleCommission = async (row) => {
+    setTenantContext(restaurantId);
+    const { error } = await supabase.from('pos_channel_commissions')
+      .update({ is_active: row.is_active === false })
+      .eq('id', row.id)
+      .eq('restaurant_id', restaurantId);
+    if (!error) setCommissions((prev) => prev.map((c) => (c.id === row.id ? { ...c, is_active: row.is_active === false } : c)));
+  };
+
+  const deleteCommission = async (row) => {
+    if (!window.confirm('Delete this commission rate?')) return;
+    setTenantContext(restaurantId);
+    const { error } = await supabase.from('pos_channel_commissions').delete().eq('id', row.id).eq('restaurant_id', restaurantId);
+    if (!error) setCommissions((prev) => prev.filter((c) => c.id !== row.id));
+  };
+
+  const saveSubscriber = async () => {
+    const email = subscriberForm.email.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      alert('Enter a valid email address.');
+      return;
+    }
+    setSubscriberBusy(true);
+    try {
+      setTenantContext(restaurantId);
+      const { error } = await supabase.from('report_subscribers').insert([{
+        restaurant_id: restaurantId,
+        email,
+        sales_report: subscriberForm.sales_report,
+        commission_report: subscriberForm.commission_report,
+        inventory_report: subscriberForm.inventory_report,
+        is_active: true,
+      }]);
+      if (error) throw error;
+      setSubscriberForm({ email: '', sales_report: true, commission_report: true, inventory_report: false });
+      setNotice('Report subscriber added.');
+      const { data } = await supabase.from('report_subscribers').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: true });
+      setSubscribers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      alert('Could not add subscriber: ' + (err.message || err));
+    } finally {
+      setSubscriberBusy(false);
+    }
+  };
+
+  const toggleSubscriberFlag = async (row, key) => {
+    setTenantContext(restaurantId);
+    const { error } = await supabase.from('report_subscribers')
+      .update({ [key]: !row[key] })
+      .eq('id', row.id)
+      .eq('restaurant_id', restaurantId);
+    if (!error) setSubscribers((prev) => prev.map((s) => (s.id === row.id ? { ...s, [key]: !row[key] } : s)));
+  };
+
+  const deleteSubscriber = async (row) => {
+    if (!window.confirm(`Remove ${row.email}?`)) return;
+    setTenantContext(restaurantId);
+    const { error } = await supabase.from('report_subscribers').delete().eq('id', row.id).eq('restaurant_id', restaurantId);
+    if (!error) setSubscribers((prev) => prev.filter((s) => s.id !== row.id));
+  };
 
   // Distinct categories that actually have microsite-visible items, in the
   // owner's chosen order (falling back to name order for anything new).
@@ -590,6 +707,182 @@ export function OrdaMicrositeView({
         </div>
         <p className="text-[11px] text-slate-400">
           Showing {effectiveItems.length} of {(menuItems || []).length} items. Changes apply when you save.
+        </p>
+      </SectionCard>
+
+      {/* ── Channel commissions ── */}
+      <SectionCard
+        icon={ShoppingBag}
+        title="Channel commissions"
+        description="Platform commission per sales channel (and optionally per brand), captured on every order line."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="space-y-1.5">
+            <label className={labelCls}>Channel</label>
+            <input
+              className={inputCls}
+              list="channel-commission-options"
+              placeholder="UberEats, Glovo, Bolt Food…"
+              value={commissionForm.channel}
+              onChange={(e) => setCommissionForm((p) => ({ ...p, channel: e.target.value }))}
+            />
+            <datalist id="channel-commission-options">
+              {['UberEats', 'Glovo', 'Bolt Food', 'Whatsapp', 'Microsite', 'Dine-in', 'Takeaway'].map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls}>Brand (optional)</label>
+            <input
+              className={inputCls}
+              placeholder="e.g. Little Lagos"
+              value={commissionForm.brand}
+              onChange={(e) => setCommissionForm((p) => ({ ...p, brand: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls}>Commission %</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              className={inputCls}
+              placeholder="e.g. 20"
+              value={commissionForm.commission_percent}
+              onChange={(e) => setCommissionForm((p) => ({ ...p, commission_percent: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={saveCommission}
+              disabled={commissionBusy}
+              className="w-full px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black disabled:opacity-50"
+            >
+              {commissionBusy ? 'Saving…' : 'Add / Update'}
+            </button>
+          </div>
+        </div>
+
+        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+          {commissions.length === 0 && (
+            <p className="text-xs text-slate-400 px-4 py-5 text-center">No commission rates yet. Example: Glovo / Pot of Jollof = 29%.</p>
+          )}
+          {commissions.map((row) => (
+            <div key={row.id} className={`flex items-center gap-3 px-4 py-2.5 ${row.is_active === false ? 'bg-slate-50' : 'bg-white'}`}>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold truncate ${row.is_active === false ? 'text-slate-400' : 'text-slate-800'}`}>
+                  {row.channel}
+                  {row.brand ? ` · ${row.brand}` : ' · All brands'}
+                </p>
+                <p className="text-[11px] text-slate-400">Commission {Number(row.commission_percent) || 0}% per item</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleCommission(row)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border ${
+                  row.is_active !== false
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                }`}
+              >
+                {row.is_active !== false ? 'Active' : 'Inactive'}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteCommission(row)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* ── Daily report emails ── */}
+      <SectionCard
+        icon={Clock}
+        title="Daily report emails"
+        description="Choose who receives the daily sales, commission and closing-stock reports."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className={labelCls}>Email address</label>
+            <input
+              type="email"
+              className={inputCls}
+              placeholder="owner@restaurant.com"
+              value={subscriberForm.email}
+              onChange={(e) => setSubscriberForm((p) => ({ ...p, email: e.target.value }))}
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-2 pb-1">
+            {[
+              { key: 'sales_report', label: 'Sales breakdown' },
+              { key: 'commission_report', label: 'Commission paid' },
+              { key: 'inventory_report', label: 'Closing stock & reorder' },
+            ].map((f) => (
+              <label key={f.key} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(subscriberForm[f.key])}
+                  onChange={(e) => setSubscriberForm((p) => ({ ...p, [f.key]: e.target.checked }))}
+                  className="accent-emerald-700 w-4 h-4"
+                />
+                {f.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={saveSubscriber}
+          disabled={subscriberBusy}
+          className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black disabled:opacity-50"
+        >
+          {subscriberBusy ? 'Adding…' : 'Add recipient'}
+        </button>
+
+        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+          {subscribers.length === 0 && (
+            <p className="text-xs text-slate-400 px-4 py-5 text-center">No report recipients yet.</p>
+          )}
+          {subscribers.map((row) => (
+            <div key={row.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-white">
+              <p className="text-sm font-bold text-slate-800 flex-1 min-w-0 truncate">{row.email}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                {[
+                  { key: 'sales_report', label: 'Sales' },
+                  { key: 'commission_report', label: 'Commission' },
+                  { key: 'inventory_report', label: 'Inventory' },
+                ].map((f) => (
+                  <label key={f.key} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(row[f.key])}
+                      onChange={() => toggleSubscriberFlag(row, f.key)}
+                      className="accent-emerald-700 w-3.5 h-3.5"
+                    />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => deleteSubscriber(row)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
+                title="Remove"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+          <Clock size={12} /> Reports are emailed automatically every day at 00:17 (Africa/Nairobi).
         </p>
       </SectionCard>
 
