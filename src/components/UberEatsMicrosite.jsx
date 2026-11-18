@@ -18,7 +18,7 @@ import {
 } from '../lib/promoEngine';
 import { computeEffectiveMinSelected } from '../lib/webPosCatalog';
 import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
-import { attachLineCosting } from '../lib/productCosting';
+import { attachLineCosting, insertOrderItems } from '../lib/productCosting';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -1923,9 +1923,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 });
             }
 
-            const { error: itemsError } = await supabase
-                .from('pos_order_items')
-                .insert(itemPayloads);
+            const { error: itemsError } = await insertOrderItems(supabase, itemPayloads);
 
             if (itemsError) throw itemsError;
 

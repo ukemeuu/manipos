@@ -58,3 +58,24 @@ export function attachLineCosting(items, { baseCogsPercent = 0 } = {}) {
     };
   });
 }
+
+const COSTING_COLS = ['cost_price', 'cogs_percent', 'commission_percent', 'cogs_amount', 'commission_amount', 'discount_amount'];
+
+/**
+ * Insert order lines, gracefully dropping the costing columns when the
+ * 20261120_cogs_commission migration has not been run yet. Never let a
+ * reporting-only schema gap block a sale.
+ */
+export async function insertOrderItems(supabaseClient, rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const { error } = await supabaseClient.from('pos_order_items').insert(list);
+  if (error && /column .* does not exist/i.test(String(error.message || ''))) {
+    const stripped = list.map((row) => {
+      const next = { ...row };
+      COSTING_COLS.forEach((col) => delete next[col]);
+      return next;
+    });
+    return supabaseClient.from('pos_order_items').insert(stripped);
+  }
+  return { error };
+}

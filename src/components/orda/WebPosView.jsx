@@ -10,7 +10,7 @@ import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
 import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
-import { attachLineCosting } from '../../lib/productCosting';
+import { attachLineCosting, insertOrderItems } from '../../lib/productCosting';
 import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
 import {
   extractBrandTabs,
@@ -907,7 +907,7 @@ export function WebPosView({
         });
       }
 
-      const { error: itemsErr } = await supabase.from('pos_order_items').insert(itemsPayload);
+      const { error: itemsErr } = await insertOrderItems(supabase, itemsPayload);
       if (itemsErr) throw itemsErr;
 
       // Best-effort Store Credit debit, Voucher redemption & Loyalty Points award

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { recordQrScan } from '../lib/qrScanService';
 import { loadTenant } from '../lib/tenantConfig';
 import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
+import { attachLineCosting, insertOrderItems } from '../lib/productCosting';
 
 export const BRAND_CONFIGS = {
     'POT OF JOLLOF': {
@@ -1590,14 +1591,17 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             if (orderError) throw orderError;
 
             // 2. Insert order items
-            const itemPayloads = cart.map(item => ({
+            const itemPayloads = attachLineCosting(cart.map(item => ({
                 order_id: orderData.id,
                 item_name: item.name,
                 quantity: item.quantity,
                 price: item.price,
                 instructions: item.instructions || null,
-                status: 'Pending'
-            }));
+                status: 'Pending',
+                cost_price: Number(item.cost_price) || 0,
+                cogs_percent: Number(item.cogs_percent) || 0,
+                commission_percent: Number(item.commission_percent) || 0,
+            })), { baseCogsPercent: Number(tenantProfile?.baseCogsPercent) || 0 });
 
             // Automatically append calculated delivery fee line item
             if (diningOption === 'Delivery' && calculatedDeliveryFee > 0) {

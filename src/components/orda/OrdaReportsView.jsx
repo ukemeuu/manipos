@@ -167,6 +167,41 @@ export function OrdaReportsView({
     return m;
   }, [menuItems]);
 
+  const filterLists = useMemo(() => {
+    const payments = new Set();
+    const channels = new Set();
+    const clerks = new Set();
+    const cats = new Set();
+    orders.forEach((o) => {
+      payments.add(normalizePaymentMethodLabel(o));
+      channels.add(formatChannelDisplayName(normalizeChannelLabel(o)));
+      if (o.cashier_name) clerks.add(o.cashier_name);
+    });
+    menuItems.forEach((m) => m.category && cats.add(m.category));
+    return {
+      payments: ['All', ...Array.from(payments)],
+      channels: ['All', ...Array.from(channels)],
+      clerks: ['All', ...Array.from(clerks)],
+      categories: ['All', ...Array.from(cats)],
+    };
+  }, [orders, menuItems]);
+
+  const scopedOrders = useMemo(() => {
+    const sTime = new Date(`${startDate}T00:00:00`).getTime();
+    const eTime = new Date(`${endDate}T23:59:59.999`).getTime();
+    return orders.filter((o) => {
+      if (activeBranch !== 'all' && o.branch_id && o.branch_id !== activeBranch) return false;
+      const t = new Date(o.created_at || 0).getTime();
+      if (t < sTime || t > eTime) return false;
+      if (deliveryFilter !== 'All' && String(o.dining_option || '').toLowerCase() !== deliveryFilter.toLowerCase()) return false;
+      if (paymentFilter !== 'All' && normalizePaymentMethodLabel(o) !== paymentFilter) return false;
+      if (channelFilter !== 'All' && formatChannelDisplayName(normalizeChannelLabel(o)) !== channelFilter) return false;
+      if (clerkFilter !== 'All' && (o.cashier_name || '') !== clerkFilter) return false;
+      return true;
+    });
+  }, [orders, activeBranch, startDate, endDate, deliveryFilter, paymentFilter, channelFilter, clerkFilter]);
+
+  // Per-item profitability (revenue - discount - COGS - commission).
   const profitabilityRows = useMemo(() => {
     const map = new Map();
     scopedOrders.forEach((o) => {
@@ -214,40 +249,6 @@ export function OrdaReportsView({
     });
     return rows;
   }, [scopedOrders, menuCostMap]);
-
-  const filterLists = useMemo(() => {
-    const payments = new Set();
-    const channels = new Set();
-    const clerks = new Set();
-    const cats = new Set();
-    orders.forEach((o) => {
-      payments.add(normalizePaymentMethodLabel(o));
-      channels.add(formatChannelDisplayName(normalizeChannelLabel(o)));
-      if (o.cashier_name) clerks.add(o.cashier_name);
-    });
-    menuItems.forEach((m) => m.category && cats.add(m.category));
-    return {
-      payments: ['All', ...Array.from(payments)],
-      channels: ['All', ...Array.from(channels)],
-      clerks: ['All', ...Array.from(clerks)],
-      categories: ['All', ...Array.from(cats)],
-    };
-  }, [orders, menuItems]);
-
-  const scopedOrders = useMemo(() => {
-    const sTime = new Date(`${startDate}T00:00:00`).getTime();
-    const eTime = new Date(`${endDate}T23:59:59.999`).getTime();
-    return orders.filter((o) => {
-      if (activeBranch !== 'all' && o.branch_id && o.branch_id !== activeBranch) return false;
-      const t = new Date(o.created_at || 0).getTime();
-      if (t < sTime || t > eTime) return false;
-      if (deliveryFilter !== 'All' && String(o.dining_option || '').toLowerCase() !== deliveryFilter.toLowerCase()) return false;
-      if (paymentFilter !== 'All' && normalizePaymentMethodLabel(o) !== paymentFilter) return false;
-      if (channelFilter !== 'All' && formatChannelDisplayName(normalizeChannelLabel(o)) !== channelFilter) return false;
-      if (clerkFilter !== 'All' && (o.cashier_name || '') !== clerkFilter) return false;
-      return true;
-    });
-  }, [orders, activeBranch, startDate, endDate, deliveryFilter, paymentFilter, channelFilter, clerkFilter]);
 
   // Executive Dashboard Metrics (valid non-cancelled/voided/returned orders + Processing Stages + Channels + Payment Methods)
   const execMetrics = useMemo(
