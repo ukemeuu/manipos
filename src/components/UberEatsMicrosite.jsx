@@ -1103,7 +1103,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                                 display_name: item.display_name,
                                 lat: item.lat,
                                 lon: item.lon,
-                                provider: 'Maps'
+                                provider: 'OpenStreetMap (fallback)'
                             }));
                         }
                     } catch (e) { }
