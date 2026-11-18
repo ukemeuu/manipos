@@ -83,7 +83,8 @@ cd dist
 # Each file gets its own FTP connection; transient drops are common on shared
 # hosting, so retry a few times before giving up.
 upload_with_retry() {
-  local file="$1" remote="$2" attempt
+  local file="$1" remote="$2" attempt base
+  base="$(basename "$remote")"
   for attempt in 1 2 3 4; do
     if curl -sS --ftp-create-dirs --connect-timeout 30 --max-time 180 \
          -T "$file" \
@@ -91,6 +92,12 @@ upload_with_retry() {
          "ftp://${FTP_HOST}:${FTP_PORT}${FTP_REMOTE_DIR}${remote}" 2>/dev/null; then
       return 0
     fi
+    # Some servers leave a hidden ".in.<file>." temp file after a dropped STOR,
+    # which makes every retry fail with 550. Clear it before trying again.
+    curl -sS --connect-timeout 15 --max-time 30 \
+      --user "${FTP_USER}:${FTP_PASS}" \
+      "ftp://${FTP_HOST}:${FTP_PORT}${FTP_REMOTE_DIR}" \
+      -Q "DELE .in.${base}." >/dev/null 2>&1 || true
     echo "  ! retry ${attempt} for ${remote}"
     sleep 3
   done
@@ -100,16 +107,28 @@ upload_with_retry() {
 # Upload hashed assets first and the entry HTML last. Publishing index.html
 # before its chunks are on the server produces "Failed to fetch dynamically
 # imported module" errors for anyone who loads the app during the deploy.
-find . -type f ! -name 'index.html' | sort | while read -r file; do
+upload_failed=0
+while read -r file; do
   remote="${file#./}"
   encoded="$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))' "$remote")"
   printf '  %s\n' "$remote"
-  upload_with_retry "$file" "$encoded"
-done
+  if ! upload_with_retry "$file" "$encoded"; then
+    echo "  ! FAILED $remote"
+    upload_failed=1
+  fi
+done < <(find . -type f ! -name 'index.html' | sort)
 
 # Entry point goes live only after every asset it references is uploaded.
 printf '  index.html\n'
-upload_with_retry index.html index.html
+if ! upload_with_retry index.html index.html; then
+  echo "  ! FAILED index.html"
+  upload_failed=1
+fi
+
+if [[ "$upload_failed" != "0" ]]; then
+  echo "Upload finished with failures." >&2
+  exit 1
+fi
 
 echo
 if [[ "$TARGET" == "staging" ]]; then
