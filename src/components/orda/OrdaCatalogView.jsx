@@ -550,9 +550,9 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
 
       {/* Main Catalog Workspace */}
       {catalogTab === 'items' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <div className="space-y-5">
           {/* Left Category Rail */}
-          <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <span className="text-xs font-black uppercase tracking-wider text-slate-500">Categories</span>
               <button
@@ -582,7 +582,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
             <button
               type="button"
               onClick={() => setSelectedCategory('all')}
-              className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between cursor-pointer ${
+              className={`text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer ${
                 selectedCategory === 'all' ? 'bg-amber-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
@@ -590,7 +590,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
               <span className="text-[11px] font-mono opacity-75">{items.length}</span>
             </button>
 
-            <div className="space-y-1 max-h-[540px] overflow-y-auto pr-1">
+            <div className="flex flex-wrap gap-1.5">
               {categories.map((cat) => (
                 <div
                   key={cat.id}
@@ -631,7 +631,7 @@ export function OrdaCatalogView({ restaurantId, branches = [], onCatalogChanged,
           </div>
 
           {/* Right Items Table */}
-          <div className="lg:col-span-9 bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2.5">
                 <div className="relative">

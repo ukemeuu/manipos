@@ -241,6 +241,8 @@ export function AdminDashboard({
   });
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [brandBusyId, setBrandBusyId] = useState(null);
   const [discounts, setDiscounts] = useState([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState(null);
@@ -522,6 +524,11 @@ export function AdminDashboard({
           .select('*')
           .eq('restaurant_id', currentRestaurantId)
           .limit(1),
+        supabase
+          .from('pos_brands')
+          .select('*')
+          .eq('restaurant_id', currentRestaurantId)
+          .order('name'),
       ]);
 
       let timeoutId = null;
@@ -534,7 +541,7 @@ export function AdminDashboard({
       if (timeoutId) clearTimeout(timeoutId);
 
       if (phase1Results) {
-        const [ordersRes, menuRes, settingsRes] = phase1Results;
+        const [ordersRes, menuRes, settingsRes, brandsRes] = phase1Results;
         const fetchedOrders = ordersRes?.status === 'fulfilled' ? ordersRes.value?.data || [] : [];
         setOrders((prev) =>
           filterStaffOrders(
@@ -547,6 +554,9 @@ export function AdminDashboard({
 
         const fetchedMenu = menuRes?.status === 'fulfilled' ? menuRes.value?.data || [] : [];
         setMenuItems(fetchedMenu);
+
+        const fetchedBrands = brandsRes?.status === 'fulfilled' ? brandsRes.value?.data || [] : [];
+        setBrands(fetchedBrands);
 
         const fetchedSettings = settingsRes?.status === 'fulfilled' ? settingsRes.value?.data : null;
         if (fetchedSettings && fetchedSettings.length > 0) {
@@ -1123,6 +1133,26 @@ export function AdminDashboard({
   };
 
   // Settings Handlers
+  const handleToggleBrand = async (brand) => {
+    if (!activeRestaurantId) return;
+    const nextActive = brand.is_active === false;
+    setBrandBusyId(brand.id);
+    setTenantContext(activeRestaurantId);
+    try {
+      const { error } = await supabase
+        .from('pos_brands')
+        .update({ is_active: nextActive, updated_at: new Date().toISOString() })
+        .eq('id', brand.id)
+        .eq('restaurant_id', activeRestaurantId);
+      if (error) throw error;
+      setBrands((prev) => prev.map((b) => (b.id === brand.id ? { ...b, is_active: nextActive } : b)));
+    } catch (err) {
+      alert('Could not update brand: ' + (err.message || err));
+    } finally {
+      setBrandBusyId(null);
+    }
+  };
+
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -2203,6 +2233,7 @@ export function AdminDashboard({
               tenantSlug={tenantSlug}
               activeBranch={activeBranchObj}
               staffName={pinStaffName}
+              brands={brands}
               initialOrder={settleTargetOrder}
               openOrders={openOrders}
               onSelectOpenOrder={(order) => setSettleTargetOrder(order)}
@@ -2688,6 +2719,7 @@ export function AdminDashboard({
                     <OrdaCatalogView
                       restaurantId={activeRestaurantId}
                       branches={branches}
+                      brands={brands}
                       onCatalogChanged={fetchDashboardData}
                       canDelete={isAdmin}
                     />
@@ -3132,6 +3164,49 @@ export function AdminDashboard({
                         )}
                       </button>
                     </form>
+
+                    {/* BRAND MANAGEMENT */}
+                    <div className="bg-slate-900/40 border border-slate-900 p-8 rounded-2xl space-y-4">
+                      <div>
+                        <h3 className="text-lg font-black text-white">Brands</h3>
+                        <p className="text-slate-400 text-sm mt-1">
+                          Deactivate a brand to hide it and its items from the POS. Activate it again anytime.
+                        </p>
+                      </div>
+                      {brands.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          No brands found. Brands are created from the catalogue item brand tags.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-slate-800">
+                          {brands.map((brand) => {
+                            const active = brand.is_active !== false;
+                            return (
+                              <div key={brand.id} className="flex items-center justify-between gap-4 py-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-white truncate">{brand.name}</p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {active ? 'Active · visible on POS' : 'Inactive · hidden from POS'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={brandBusyId === brand.id}
+                                  onClick={() => handleToggleBrand(brand)}
+                                  className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-black cursor-pointer disabled:opacity-50 ${
+                                    active
+                                      ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20'
+                                      : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                  }`}
+                                >
+                                  {brandBusyId === brand.id ? 'Saving…' : active ? 'Deactivate' : 'Activate'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </motion.div>
                 )}
 

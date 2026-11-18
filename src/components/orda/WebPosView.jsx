@@ -25,6 +25,8 @@ import {
   getRelativeLocalDateString,
   buildOrderCreatedAtForDate,
   computeManualOrderDiscount,
+  normalizeMenuText,
+  extractItemNormalizedBrands,
 } from '../../lib/webPosCatalog';
 
 const SALES_CHANNELS = [
@@ -126,6 +128,7 @@ export function WebPosView({
   tenantSlug,
   activeBranch = null,
   staffName = 'Web POS Staff',
+  brands = [],
   initialOrder = null,
   openOrders = [],
   onSelectOpenOrder = null,
@@ -337,7 +340,32 @@ export function WebPosView({
     return map;
   }, [modifierGroups]);
 
-  const brandTabs = useMemo(() => extractBrandTabs(menuItems), [menuItems]);
+  const activeBrandSet = useMemo(() => {
+    const set = new Set();
+    (brands || []).forEach((b) => {
+      if (b.is_active !== false && b.name) set.add(normalizeMenuText(b.name));
+    });
+    return set;
+  }, [brands]);
+
+  useEffect(() => {
+    if (
+      selectedBrand !== 'All'
+      && activeBrandSet.size > 0
+      && !activeBrandSet.has(normalizeMenuText(selectedBrand))
+      && !activeBrandSet.has(selectedBrand)
+    ) {
+      setSelectedBrand('All');
+    }
+  }, [activeBrandSet, selectedBrand]);
+
+  const brandTabs = useMemo(() => {
+    const tabs = extractBrandTabs(menuItems);
+    if (activeBrandSet.size === 0) return tabs;
+    return tabs.filter(
+      (t) => t.id === 'All' || activeBrandSet.has(normalizeMenuText(t.id)) || activeBrandSet.has(t.id)
+    );
+  }, [menuItems, activeBrandSet]);
 
   const brandScopedItems = useMemo(() => {
     let list = menuItems;
@@ -347,8 +375,15 @@ export function WebPosView({
     if (selectedBrand !== 'All') {
       list = list.filter((i) => itemMatchesBrand(i, selectedBrand));
     }
+    if (activeBrandSet.size > 0) {
+      list = list.filter((item) => {
+        const itemBrands = extractItemNormalizedBrands(item);
+        if (itemBrands.length === 0) return true;
+        return itemBrands.some((b) => activeBrandSet.has(b));
+      });
+    }
     return list;
-  }, [menuItems, selectedBrand, activeBranch]);
+  }, [menuItems, selectedBrand, activeBranch, activeBrandSet]);
 
   const categoryTabs = useMemo(() => {
     const itemCatSet = new Set();
@@ -387,10 +422,18 @@ export function WebPosView({
 
   const filteredCombos = useMemo(() => {
     if (selectedCategory !== 'All' && selectedCategory !== 'Combos') return [];
-    if (!search.trim()) return combos;
+    let list = combos;
+    if (activeBrandSet.size > 0) {
+      list = list.filter((c) => {
+        const cb = extractItemNormalizedBrands(c);
+        if (cb.length === 0) return true;
+        return cb.some((b) => activeBrandSet.has(b));
+      });
+    }
+    if (!search.trim()) return list;
     const q = search.toLowerCase();
-    return combos.filter((c) => (c.name || '').toLowerCase().includes(q));
-  }, [combos, selectedCategory, search]);
+    return list.filter((c) => (c.name || '').toLowerCase().includes(q));
+  }, [combos, selectedCategory, search, activeBrandSet]);
 
   const filteredGuests = useMemo(() => {
     if (!guestSearch.trim()) return guests.slice(0, 12);
