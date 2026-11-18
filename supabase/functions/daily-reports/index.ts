@@ -1,17 +1,15 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const jsonResponse = (body: Record<string, unknown>, status = 200) =>
-  new Response(JSON.stringify(body), {
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
-});
+  });
+}
 
 const money = (value: number) => `KES ${Math.round(Number(value) || 0).toLocaleString()}`;
 
@@ -25,7 +23,6 @@ function reportDayRange(dateParam: string | null) {
   } else {
     base = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   }
-  // Shift to Nairobi midnight boundaries.
   const offsetMs = 3 * 60 * 60 * 1000;
   const local = new Date(base.getTime() + offsetMs);
   const y = local.getUTCFullYear();
@@ -38,7 +35,9 @@ function reportDayRange(dateParam: string | null) {
 }
 
 function buildSalesReport(restaurant: string, day: string, orders: Array<Record<string, any>>) {
-  const valid = orders.filter((o) => !["cancelled", "voided", "declined", "returned"].includes(String(o.status || "").toLowerCase()));
+  const valid = orders.filter((o) =>
+    !["cancelled", "voided", "declined", "returned"].includes(String(o.status || "").toLowerCase())
+  );
   const gross = valid.reduce((s, o) => s + Number(o.total_amount || 0), 0);
   const discount = valid.reduce((s, o) => s + Number(o.discount || 0), 0);
   const byChannel = new Map<string, { count: number; total: number }>();
@@ -55,7 +54,7 @@ function buildSalesReport(restaurant: string, day: string, orders: Array<Record<
     p.total += Number(o.total_amount || 0);
     byPayment.set(pay, p);
   });
-  const lines = [
+  return [
     `Daily Sales Breakdown — ${restaurant} (${day})`,
     ``,
     `Orders: ${valid.length}`,
@@ -68,8 +67,7 @@ function buildSalesReport(restaurant: string, day: string, orders: Array<Record<
     ``,
     `By payment:`,
     ...Array.from(byPayment.entries()).map(([p, v]) => `  ${p}: ${v.count} orders · ${money(v.total)}`),
-  ];
-  return lines.join("\n");
+  ].join("\n");
 }
 
 function buildCommissionReport(restaurant: string, day: string, orders: Array<Record<string, any>>) {
@@ -87,7 +85,7 @@ function buildCommissionReport(restaurant: string, day: string, orders: Array<Re
     byChannel.set(ch, agg);
   });
   const total = Array.from(byChannel.values()).reduce((s, v) => s + v.commission, 0);
-  const lines = [
+  return [
     `Daily Platform Commission — ${restaurant} (${day})`,
     ``,
     ...Array.from(byChannel.entries()).map(
@@ -95,30 +93,29 @@ function buildCommissionReport(restaurant: string, day: string, orders: Array<Re
     ),
     ``,
     `Total commission paid to platforms: ${money(total)}`,
-  ];
-  return lines.join("\n");
+  ].join("\n");
 }
 
 function buildInventoryReport(restaurant: string, day: string, items: Array<Record<string, any>>) {
-  const closing = items.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unit_cost || i.cost_price || 0), 0);
+  const closing = items.reduce(
+    (s, i) => s + Number(i.quantity || 0) * Number(i.unit_cost || i.cost_price || 0),
+    0
+  );
   const reorder = items.filter((i) => Number(i.quantity || 0) <= Number(i.reorder_threshold || 0));
-  const lines = [
+  return [
     `Daily Closing Stock — ${restaurant} (${day})`,
     ``,
     `Stock lines: ${items.length}`,
     `Closing stock value: ${money(closing)}`,
     ``,
-    reorder.length > 0
-      ? `Items to reorder next day:`
-      : `No items below the reorder threshold.`,
+    reorder.length > 0 ? `Items to reorder next day:` : `No items below the reorder threshold.`,
     ...reorder.map(
       (i) => `  ${i.name}: ${Number(i.quantity || 0)} ${i.unit || "units"} (threshold ${Number(i.reorder_threshold || 0)})`
     ),
-  ];
-  return lines.join("\n");
+  ].join("\n");
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -126,7 +123,6 @@ serve(async (req) => {
     return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
   }
 
-  // Optional shared-secret protection for the scheduled caller.
   const cronSecret = Deno.env.get("CRON_SECRET") || "";
   if (cronSecret) {
     const auth = req.headers.get("Authorization") || "";
@@ -135,32 +131,45 @@ serve(async (req) => {
     }
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    if (!supabaseUrl || !serviceKey) {
-      return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
-    }
-    const supabase = createClient(supabaseUrl, serviceKey);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !serviceKey) {
+    return jsonResponse({ ok: false, error: "Server configuration error" }, 500);
+  }
 
+  const restGet = (path: string) =>
+    fetch(`${supabaseUrl}/rest/v1${path}`, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    }).then(async (r) => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => null) }));
+
+  try {
     const body = await req.json().catch(() => ({}));
     const { day, startIso, endIso } = reportDayRange(body?.date ? String(body.date) : null);
 
-    let query = supabase
-      .from("report_subscribers")
-      .select("*, restaurants(name, slug)")
-      .eq("is_active", true);
+    let subscriberQuery = "/report_subscribers?select=*&is_active=eq.true";
     if (body?.restaurant_id) {
-      query = query.eq("restaurant_id", String(body.restaurant_id));
+      subscriberQuery += `&restaurant_id=eq.${encodeURIComponent(String(body.restaurant_id))}`;
     }
-    const { data: subscriberRows, error: subError } = await query;
-    if (subError) return jsonResponse({ ok: false, error: subError.message }, 500);
+    // Embed the restaurant name via a FK is unavailable without supabase-js, so
+    // fetch restaurants separately and join in memory.
+    const subRes = await restGet(subscriberQuery);
+    if (!subRes.ok) return jsonResponse({ ok: false, error: "Could not load subscribers" }, 500);
+    const subscriberRows = Array.isArray(subRes.body) ? subRes.body : [];
 
-    const byRestaurant = new Map<string, { name: string; slug: string; subscribers: Array<Record<string, any>> }>();
-    (subscriberRows || []).forEach((row: Record<string, any>) => {
-      const rest = row.restaurants || {};
+    const restaurantIds = Array.from(new Set(subscriberRows.map((r: Record<string, any>) => String(r.restaurant_id))));
+    const names = new Map<string, string>();
+    for (const id of restaurantIds) {
+      const r = await restGet(`/restaurants?id=eq.${encodeURIComponent(id)}&select=id,name&limit=1`);
+      if (r.ok && Array.isArray(r.body) && r.body[0]) names.set(id, String(r.body[0].name || id));
+    }
+
+    const byRestaurant = new Map<string, { name: string; subscribers: Array<Record<string, any>> }>();
+    subscriberRows.forEach((row: Record<string, any>) => {
       const id = String(row.restaurant_id);
-      const entry = byRestaurant.get(id) || { name: rest.name || id, slug: rest.slug || "", subscribers: [] };
+      const entry = byRestaurant.get(id) || { name: names.get(id) || id, subscribers: [] };
       entry.subscribers.push(row);
       byRestaurant.set(id, entry);
     });
@@ -172,21 +181,18 @@ serve(async (req) => {
     const failures: string[] = [];
 
     for (const [restaurantId, entry] of byRestaurant.entries()) {
-      const { data: orders } = await supabase
-        .from("pos_orders")
-        .select("*, items:pos_order_items(*)")
-        .eq("restaurant_id", restaurantId)
-        .gte("created_at", startIso)
-        .lte("created_at", endIso)
-        .limit(1000);
-      const { data: inventory } = await supabase
-        .from("inventory_items")
-        .select("*")
-        .eq("restaurant_id", restaurantId)
-        .limit(1000);
+      const params = new URLSearchParams({
+        select: "*,items:pos_order_items(*)",
+        restaurant_id: `eq.${restaurantId}`,
+        created_at: `gte.${startIso}`,
+        limit: "1000",
+      });
+      params.append("created_at", `lte.${endIso}`);
+      const ordRes = await restGet(`/pos_orders?${params.toString()}`);
+      const orderList = ordRes.ok && Array.isArray(ordRes.body) ? ordRes.body : [];
 
-      const orderList = Array.isArray(orders) ? orders : [];
-      const inventoryList = Array.isArray(inventory) ? inventory : [];
+      const invRes = await restGet(`/inventory_items?restaurant_id=eq.${encodeURIComponent(restaurantId)}&select=*&limit=1000`);
+      const inventoryList = invRes.ok && Array.isArray(invRes.body) ? invRes.body : [];
 
       const salesText = buildSalesReport(entry.name, day, orderList);
       const commissionText = buildCommissionReport(entry.name, day, orderList);
@@ -215,7 +221,10 @@ serve(async (req) => {
             }),
           });
           if (resp.ok) sent += 1;
-          else failures.push(`${sub.email}: Resend ${resp.status}`);
+          else {
+            const detail = await resp.text().catch(() => "");
+            failures.push(`${sub.email}: Resend ${resp.status} ${detail.slice(0, 240)}`);
+          }
         } catch (e) {
           failures.push(`${sub.email}: ${e instanceof Error ? e.message : "send failed"}`);
         }
@@ -224,9 +233,6 @@ serve(async (req) => {
 
     return jsonResponse({ ok: true, day, restaurants: byRestaurant.size, sent, failures });
   } catch (err) {
-    return jsonResponse(
-      { ok: false, error: err instanceof Error ? err.message : "Unexpected error" },
-      500
-    );
+    return jsonResponse({ ok: false, error: err instanceof Error ? err.message : "Unexpected error" }, 500);
   }
 });
