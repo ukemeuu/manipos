@@ -73,6 +73,7 @@ export function OrdaMicrositeView({
       delivery_fee: settings?.delivery_fee ?? '',
       min_order: settings?.min_order ?? '',
       free_delivery_over: settings?.free_delivery_over ?? '',
+      base_cogs_percent: settings?.base_cogs_percent ?? '',
     });
 
     const cfg = settings?.microsite_config || {};
@@ -183,6 +184,7 @@ export function OrdaMicrositeView({
         delivery_fee: Number(form.delivery_fee) || 0,
         min_order: Number(form.min_order) || 0,
         free_delivery_over: form.free_delivery_over === '' ? null : Number(form.free_delivery_over),
+        base_cogs_percent: Number(form.base_cogs_percent) || 0,
         microsite_config: cfg,
       };
 
@@ -386,7 +388,7 @@ export function OrdaMicrositeView({
         title="Ordering &amp; delivery"
         description="Fees and timing customers see before checkout."
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="space-y-1.5">
             <label className={labelCls}>Delivery time (minutes)</label>
             <input
@@ -431,9 +433,22 @@ export function OrdaMicrositeView({
               onChange={(e) => setForm((p) => ({ ...p, free_delivery_over: e.target.value }))}
             />
           </div>
+          <div className="space-y-1.5">
+            <label className={labelCls}>Base COGS %</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              className={inputCls}
+              placeholder="e.g. 35"
+              value={form.base_cogs_percent}
+              onChange={(e) => setForm((p) => ({ ...p, base_cogs_percent: e.target.value }))}
+            />
+          </div>
         </div>
         <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
-          <Clock size={12} /> Free delivery threshold is optional — leave it empty to disable it.
+          <Clock size={12} /> Free delivery threshold is optional. Base COGS % is the store-wide cost fallback for items without an exact cost price.
         </p>
       </SectionCard>
 

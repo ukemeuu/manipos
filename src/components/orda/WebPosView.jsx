@@ -10,6 +10,7 @@ import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
 import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
+import { attachLineCosting } from '../../lib/productCosting';
 import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
 import {
   extractBrandTabs,
@@ -134,6 +135,7 @@ export function WebPosView({
   onSelectOpenOrder = null,
   tendersConfig = null,
   allowNegativeStoreCredit = false,
+  baseCogsPercent = 0,
   onBackToOrders,
   onOrderPlaced,
 }) {
@@ -476,6 +478,9 @@ export function WebPosView({
             unitPrice: effective,
             quantity: 1,
             summary: '',
+            cost_price: Number(item.cost_price) || 0,
+            cogs_percent: Number(item.cogs_percent) || 0,
+            commission_percent: Number(item.commission_percent) || 0,
             excludeFromTax: Boolean(item.exclude_from_tax),
           },
         ];
@@ -599,6 +604,9 @@ export function WebPosView({
         quantity: itemQty,
         summary: parts.join(' | '),
         excludeFromTax: Boolean(item.exclude_from_tax),
+        cost_price: Number(item.cost_price) || 0,
+        cogs_percent: Number(item.cogs_percent) || 0,
+        commission_percent: Number(item.commission_percent) || 0,
       },
     ]);
     setCustomizingItem(null);
@@ -638,8 +646,9 @@ export function WebPosView({
       grandTotalBeforePromo: subtotal + (diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0),
       diningOption: diningMode,
       paymentMethod: paymentTender,
+      items: cart,
     });
-  }, [appliedDiscount, subtotal, deliveryFee, diningMode, paymentTender]);
+  }, [appliedDiscount, subtotal, deliveryFee, diningMode, paymentTender, cart]);
 
   const promoDiscountAmount = promoEval.valid ? promoEval.discountAmount : 0;
   const manualDiscountAmount = useMemo(
@@ -719,6 +728,7 @@ export function WebPosView({
       grandTotalBeforePromo: subtotal + (diningMode === 'Delivery' ? Number(deliveryFee || 0) : 0),
       diningOption: diningMode,
       paymentMethod: paymentTender,
+      items: cart,
     });
     if (!evalRes.valid) {
       setPromoError(evalRes.reason || 'Promotion requirements not met.');
@@ -870,14 +880,21 @@ export function WebPosView({
         });
       }
 
-      const itemsPayload = cart.map((item) => ({
+      const lineDiscountMap = new Map(
+        (promoEval.valid ? promoEval.lineDiscounts || [] : []).map((d) => [String(d.id), Number(d.amount) || 0])
+      );
+      const itemsPayload = attachLineCosting(cart.map((item) => ({
         order_id: orderData.id,
         item_name: item.title,
         quantity: item.quantity,
         price: item.unitPrice,
         instructions: item.summary || null,
         status: saveAsOpen ? 'Open' : 'Pending',
-      }));
+        cost_price: Number(item.cost_price) || 0,
+        cogs_percent: Number(item.cogs_percent) || 0,
+        commission_percent: Number(item.commission_percent) || 0,
+        discount_amount: lineDiscountMap.get(String(item.id)) || 0,
+      })), { baseCogsPercent });
 
       if (appliedDeliveryFee > 0) {
         itemsPayload.push({

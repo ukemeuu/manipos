@@ -18,6 +18,7 @@ import {
 } from '../lib/promoEngine';
 import { computeEffectiveMinSelected } from '../lib/webPosCatalog';
 import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
+import { attachLineCosting } from '../lib/productCosting';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -64,6 +65,9 @@ function normaliseTenantMenu(tenant) {
             isSoldOut: false,
             isPopular: item.is_featured === true,
             rating: null,
+            cost_price: Number(item.cost_price) || 0,
+            cogs_percent: Number(item.cogs_percent) || 0,
+            commission_percent: Number(item.commission_percent) || 0,
         });
     });
 
@@ -1548,8 +1552,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             grandTotalBeforePromo: subtotal + rawDeliveryFee,
             diningOption: diningMode === 'delivery' ? 'Delivery' : diningMode === 'dine_in' ? 'Dine In' : 'Pickup',
             paymentMethod: 'Paid to App',
+            items: cart,
         });
-    }, [appliedDiscount, subtotal, rawDeliveryFee, diningMode]);
+    }, [appliedDiscount, subtotal, rawDeliveryFee, diningMode, cart]);
 
     const discountAmount = promoEval.valid ? promoEval.discountAmount : 0;
     const deliveryFee = Math.max(0, rawDeliveryFee - (promoEval.valid ? promoEval.deliveryDiscount : 0));
@@ -1730,6 +1735,9 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             modifiers: chosenModifierLabels,
             specialInstructions: modalSpecialInstructions.trim(),
             excludeFromTax: selectedItem.excludeFromTax === true,
+            cost_price: Number(selectedItem.cost_price) || 0,
+            cogs_percent: Number(selectedItem.cogs_percent) || 0,
+            commission_percent: Number(selectedItem.commission_percent) || 0,
         };
 
         setCart(prev => {
@@ -1885,7 +1893,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             }
 
             // 2. Insert order items
-            const itemPayloads = cart.map(item => ({
+            const lineDiscountMap = new Map(
+                (promoEval.valid ? promoEval.lineDiscounts || [] : []).map((d) => [String(d.id), Number(d.amount) || 0])
+            );
+            const itemPayloads = attachLineCosting(cart.map(item => ({
                 order_id: orderData.id,
                 item_name: item.title,
                 quantity: item.quantity,
@@ -1894,8 +1905,12 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                     item.modifiers && item.modifiers.length > 0 ? item.modifiers.join(', ') : '',
                     item.specialInstructions ? `Note: ${item.specialInstructions}` : ''
                 ].filter(Boolean).join(' | ') || null,
-                status: 'Pending'
-            }));
+                status: 'Pending',
+                cost_price: Number(item.cost_price) || 0,
+                cogs_percent: Number(item.cogs_percent) || 0,
+                commission_percent: Number(item.commission_percent) || 0,
+                discount_amount: lineDiscountMap.get(String(item.id)) || 0,
+            })), { baseCogsPercent: Number(tenant?.baseCogsPercent) || 0 });
 
             if (diningMode === 'delivery' && deliveryFee > 0) {
                 itemPayloads.push({

@@ -167,6 +167,54 @@ export function OrdaReportsView({
     return m;
   }, [menuItems]);
 
+  const profitabilityRows = useMemo(() => {
+    const map = new Map();
+    scopedOrders.forEach((o) => {
+      const items = Array.isArray(o.items) ? o.items : Array.isArray(o.pos_order_items) ? o.pos_order_items : [];
+      items.forEach((line) => {
+        const name = String(line.item_name || 'Item');
+        if (/delivery fee|package fee|packaging fee/i.test(name)) return;
+        const qty = Number(line.quantity || 1);
+        const revenue = Number(line.price || 0) * qty;
+        const costPrice = Number(line.cost_price || 0);
+        const cogs = Number(line.cogs_amount || 0) || (costPrice > 0 ? costPrice * qty : 0);
+        const commission = Number(line.commission_amount || 0) || (revenue * (Number(line.commission_percent || 0) / 100));
+        const discount = Number(line.discount_amount || 0);
+        const profit = revenue - discount - cogs - commission;
+        const key = name.toLowerCase();
+        const row = map.get(key) || {
+          name,
+          category: menuCostMap.get(key)?.category || '',
+          brand: line.brand || '',
+          units: 0,
+          revenue: 0,
+          discount: 0,
+          cogs: 0,
+          commission: 0,
+          profit: 0,
+        };
+        row.units += qty;
+        row.revenue += revenue;
+        row.discount += discount;
+        row.cogs += cogs;
+        row.commission += commission;
+        row.profit += profit;
+        map.set(key, row);
+      });
+    });
+    const rows = Array.from(map.values()).sort((a, b) => b.profit - a.profit);
+    rows.forEach((r) => {
+      r.margin = r.revenue > 0 ? (r.profit / r.revenue) * 100 : 0;
+      r.revenue = Math.round(r.revenue * 100) / 100;
+      r.discount = Math.round(r.discount * 100) / 100;
+      r.cogs = Math.round(r.cogs * 100) / 100;
+      r.commission = Math.round(r.commission * 100) / 100;
+      r.profit = Math.round(r.profit * 100) / 100;
+      r.margin = Math.round(r.margin * 100) / 100;
+    });
+    return rows;
+  }, [scopedOrders, menuCostMap]);
+
   const filterLists = useMemo(() => {
     const payments = new Set();
     const channels = new Set();
@@ -434,6 +482,7 @@ export function OrdaReportsView({
     { id: 'overview', label: 'Executive Dashboard' },
     { id: 'transactions', label: 'Transactions' },
     { id: 'sales', label: 'Sales (Items/Mods/Combos)' },
+    { id: 'profitability', label: 'Product Profitability' },
     { id: 'tax', label: 'Tax & Charges' },
     { id: 'eod', label: 'End of Day (6am–6am)' },
     { id: 'discounts', label: 'Discounts & Loyalty' },
@@ -936,6 +985,98 @@ export function OrdaReportsView({
           )}
         </div>
       )}
+
+      {/* PRODUCT PROFITABILITY */}
+      {reportKey === 'profitability' && (() => {
+        const totals = profitabilityRows.reduce(
+          (acc, r) => ({
+            revenue: acc.revenue + r.revenue,
+            discount: acc.discount + r.discount,
+            cogs: acc.cogs + r.cogs,
+            commission: acc.commission + r.commission,
+            profit: acc.profit + r.profit,
+          }),
+          { revenue: 0, discount: 0, cogs: 0, commission: 0, profit: 0 }
+        );
+        const margin = totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
+        return (
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Product Profitability</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Revenue, COGS, commission and profit per menu item for the selected window.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => downloadCsv(
+                  `product-profitability-${startDate}.csv`,
+                  ['Item', 'Category', 'Units', 'Revenue', 'Discount', 'COGS', 'Commission', 'Profit', 'Margin %'],
+                  profitabilityRows.map((r) => [r.name, r.category, r.units, r.revenue, r.discount, r.cogs, r.commission, r.profit, r.margin])
+                )}
+                className="px-3 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-bold flex items-center gap-1"
+              >
+                <Download size={13} /> Export Profitability
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {[
+                { label: 'Revenue', value: totals.revenue, cls: 'text-slate-900' },
+                { label: 'Discounts', value: totals.discount, cls: 'text-rose-600' },
+                { label: 'COGS', value: totals.cogs, cls: 'text-slate-900' },
+                { label: 'Commission', value: totals.commission, cls: 'text-amber-700' },
+                { label: 'Net Profit', value: totals.profit, cls: totals.profit >= 0 ? 'text-emerald-700' : 'text-rose-600' },
+              ].map((c) => (
+                <div key={c.label} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{c.label}</p>
+                  <p className={`text-lg font-black mt-1 ${c.cls}`}>KES {c.value.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Overall margin: <strong className="text-slate-700">{margin.toFixed(1)}%</strong>. COGS uses each item's cost price, or its COGS % / the store base COGS %.
+            </p>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-4">Item</th>
+                    <th className="py-2.5 px-4">Category</th>
+                    <th className="py-2.5 px-4 text-right">Units</th>
+                    <th className="py-2.5 px-4 text-right">Revenue</th>
+                    <th className="py-2.5 px-4 text-right">Discount</th>
+                    <th className="py-2.5 px-4 text-right">COGS</th>
+                    <th className="py-2.5 px-4 text-right">Commission</th>
+                    <th className="py-2.5 px-4 text-right">Profit</th>
+                    <th className="py-2.5 px-4 text-right">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profitabilityRows.length === 0 && (
+                    <tr><td colSpan={9} className="py-8 text-center text-slate-400">No item sales in this window.</td></tr>
+                  )}
+                  {profitabilityRows.map((r) => (
+                    <tr key={r.name} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2.5 px-4 font-bold text-slate-800">{r.name}</td>
+                      <td className="py-2.5 px-4 text-slate-500">{r.category || '—'}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{r.units}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{r.revenue.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-right font-mono text-rose-600">{r.discount.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{r.cogs.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-right font-mono text-amber-700">{r.commission.toLocaleString()}</td>
+                      <td className={`py-2.5 px-4 text-right font-mono font-bold ${r.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{r.profit.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{r.margin.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 4. TAX & CHARGES REPORT (/dashboard/tax) */}
       {reportKey === 'tax' && (

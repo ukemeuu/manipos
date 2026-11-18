@@ -126,6 +126,7 @@ function normaliseTenant(row, settings, registry, slug) {
     deliveryFeeBrackets: Array.isArray(settings?.delivery_fee_brackets) ? settings.delivery_fee_brackets : [],
     enableTableSelectionMicrosite: settings?.enable_table_selection_microsite === true,
     micrositeConfig: settings?.microsite_config || {},
+    baseCogsPercent: Number(settings?.base_cogs_percent) || 0,
     branches: [],
     combos: [],
     menu: base.menu || [],

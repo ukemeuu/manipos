@@ -10,8 +10,12 @@ const PROMO_RULES = [
   { id: 'cart_fixed', label: 'Fixed Discount On Cart' },
   { id: 'delivery_percent', label: 'Percentage Discount On Delivery' },
   { id: 'grand_total_percent', label: 'Percentage Discount On Cart Total (Grand Total)' },
+  { id: 'product_percent', label: 'Percentage Discount On Specific Products' },
+  { id: 'product_fixed', label: 'Fixed Discount On Specific Products' },
   { id: 'loyalty', label: 'Loyalty Program' },
 ];
+
+const PRODUCT_RULES = new Set(['product_percent', 'product_fixed']);
 
 const FULFILMENT_OPTIONS = ['Pickup', 'Delivery', 'Dine In'];
 const PAYMENT_OPTIONS = ['Cash', 'MPESA Paybill', 'MPESA TILL', 'CARD', 'Paid to App', 'Store Credit', 'Transfer'];
@@ -42,6 +46,8 @@ export function PromotionsVouchersLoyaltyView({
     name: '',
     description: '',
     promo_rule_type: 'cart_percent',
+    scope: 'bill',
+    menu_item_ids: [],
     value: '10',
     has_min_order: false,
     min_order_amount: '',
@@ -137,6 +143,8 @@ export function PromotionsVouchersLoyaltyView({
         name: existing.name || existing.code || '',
         description: existing.description || '',
         promo_rule_type: existing.promo_rule_type || (existing.type === 'fixed' ? 'cart_fixed' : 'cart_percent'),
+        scope: existing.scope || (PRODUCT_RULES.has(existing.promo_rule_type) ? 'product' : 'bill'),
+        menu_item_ids: Array.isArray(existing.menu_item_ids) ? existing.menu_item_ids : [],
         value: String(existing.value ?? existing.discount_percent ?? existing.discount_amount ?? 10),
         has_min_order: Number(existing.min_order_amount || 0) > 0,
         min_order_amount: String(existing.min_order_amount || ''),
@@ -165,6 +173,8 @@ export function PromotionsVouchersLoyaltyView({
         name: '',
         description: '',
         promo_rule_type: 'cart_percent',
+        scope: 'bill',
+        menu_item_ids: [],
         value: '10',
         has_min_order: false,
         min_order_amount: '',
@@ -223,6 +233,8 @@ export function PromotionsVouchersLoyaltyView({
         usage_per_customer: promoForm.has_usage_per_customer ? Number(promoForm.usage_per_customer || 1) : null,
         max_total_uses: promoForm.has_max_uses ? Number(promoForm.max_total_uses || 1) : null,
         use_custom_code: promoForm.use_custom_code,
+        scope: PRODUCT_RULES.has(rule) ? 'product' : 'bill',
+        menu_item_ids: PRODUCT_RULES.has(rule) ? (promoForm.menu_item_ids || []) : [],
       };
 
       const runWrite = async (obj) => {
@@ -235,7 +247,7 @@ export function PromotionsVouchersLoyaltyView({
       let res = await runWrite(payload);
       if (res.error) {
         const msg = String(res.error.message || '').toLowerCase();
-        if (msg.includes('promo_rule_type') || msg.includes('max_discount_value') || msg.includes('fulfilment_types')) {
+        if (msg.includes('promo_rule_type') || msg.includes('max_discount_value') || msg.includes('fulfilment_types') || msg.includes('scope') || msg.includes('menu_item_ids')) {
           const core = {
             restaurant_id: restaurantId,
             name: payload.name,
@@ -658,6 +670,36 @@ export function PromotionsVouchersLoyaltyView({
               ))}
             </select>
           </div>
+
+          {PRODUCT_RULES.has(promoForm.promo_rule_type) && (
+            <div>
+              <label className="block font-bold text-slate-600 mb-1">Apply to Products *</label>
+              <p className="text-[11px] text-slate-400 mb-2">Only the selected items receive this discount.</p>
+              <div className="border border-slate-200 rounded-xl max-h-56 overflow-y-auto divide-y divide-slate-100 bg-white">
+                {menuItems.length === 0 && <p className="text-xs text-slate-400 px-3 py-4 text-center">No menu items.</p>}
+                {menuItems.map((m) => {
+                  const checked = (promoForm.menu_item_ids || []).includes(m.id);
+                  return (
+                    <label key={m.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setPromoForm((p) => ({
+                          ...p,
+                          menu_item_ids: e.target.checked
+                            ? [...(p.menu_item_ids || []), m.id]
+                            : (p.menu_item_ids || []).filter((id) => id !== m.id),
+                        }))}
+                        className="accent-emerald-700 w-4 h-4"
+                      />
+                      <span className="text-slate-800">{m.name}</span>
+                      <span className="text-slate-400 text-[11px] ml-auto">{m.category}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

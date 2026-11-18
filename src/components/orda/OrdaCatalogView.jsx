@@ -232,6 +232,9 @@ export function OrdaCatalogView({
         additions: Array.isArray(itemDrawer.additions) ? itemDrawer.additions.filter((a) => a.name?.trim()) : [],
         menu_group_id: itemDrawer.menu_group_id || null,
         branch_id: itemDrawer.branch_id || null,
+        cost_price: Number(itemDrawer.cost_price) || 0,
+        cogs_percent: Number(itemDrawer.cogs_percent) || 0,
+        commission_percent: Number(itemDrawer.commission_percent) || 0,
       };
 
       const runWrite = async (payload) => {
@@ -898,6 +901,54 @@ export function OrdaCatalogView({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Costing & commission */}
+            <div className="border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div>
+                <span className="text-xs font-bold text-slate-800">Costing &amp; Commission</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">Used for real-time COGS and per-product profit tracking.</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className={labelCls}>Cost Price (KES)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className={inputCls}
+                    value={itemDrawer.cost_price ?? ''}
+                    onChange={(e) => setItemDrawer({ ...itemDrawer, cost_price: e.target.value })}
+                    placeholder="Exact cost / unit"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>COGS % of Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className={inputCls}
+                    value={itemDrawer.cogs_percent ?? ''}
+                    onChange={(e) => setItemDrawer({ ...itemDrawer, cogs_percent: e.target.value })}
+                    placeholder="Fallback if no cost"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Commission %</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className={inputCls}
+                    value={itemDrawer.commission_percent ?? ''}
+                    onChange={(e) => setItemDrawer({ ...itemDrawer, commission_percent: e.target.value })}
+                    placeholder="e.g. 20 for UberEats"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Variations */}

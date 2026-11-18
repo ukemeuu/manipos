@@ -21,6 +21,7 @@ export function evaluatePromotionDiscount({
   diningOption = 'Pickup',
   paymentMethod = 'Cash',
   customerOrderCount = 0,
+  items = [],
 }) {
   if (!promo) return { valid: false, reason: 'Invalid promo code.', discountAmount: 0, deliveryDiscount: 0 };
   if (promo.is_active === false) {
@@ -83,8 +84,46 @@ export function evaluatePromotionDiscount({
 
   let discountAmount = 0;
   let deliveryDiscount = 0;
+  let lineDiscounts = [];
 
-  if (rule === 'cart_fixed') {
+  if (rule === 'product_percent' || rule === 'product_fixed') {
+    // Discount only the selected products (per-product discount).
+    const selectedIds = new Set((Array.isArray(promo.menu_item_ids) ? promo.menu_item_ids : []).map(String));
+    const matching = (Array.isArray(items) ? items : []).filter((it) => {
+      const id = String(it?.id ?? it?.menu_item_id ?? '');
+      return id && selectedIds.has(id);
+    });
+    const matchingSubtotal = matching.reduce(
+      (sum, it) => sum + Number(it?.price ?? it?.unitPrice ?? 0) * Number(it?.quantity || 1),
+      0
+    );
+    let perLineRate = 0;
+    if (rule === 'product_percent') {
+      perLineRate = Math.max(0, Math.min(100, rawValue)) / 100;
+      discountAmount = Math.round(matchingSubtotal * perLineRate);
+    } else {
+      discountAmount = Math.max(0, Math.round(rawValue));
+    }
+    if (maxCap > 0) discountAmount = Math.min(discountAmount, maxCap);
+    discountAmount = Math.min(discountAmount, matchingSubtotal);
+
+    if (rule === 'product_fixed' && matchingSubtotal > 0 && discountAmount > 0) {
+      // Distribute a fixed amount proportionally across the matching lines.
+      let remaining = discountAmount;
+      lineDiscounts = matching.map((it, idx) => {
+        const line = Number(it?.price ?? it?.unitPrice ?? 0) * Number(it?.quantity || 1);
+        const isLast = idx === matching.length - 1;
+        const amount = isLast ? remaining : Math.min(remaining, Math.round((line / matchingSubtotal) * discountAmount));
+        remaining = Math.max(0, remaining - amount);
+        return { id: String(it?.id ?? it?.menu_item_id ?? ''), amount };
+      });
+    } else {
+      lineDiscounts = matching.map((it) => {
+        const line = Number(it?.price ?? it?.unitPrice ?? 0) * Number(it?.quantity || 1);
+        return { id: String(it?.id ?? it?.menu_item_id ?? ''), amount: Math.round(line * perLineRate) };
+      });
+    }
+  } else if (rule === 'cart_fixed') {
     discountAmount = Math.min(subtotal, Math.max(0, Math.round(rawValue)));
   } else if (rule === 'delivery_percent') {
     deliveryDiscount = Math.round((Math.max(0, deliveryFee) * rawValue) / 100);
@@ -108,6 +147,7 @@ export function evaluatePromotionDiscount({
     rule,
     discountAmount,
     deliveryDiscount,
+    lineDiscounts,
     totalSavings: discountAmount + deliveryDiscount,
   };
 }

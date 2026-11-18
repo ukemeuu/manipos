@@ -2366,6 +2366,7 @@ export function AdminDashboard({
               onSelectOpenOrder={(order) => setSettleTargetOrder(order)}
               tendersConfig={settings.payment_tenders_config}
               allowNegativeStoreCredit={settings.allow_negative_store_credit === true}
+              baseCogsPercent={Number(settings.base_cogs_percent) || 0}
               onBackToOrders={() => {
                 setShowWebPos(false);
                 setSettleTargetOrder(null);
