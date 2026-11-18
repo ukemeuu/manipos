@@ -107,6 +107,7 @@ import {
   closeStaffShift,
 } from '../lib/posShiftService';
 import { connectQZ, isQZConnected, onQZStatusChange, listPrinters } from '../lib/qzPrint';
+import { isMicrositeOrder } from '../lib/orderChannel';
 
 // Setup progress is per restaurant. A shared flag would let a brand-new
 // tenant skip onboarding because a previous tenant on the same device had
@@ -160,6 +161,10 @@ export function AdminDashboard({
           if (Number.isNaN(ts) || ts < dayStartMs) return false;
         }
         if (!isAdmin) {
+          // Microsite / self-service orders are store-wide incoming orders.
+          // They are not "punched in" by a specific cashier, so every staff
+          // member needs them on the board to fulfil them — not just admins.
+          if (isMicrositeOrder(o)) return true;
           const sid = o.staff_id || o.cashier_id;
           if (sid && staff?.id) return String(sid) === String(staff.id);
           const name = o.cashier_name || o.staff_name;
