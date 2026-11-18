@@ -97,12 +97,19 @@ upload_with_retry() {
   return 1
 }
 
-find . -type f | sort | while read -r file; do
+# Upload hashed assets first and the entry HTML last. Publishing index.html
+# before its chunks are on the server produces "Failed to fetch dynamically
+# imported module" errors for anyone who loads the app during the deploy.
+find . -type f ! -name 'index.html' | sort | while read -r file; do
   remote="${file#./}"
   encoded="$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))' "$remote")"
   printf '  %s\n' "$remote"
   upload_with_retry "$file" "$encoded"
 done
+
+# Entry point goes live only after every asset it references is uploaded.
+printf '  index.html\n'
+upload_with_retry index.html index.html
 
 echo
 if [[ "$TARGET" == "staging" ]]; then

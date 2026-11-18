@@ -1,5 +1,5 @@
 /* ManiPOS service worker — offline shell & Android push alerts for POS terminals. */
-const VERSION = 'manipos-v11';
+const VERSION = 'manipos-v12';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 
@@ -78,7 +78,12 @@ self.addEventListener('fetch', (event) => {
                 const excess = keys.slice(0, keys.length - MAX_ASSET_CACHE_ENTRIES);
                 await Promise.all(excess.map((oldReq) => cache.delete(oldReq)));
               }
+              return res;
             }
+            // A cached index.html can reference a hashed chunk that is no
+            // longer on the server after a deploy. Serve the last good copy
+            // instead of surfacing a 404 to the POS terminal.
+            if (cached) return cached;
             return res;
           })
           .catch(() => cached);

@@ -134,13 +134,33 @@ function isGenericPosHost() {
   return typeof window !== 'undefined' && window.location.hostname === 'pos.manipos.com';
 }
 
-function wipeLocalSessionStorage() {
+// manipos.com / www.manipos.com are the neutral SaaS marketing site. A staff
+// session cached on this origin (for example by the landing-page sign-in
+// modal) must never auto-open a tenant workspace after the user signs out.
+function isNeutralMarketingHost() {
+  return typeof window !== 'undefined' && (
+    window.location.hostname === 'manipos.com' ||
+    window.location.hostname === 'www.manipos.com'
+  );
+}
+
+// Staff-only session artifacts. Removed on every origin that must not keep a
+// signed-in staff member across a sign-out.
+function wipeStaffSessionStorage() {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem('pin_staff_user');
     localStorage.removeItem('manipos_selected_brand');
     localStorage.removeItem('manipos_poj_session_v1');
+    localStorage.removeItem('manipos_offline_staff_credentials');
     sessionStorage.removeItem('manipos_pending_supa_session');
+  } catch (_) {}
+}
+
+function wipeLocalSessionStorage() {
+  wipeStaffSessionStorage();
+  if (typeof window === 'undefined') return;
+  try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
@@ -157,6 +177,15 @@ function App() {
       // tenant's leftover session from localStorage (prevents redirect hijacks).
       if (isGenericPosHost()) {
         wipeLocalSessionStorage();
+        return null;
+      }
+
+      // The marketing homepage is always neutral: never boot into a staff
+      // session cached on manipos.com (the landing-page sign-in modal stores
+      // one before handing off to the tenant POS). The superadmin console is
+      // exempt because it signs in with its own Supabase session.
+      if (isNeutralMarketingHost()) {
+        wipeStaffSessionStorage();
         return null;
       }
 
@@ -442,6 +471,12 @@ function App() {
 
     // Restore transferred Supabase Auth session if arriving from pos.manipos.com redirect
     const restoreOrGetSession = async () => {
+      // Never auto-restore a Supabase session on the neutral marketing site
+      // (staff sign in on the tenant POS subdomain, not on manipos.com).
+      if (isNeutralMarketingHost() && currentRoute !== 'superadmin') {
+        setLoading(false);
+        return;
+      }
       try {
         const pendingRaw = sessionStorage.getItem('manipos_pending_supa_session');
         if (pendingRaw) {
@@ -488,6 +523,7 @@ function App() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
       if (isGenericPosHost()) return;
+      if (isNeutralMarketingHost() && currentRoute !== 'superadmin') return;
       if (activeSession) {
         const pinFallback = (() => {
           try {
@@ -511,6 +547,7 @@ function App() {
   // is active on a tenant POS subdomain, and sync logins/logouts across open tabs.
   useEffect(() => {
     if (isGenericPosHost()) return undefined;
+    if (isNeutralMarketingHost()) return undefined;
     if (session?.staffUser) {
       const slug = session.staffUser.tenantSlug || tenantInfo.tenantSlug || tenant?.slug;
       if (slug && slug !== 'pos') {
@@ -533,7 +570,7 @@ function App() {
 
   useEffect(() => {
     const syncFromStorage = () => {
-      if (isGenericPosHost()) return;
+      if (isGenericPosHost() || isNeutralMarketingHost()) return;
       try {
         const raw = localStorage.getItem('pin_staff_user');
         if (raw) {
@@ -557,6 +594,9 @@ function App() {
     const unsub = subscribeAuthEvents((msg) => {
       if (msg?.type === 'logout') {
         wipeLocalSessionStorage();
+        // Every open tab must drop the cross-subdomain portal cookie, not
+        // just the tab that initiated the sign-out.
+        clearActivePortalCookie();
         setSession(null);
       } else if (msg?.type === 'login') {
         syncFromStorage();
