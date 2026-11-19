@@ -17,6 +17,7 @@ import {
   requestOrderPushPermission,
 } from '../lib/orderAlarm';
 import { initNativeOrderPush } from '../lib/nativePushService';
+import { printAllOrderSlips } from '../lib/posPrintService';
 
 /**
  * Determines whether a pending pos_orders row came from a guest microsite/self-service
@@ -265,6 +266,50 @@ export function IncomingOrderAlarmOverlay({ restaurantId, tenantSlug = '', staff
         },
         staff: { name: staffName, role: staffRole, restaurantId },
       });
+
+      // Automatically open the print popup / send to printer when an incoming order is accepted
+      if (nextStatus === 'Preparing') {
+        let items = Array.isArray(order.pos_order_items) && order.pos_order_items.length > 0
+          ? order.pos_order_items
+          : Array.isArray(order.items) && order.items.length > 0
+            ? order.items
+            : [];
+        if (items.length === 0 && !order._fromPoj) {
+          try {
+            const { data: fetchedItems } = await supabase
+              .from('pos_order_items')
+              .select('*')
+              .eq('order_id', order.id);
+            if (Array.isArray(fetchedItems) && fetchedItems.length > 0) {
+              items = fetchedItems;
+            }
+          } catch (_) {}
+        }
+        void printAllOrderSlips({
+          id: order.id,
+          ticketNumber: order.ticket_number || order.order_number || String(order.id).slice(0, 8),
+          customerName: order.customer_name || 'Walk-in Guest',
+          customerPhone: order.customer_phone || '',
+          diningOption: order.dining_option || 'Delivery',
+          tableNumber: order.table_number || '',
+          deliveryAddress: extractDeliveryAddress(order),
+          deliveryFee: Number(order.delivery_fee || 0),
+          totalAmount: Number(order.total_amount || 0),
+          paymentMethod: order.payment_method || 'M-Pesa',
+          paymentStatus: order.payment_status || 'pending',
+          cashier: staffName || 'Staff',
+          brand: order.brand || '',
+          notes: order.notes || '',
+          createdAt: order.created_at || new Date().toISOString(),
+          items: items.map((line) => ({
+            name: line.item_name || line.name || 'Item',
+            quantity: Number(line.quantity || 1),
+            price: Number(line.unit_price ?? line.price ?? 0),
+            note: line.instructions || line.summary || line.note || '',
+            brand: line.brand || '',
+          })),
+        }).catch(() => {});
+      }
 
       setPendingOrders((prev) => prev.filter((o) => o.id !== order.id));
       window.dispatchEvent(

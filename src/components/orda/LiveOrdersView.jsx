@@ -10,7 +10,7 @@ import {
   processOrderInventoryDepletion,
   processVoidOrderInventoryDisposition,
 } from '../../lib/inventoryErpEngine';
-import { printCashierSlips, printKitchenSlips } from '../../lib/posPrintService';
+import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
 import { getBusinessDayStartIso } from '../../lib/posShiftService';
 import { updatePojOrderStatus } from '../../services/data/pojSyncService';
 import { normalizeChannelLabel, isMicrositeOrder } from '../../lib/orderChannel';
@@ -499,6 +499,10 @@ export function LiveOrdersView({
 
       if (!updatedLocally && !updatedPoj) {
         throw new Error('Order update did not match an active order record. Please refresh and try again.');
+      }
+
+      if (nextStatus === 'Preparing' && (classifyOrderBucket(order) === 'new' || isMicrositeOrder(order))) {
+        void printOrderWithItems({ ...order, ...patch }, printAllOrderSlips).catch(() => {});
       }
 
       if (nextStatus === 'Completed') {
