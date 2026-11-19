@@ -14,7 +14,7 @@ import {
 } from './lib/tenant';
 import { loadTenant, getActiveTenantSlug, getMicrositeUrl } from './lib/tenantConfig';
 import { can } from './lib/permissions';
-import { isAdminAccount } from './lib/posRouting';
+import { isAdminAccount, buildAppUrl } from './lib/posRouting';
 import {
   writeActivePortalCookie,
   readActivePortalCookie,
@@ -115,12 +115,29 @@ function resolveRoute() {
 const OPERATIONAL_ROUTES = new Set(['kds', 'floor', 'inventory']);
 
 // Legacy #menu-builder route: the catalog now lives in the Orda admin menu.
+// Rewrite the location in place (keeping ?tenant=...) and let the router
+// re-render. A full window.location.replace() here dropped the tenant param,
+// and pos.manipos.com treats a URL without it as the generic login host — which
+// wiped the staff session and bounced the user back to the dashboard.
 function LegacyMenuBuilderRedirect() {
   useEffect(() => {
-    window.location.replace('/?page=dashboard&tab=menu');
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('page', 'dashboard');
+      url.searchParams.set('tab', 'menu');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      try {
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } catch (_) {
+        window.dispatchEvent(new Event('popstate'));
+      }
+    } catch (_) { }
   }, []);
   return null;
-}const POJ_PORTAL_ROUTES = new Set(['staff-portal', 'accountant', 'expenses', 'receiving', 'waste', 'store-ops', 'qr-vault']);
+}
+
+const POJ_PORTAL_ROUTES = new Set(['staff-portal', 'accountant', 'expenses', 'receiving', 'waste', 'store-ops', 'qr-vault']);
 const ROLE_HOME_ROUTE = {
   kds: 'kds',
   staff: 'staff-portal',
@@ -691,7 +708,15 @@ function App() {
     window.location.href = url;
   };
 
-  const openModule = (page) => goTo(page, `/?page=${page}`);
+  const openModule = (page) => {
+    // Menu Builder is now the "menu" tab of the Orda admin shell, not a
+    // standalone page. Route straight to it and keep the tenant param.
+    if (page === 'menu-builder' || page === 'menu-build') {
+      goTo('dashboard', buildAppUrl('dashboard', { tab: 'menu' }));
+      return;
+    }
+    goTo(page, buildAppUrl(page, { tab: null }));
+  };
 
   const openMicrosite = (slug) => {
     const url = getMicrositeUrl(slug);
@@ -887,7 +912,7 @@ function App() {
             restaurantName={resolvedRestName}
             staffUser={staffUser}
             onSignOut={handleGlobalSignOut}
-            onOpenPos={isAdmin ? () => goTo('app', '/?page=app') : (can('view_pos', staffUser) ? () => setCurrentRoute('terminal') : null)}
+            onOpenPos={isAdmin ? () => goTo('app', buildAppUrl('app')) : (can('view_pos', staffUser) ? () => setCurrentRoute('terminal') : null)}
           />
         );
       }
@@ -899,7 +924,7 @@ function App() {
           restaurantName={resolvedRestName}
           tenantSlug={resolvedSlug}
           staffUser={staffUser}
-          onSignOut={isAdmin ? () => goTo('app', '/?page=app') : handleGlobalSignOut}
+          onSignOut={isAdmin ? () => goTo('app', buildAppUrl('app')) : handleGlobalSignOut}
         />
       );
     }
@@ -972,7 +997,7 @@ function App() {
           <KitchenDisplay
             tenant={tenant}
             staffName={staffUser.name}
-            onBack={() => goTo('app', '/?page=app')}
+            onBack={() => goTo('app', buildAppUrl('app'))}
           />
         );
       }
@@ -981,7 +1006,7 @@ function App() {
           <FloorPlanView
             tenant={tenant}
             staffName={staffUser.name}
-            onBack={() => goTo('app', '/?page=app')}
+            onBack={() => goTo('app', buildAppUrl('app'))}
             onOpenPos={() => goTo(businessType === 'retail' ? 'retail-terminal' : 'terminal')}
           />
         );
@@ -990,7 +1015,7 @@ function App() {
         <InventoryView
           tenant={tenant}
           staffName={staffUser.name}
-          onBack={() => goTo('app', '/?page=app')}
+          onBack={() => goTo('app', buildAppUrl('app'))}
         />
       );
     }

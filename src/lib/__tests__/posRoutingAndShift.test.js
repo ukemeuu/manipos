@@ -3,6 +3,7 @@ import {
   isAdminAccount,
   resolveOrdaEntryState,
   getVisibleOrdaRailIds,
+  buildAppUrl,
 } from '../posRouting';
 import {
   getBusinessDayStartIso,
@@ -50,6 +51,19 @@ describe('Interface B (Orda) Routing & RBAC', () => {
       activeTab: 'hr-admin',
       initialWebPos: false,
     });
+  });
+
+  it('keeps the tenant param when navigating in-app (Menu Builder must not sign staff out)', () => {
+    const current = 'https://pos.manipos.com/?tenant=potofjollof&page=app';
+    expect(buildAppUrl('dashboard', { tab: 'menu' }, current)).toBe(
+      '/?tenant=potofjollof&page=dashboard&tab=menu'
+    );
+    // Switching to another module drops the previous tab but keeps the tenant.
+    expect(
+      buildAppUrl('inventory', { tab: null }, 'https://pos.manipos.com/?tenant=potofjollof&page=dashboard&tab=menu')
+    ).toBe('/?tenant=potofjollof&page=inventory');
+    // Without a browser URL it falls back to a plain app URL.
+    expect(buildAppUrl('dashboard', { tab: 'menu' }, '')).toBe('/?page=dashboard&tab=menu');
   });
 
   it('resolves every Orda module tab deterministically so URL deep links and refreshes match clicked buttons', () => {

@@ -54,6 +54,32 @@ const SETTINGS_TABS = new Set([
   'audit',
 ]);
 
+/**
+ * Builds an in-app URL while keeping the routing params that decide which
+ * restaurant workspace this browser tab belongs to. Losing ?tenant= on
+ * pos.manipos.com is what makes the app treat the tab as signed out.
+ */
+export function buildAppUrl(page, extra = {}, currentHref = null) {
+  const href = currentHref ?? (typeof window !== 'undefined' ? window.location.href : '');
+  try {
+    // A real href keeps the current tenant/host params; without one we still
+    // honour the requested params on a neutral relative URL.
+    const url = new URL(href || 'https://pos.manipos.com/');
+    url.searchParams.set('page', page);
+    Object.entries(extra).forEach(([key, value]) => {
+      if (value == null || value === '') url.searchParams.delete(key);
+      else url.searchParams.set(key, String(value));
+    });
+    return `${url.pathname}${url.search}${href ? url.hash : ''}`;
+  } catch (_) {
+    const params = new URLSearchParams({ page });
+    Object.entries(extra).forEach(([key, value]) => {
+      if (value != null && value !== '') params.set(key, String(value));
+    });
+    return `/?${params.toString()}`;
+  }
+}
+
 export function resolveModuleForOrdaTab(tabParam = '') {
   const tab = String(tabParam || '').toLowerCase().trim();
   if (!tab || tab === 'orders' || tab === 'pos') return 'orders';
