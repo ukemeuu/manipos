@@ -6,6 +6,7 @@ import { recordQrScan } from '../lib/qrScanService';
 import { loadTenant } from '../lib/tenantConfig';
 import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
 import { attachLineCosting, insertOrderItems, resolveChannelCommission } from '../lib/productCosting';
+import { makeOrderIdempotencyKey, insertOrderWithIdempotency, ensureOrderItemsPersisted } from '../lib/orderIdempotency';
 
 export const BRAND_CONFIGS = {
     'POT OF JOLLOF': {
@@ -472,6 +473,16 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
     const [cartOpen, setCartOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const submitInFlightRef = useRef(false);
+    const draftIdempotencyKeyRef = useRef(null);
+    const createdOrderRef = useRef(null);
+
+    useEffect(() => {
+        if (cart.length === 0) {
+            draftIdempotencyKeyRef.current = null;
+            createdOrderRef.current = null;
+        }
+    }, [cart.length]);
     // Restaurant ID captured from menu rows — required so orders appear in the POS dashboard
     const [restaurantId, setRestaurantId] = useState(null);
     
@@ -1501,7 +1512,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
 
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
-        if (cart.length === 0) return;
+        if (cart.length === 0 || submitInFlightRef.current) return;
 
         let activeDeliveryAddress = (deliveryAddress || "").trim();
         // Smart fallback: if Delivery is selected and user typed location in the top box
@@ -1514,6 +1525,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
             return;
         }
 
+        submitInFlightRef.current = true;
         setSubmitting(true);
         try {
             // Determine active table if Dine-in
@@ -1563,6 +1575,10 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 ? (notes.trim() ? `Delivery Address: ${activeDeliveryAddress}\nNotes: ${notes.trim()}${promoNoteText}${loyaltyNoteText}` : `Delivery Address: ${activeDeliveryAddress}${promoNoteText}${loyaltyNoteText}`)
                 : (notes.trim() ? `${notes.trim()}${promoNoteText}` : (promoNoteText + loyaltyNoteText).trim());
 
+            if (!draftIdempotencyKeyRef.current) {
+                draftIdempotencyKeyRef.current = makeOrderIdempotencyKey();
+            }
+
             const orderPayload = {
                 customer_name: finalCustomerName,
                 dining_option: diningOption,
@@ -1577,18 +1593,21 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 brand: activeBrand === "All" ? (cart.length > 0 ? getBrandForItem(cart[0], tenantProfile?.name) : (tenantProfile?.name || "General Restaurant")) : activeBrand,
                 delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
                 guest_id: guestUser ? guestUser.id : null,
+                idempotency_key: draftIdempotencyKeyRef.current,
                 notes: finalNotes,
                 ...(restaurantId ? { restaurant_id: restaurantId } : {})
             };
 
-            // 1. Insert order header
-            const { data: orderData, error: orderError } = await supabase
-                .from('pos_orders')
-                .insert([orderPayload])
-                .select('id, ticket_number')
-                .single();
-
-            if (orderError) throw orderError;
+            // 1. Insert order header (idempotent: retries of the same cart never create a duplicate row)
+            let orderData = createdOrderRef.current;
+            if (!orderData?.id) {
+                const insertRes = await insertOrderWithIdempotency(supabase, orderPayload);
+                if (insertRes.error) throw insertRes.error;
+                orderData = insertRes.data;
+                if (orderData?.id) {
+                    createdOrderRef.current = orderData;
+                }
+            }
 
             // 2. Insert order items
             const itemPayloads = attachLineCosting(cart.map(item => ({
@@ -1634,9 +1653,17 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 });
             }
 
-            const { error: itemsError } = await insertOrderItems(supabase, itemPayloads);
+            const { error: itemsError } = await ensureOrderItemsPersisted(
+                supabase,
+                orderData.id,
+                itemPayloads,
+                insertOrderItems
+            );
 
             if (itemsError) throw itemsError;
+
+            draftIdempotencyKeyRef.current = null;
+            createdOrderRef.current = null;
 
             // 3. Immediately display success modal to user (sub-second feedback)
             if (guestUser) {
@@ -1712,6 +1739,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
          } catch (err) {
             alert('Failed to place order: ' + err.message);
         } finally {
+            submitInFlightRef.current = false;
             setSubmitting(false);
         }
     };

@@ -19,6 +19,7 @@ import {
 import { computeEffectiveMinSelected } from '../lib/webPosCatalog';
 import { GOOGLE_MAPS_API_KEY } from '../lib/googleMaps';
 import { attachLineCosting, insertOrderItems, resolveChannelCommission } from '../lib/productCosting';
+import { makeOrderIdempotencyKey, insertOrderWithIdempotency, ensureOrderItemsPersisted } from '../lib/orderIdempotency';
 
 function normaliseTenantMenu(tenant) {
     const groups = new Map();
@@ -868,6 +869,16 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
     const [promoError, setPromoError] = useState('');
     const [promoLoading, setPromoLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const submitInFlightRef = useRef(false);
+    const draftIdempotencyKeyRef = useRef(null);
+    const createdOrderRef = useRef(null);
+
+    useEffect(() => {
+        if (cart.length === 0) {
+            draftIdempotencyKeyRef.current = null;
+            createdOrderRef.current = null;
+        }
+    }, [cart.length]);
     const [orderSuccess, setOrderSuccess] = useState(null);
     const [whatsappSettings, setWhatsappSettings] = useState({
         paybill_number: tenant?.paybill || '',
@@ -1786,6 +1797,8 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
 
     // Submit Order to POS with M-Pesa Payment Flow & optional WhatsApp dispatch
     const handleSubmitOrder = async (isWhatsApp = false) => {
+        if (cart.length === 0 || submitInFlightRef.current) return;
+
         if (!customerName.trim() || !customerPhone.trim()) {
             alert('Please enter your name and phone number before placing the order.');
             return;
@@ -1796,6 +1809,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             return;
         }
 
+        submitInFlightRef.current = true;
         setIsSubmitting(true);
         try {
             // Build notes
@@ -1827,6 +1841,10 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 setTenantContext(resolvedRestaurantId);
             }
 
+            if (!draftIdempotencyKeyRef.current) {
+                draftIdempotencyKeyRef.current = makeOrderIdempotencyKey();
+            }
+
             const orderPayload = {
                 customer_name: customerName.trim() || (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : 'Online Guest'),
                 customer_phone: customerPhone.trim() || null,
@@ -1848,39 +1866,20 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 charges_amount: chargesComputation.otherChargesTotal,
                 charges_breakdown: chargesComputation.lines,
                 notes: finalNotes,
-                guest_id: guestUser ? guestUser.id : null
+                guest_id: guestUser ? guestUser.id : null,
+                idempotency_key: draftIdempotencyKeyRef.current
             };
 
-            // 1. Insert order header (with graceful fallback for optional Wave 1/Wave 2 columns)
-            let orderInsertAttempt = { ...orderPayload };
-            let orderData = null;
-            let orderError = null;
-            const optionalOrderCols = [
-                'sales_channel', 'branch_id', 'tax_amount', 'charges_amount',
-                'charges_breakdown', 'order_channel', 'customer_phone',
-                'delivery_address', 'table_number',
-            ];
-            for (let i = 0; i <= optionalOrderCols.length; i += 1) {
-                const res = await supabase
-                    .from('pos_orders')
-                    .insert([orderInsertAttempt])
-                    .select('id, ticket_number')
-                    .single();
-                orderData = res.data;
-                orderError = res.error;
-                if (!orderError) break;
-                const msg = String(orderError.message || '').toLowerCase();
-                const missing = optionalOrderCols.find((col) => col in orderInsertAttempt && msg.includes(col));
-                if (missing) {
-                    const next = { ...orderInsertAttempt };
-                    delete next[missing];
-                    orderInsertAttempt = next;
-                } else {
-                    break;
+            // 1. Insert order header (idempotent: retries of the same cart never create a duplicate row)
+            let orderData = createdOrderRef.current;
+            if (!orderData?.id) {
+                const insertRes = await insertOrderWithIdempotency(supabase, orderPayload);
+                if (insertRes.error) throw insertRes.error;
+                orderData = insertRes.data;
+                if (orderData?.id) {
+                    createdOrderRef.current = orderData;
                 }
             }
-
-            if (orderError) throw orderError;
 
             if (chargesComputation.lines.length > 0 && orderData?.id && resolvedRestaurantId) {
                 recordOrderChargeLines({
@@ -1930,9 +1929,17 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 });
             }
 
-            const { error: itemsError } = await insertOrderItems(supabase, itemPayloads);
+            const { error: itemsError } = await ensureOrderItemsPersisted(
+                supabase,
+                orderData.id,
+                itemPayloads,
+                insertOrderItems
+            );
 
             if (itemsError) throw itemsError;
+
+            draftIdempotencyKeyRef.current = null;
+            createdOrderRef.current = null;
 
             if (guestUser?.id && orderData?.id && resolvedRestaurantId) {
                 awardLoyaltyPointsForOrder({
@@ -2086,6 +2093,7 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
             console.error('Order submission error:', err);
             alert('Failed to place order: ' + (err.message || 'Please check your connection and try again.'));
         } finally {
+            submitInFlightRef.current = false;
             setIsSubmitting(false);
         }
     };
