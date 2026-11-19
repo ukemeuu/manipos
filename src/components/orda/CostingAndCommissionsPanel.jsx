@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Percent, CreditCard, Store, CheckCircle2, Loader2, Save, Sparkles } from 'lucide-react';
 import { supabase, setTenantContext } from '../../lib/supabase';
 import {
@@ -10,6 +10,7 @@ import {
 export function CostingAndCommissionsPanel({
   restaurantId,
   items = [],
+  brands = [],
   onDataUpdated,
 }) {
   const [loading, setLoading] = useState(true);
@@ -22,11 +23,52 @@ export function CostingAndCommissionsPanel({
   const [channelRates, setChannelRates] = useState(() =>
     Object.fromEntries(STANDARD_SALES_CHANNELS.map((ch) => [ch, '0']))
   );
+  // { [brandName]: { [channel]: '29' | '' } } — an empty value means "use the
+  // channel default", which is also how a removed override is stored.
+  const [brandOverrides, setBrandOverrides] = useState({});
+  const [activeBrandTab, setActiveBrandTab] = useState('');
   const [paymentRates, setPaymentRates] = useState(() =>
     Object.fromEntries(STANDARD_PAYMENT_METHODS.map((pm) => [pm, pm === 'Card' ? '2.5' : '0']))
   );
   const [settingsRowId, setSettingsRowId] = useState(null);
   const [existingTendersCfg, setExistingTendersCfg] = useState({});
+
+  // Brands this tenant actually sells under (Little Lagos, Pot of Jollof, ...).
+  // Falls back to brands found on the menu items when pos_brands is unavailable.
+  const brandNames = useMemo(() => {
+    const seen = new Map();
+    const push = (value) => {
+      const name = String(value || '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (!seen.has(key)) seen.set(key, name);
+    };
+    (Array.isArray(brands) ? brands : []).forEach((b) => {
+      if (typeof b === 'string') push(b);
+      else if (b?.is_active !== false) push(b?.name);
+    });
+    if (seen.size === 0) {
+      (Array.isArray(items) ? items : []).forEach((item) => {
+        push(item?.brand);
+        if (Array.isArray(item?.brands)) item.brands.forEach(push);
+        else if (typeof item?.brands === 'string') item.brands.split(',').forEach(push);
+      });
+    }
+    return Array.from(seen.values());
+  }, [brands, items]);
+
+  // Keep the selected override brand valid when the tenant's brand list loads
+  // or changes (default to the first brand so the section is never blank).
+  useEffect(() => {
+    if (brandNames.length === 0) {
+      if (activeBrandTab) setActiveBrandTab('');
+      return;
+    }
+    const stillValid = brandNames.some(
+      (name) => name.toLowerCase() === activeBrandTab.toLowerCase()
+    );
+    if (!stillValid) setActiveBrandTab(brandNames[0]);
+  }, [brandNames, activeBrandTab]);
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -66,23 +108,36 @@ export function CostingAndCommissionsPanel({
 
       // Merge channel rates from pos_channel_commissions + payment_tenders_config.channel_commissions
       const nextChannels = Object.fromEntries(STANDARD_SALES_CHANNELS.map((ch) => [ch, '0']));
+      const findChannel = (value) =>
+        STANDARD_SALES_CHANNELS.find((c) => c.toLowerCase() === String(value || '').toLowerCase());
       const mapFromSettings = tendersCfg.channel_commissions || {};
       Object.entries(mapFromSettings).forEach(([k, v]) => {
-        const match = STANDARD_SALES_CHANNELS.find((c) => c.toLowerCase() === String(k).toLowerCase());
+        const match = findChannel(k);
         nextChannels[match || k] = String(Number(v) || 0);
       });
 
       const tableRows = chRes.status === 'fulfilled' && Array.isArray(chRes.value?.data) ? chRes.value.data : [];
+      const nextBrandOverrides = {};
       tableRows.forEach((row) => {
         if (row.is_active === false) return;
-        const match = STANDARD_SALES_CHANNELS.find(
-          (c) => c.toLowerCase() === String(row.channel || '').toLowerCase()
-        );
-        if (match || row.channel) {
-          nextChannels[match || row.channel] = String(Number(row.commission_percent) || 0);
+        const channelName = findChannel(row.channel) || row.channel;
+        if (!channelName) return;
+        const pct = String(Number(row.commission_percent) || 0);
+        const brandName = String(row.brand || '').trim();
+        if (!brandName) {
+          // Brand-less row = the channel-wide default (overrides the JSON map).
+          nextChannels[channelName] = pct;
+          return;
         }
+        // Match the stored brand to its display name so "LITTLE LAGOS" and
+        // "Little Lagos" edit the same override.
+        const displayBrand =
+          brandNames.find((b) => b.toLowerCase() === brandName.toLowerCase()) || brandName;
+        if (!nextBrandOverrides[displayBrand]) nextBrandOverrides[displayBrand] = {};
+        nextBrandOverrides[displayBrand][channelName] = pct;
       });
       setChannelRates(nextChannels);
+      setBrandOverrides(nextBrandOverrides);
 
       // Merge payment method commission rates
       const nextPayments = Object.fromEntries(
@@ -167,20 +222,41 @@ export function CostingAndCommissionsPanel({
     }
   };
 
+  const updateBrandOverride = (brand, channel, value) => {
+    setBrandOverrides((prev) => ({
+      ...prev,
+      [brand]: { ...(prev[brand] || {}), [channel]: value },
+    }));
+  };
+
   const handleSaveChannelCommissions = async () => {
     setSavingChannels(true);
     setNotice('');
     try {
       const cleanMap = {};
       Object.entries(channelRates).forEach(([ch, val]) => {
-        const num = Math.max(0, Math.min(100, Number(val) || 0));
-        cleanMap[ch] = num;
+        cleanMap[ch] = Math.max(0, Math.min(100, Number(val) || 0));
       });
 
-      // 1. Always save into restaurant_settings JSONB so WebPOS & Reports read it immediately
+      // 1. Always save the channel-wide defaults into restaurant_settings JSONB
+      // so WebPOS & Reports read them immediately.
       await persistTendersConfig({ channel_commissions: cleanMap });
 
-      // 2. Also sync into pos_channel_commissions table when available
+      // 2. Per-brand overrides live in pos_channel_commissions as
+      // (channel, brand) rows; a blank input removes the override so the
+      // channel default applies again.
+      const cleanOverrides = {};
+      Object.entries(brandOverrides).forEach(([brand, perChannel]) => {
+        Object.entries(perChannel || {}).forEach(([ch, raw]) => {
+          const text = String(raw ?? '').trim();
+          if (text === '') return;
+          const num = Math.max(0, Math.min(100, Number(text) || 0));
+          if (!cleanOverrides[brand]) cleanOverrides[brand] = {};
+          cleanOverrides[brand][ch] = num;
+        });
+      });
+
+      let tableSynced = true;
       try {
         setTenantContext(restaurantId);
         const { data: existingRows } = await supabase
@@ -188,34 +264,85 @@ export function CostingAndCommissionsPanel({
           .select('id, channel, brand')
           .eq('restaurant_id', restaurantId);
         const rows = Array.isArray(existingRows) ? existingRows : [];
+        const norm = (value) => String(value || '').trim().toLowerCase();
+        const findRow = (channel, brand) =>
+          rows.find((r) => norm(r.channel) === norm(channel) && norm(r.brand) === norm(brand));
 
-        for (const [channel, pct] of Object.entries(cleanMap)) {
-          const match = rows.find(
-            (r) => String(r.channel || '').toLowerCase() === channel.toLowerCase() && !r.brand
-          );
+        const writes = [];
+        const saveRow = (channel, brand, pct) => {
+          const match = findRow(channel, brand);
           if (match) {
-            await supabase
-              .from('pos_channel_commissions')
-              .update({ commission_percent: pct, is_active: true })
-              .eq('id', match.id)
-              .eq('restaurant_id', restaurantId);
+            writes.push(
+              supabase
+                .from('pos_channel_commissions')
+                .update({ commission_percent: pct, is_active: true, updated_at: new Date().toISOString() })
+                .eq('id', match.id)
+                .eq('restaurant_id', restaurantId)
+            );
           } else {
-            await supabase.from('pos_channel_commissions').insert([
-              {
-                restaurant_id: restaurantId,
-                channel,
-                brand: null,
-                commission_percent: pct,
-                is_active: true,
-              },
-            ]);
+            writes.push(
+              supabase.from('pos_channel_commissions').insert([
+                {
+                  restaurant_id: restaurantId,
+                  channel,
+                  brand: brand || null,
+                  commission_percent: pct,
+                  is_active: true,
+                },
+              ])
+            );
           }
+        };
+
+        Object.entries(cleanMap).forEach(([channel, pct]) => saveRow(channel, '', pct));
+        Object.entries(cleanOverrides).forEach(([brand, perChannel]) => {
+          Object.entries(perChannel).forEach(([channel, pct]) => saveRow(channel, brand, pct));
+        });
+        // Cleared override -> delete the row so the channel default takes over.
+        Object.entries(brandOverrides).forEach(([brand, perChannel]) => {
+          Object.entries(perChannel || {}).forEach(([channel, raw]) => {
+            if (String(raw ?? '').trim() !== '') return;
+            const match = findRow(channel, brand);
+            if (!match) return;
+            writes.push(
+              supabase
+                .from('pos_channel_commissions')
+                .delete()
+                .eq('id', match.id)
+                .eq('restaurant_id', restaurantId)
+            );
+          });
+        });
+
+        const results = await Promise.allSettled(writes);
+        const failed = results.filter((r) => r.status === 'rejected' || r.value?.error);
+        if (failed.length > 0) {
+          tableSynced = false;
+          const reason = failed[0].value?.error?.message || failed[0].reason?.message || '';
+          console.warn('[commissions] per-brand rows not fully saved:', reason);
         }
-      } catch (_) {
-        // Ignore if pos_channel_commissions table is not yet migrated; settings map covers it
+      } catch (err) {
+        // E.g. the pos_channel_commissions migration has not been applied yet.
+        // The channel-wide settings map still covers the default rates.
+        tableSynced = false;
+        console.warn('[commissions] per-brand table unavailable:', err?.message || err);
       }
 
-      setNotice('Channel commission percentages saved for all sales channels.');
+      const overrideCount = Object.values(cleanOverrides).reduce(
+        (sum, perChannel) => sum + Object.keys(perChannel).length,
+        0
+      );
+      if (!tableSynced) {
+        setNotice(
+          'Channel defaults saved, but per-brand overrides could not be stored. Run the pos_channel_commissions migration and try again.'
+        );
+        return;
+      }
+      setNotice(
+        overrideCount > 0
+          ? `Channel commissions saved (${overrideCount} brand override${overrideCount === 1 ? '' : 's'}). EOD & Profitability will use the brand rate when the order has a brand.`
+          : 'Channel commission percentages saved for all sales channels.'
+      );
       await onDataUpdated?.();
     } catch (err) {
       alert('Could not save channel commissions: ' + (err?.message || err));
@@ -339,6 +466,97 @@ export function CostingAndCommissionsPanel({
               </div>
             ))}
           </div>
+
+          {brandNames.length > 0 && activeBrandTab && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-wider text-amber-700">
+                    Per-brand overrides
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Leave a field blank to inherit the channel default above. Example: Glovo 27% for
+                    Little Lagos, 29% for Pot of Jollof.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBrandOverrides((prev) => ({
+                      ...prev,
+                      [activeBrandTab]: Object.fromEntries(
+                        Object.keys(channelRates).map((ch) => [ch, ''])
+                      ),
+                    }));
+                  }}
+                  className="shrink-0 text-[10px] font-black uppercase tracking-wider text-amber-700 hover:text-amber-900 cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {brandNames.map((brand) => {
+                  const active = brand.toLowerCase() === activeBrandTab.toLowerCase();
+                  const overrideCount = Object.values(brandOverrides[brand] || {}).filter(
+                    (v) => String(v ?? '').trim() !== ''
+                  ).length;
+                  return (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => setActiveBrandTab(brand)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold cursor-pointer transition-colors ${
+                        active
+                          ? 'bg-slate-950 border-slate-950 text-amber-400'
+                          : 'bg-white border-amber-200 text-slate-700 hover:border-amber-400'
+                      }`}
+                    >
+                      {brand}
+                      {overrideCount > 0 && (
+                        <span
+                          className={`text-[9px] font-black px-1 rounded-full ${
+                            active ? 'bg-amber-400 text-black' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {overrideCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="divide-y divide-amber-100 border border-amber-200 rounded-xl overflow-hidden bg-white">
+                {Object.keys(channelRates).map((channel) => (
+                  <div
+                    key={`${activeBrandTab}-${channel}`}
+                    className="flex items-center justify-between px-3.5 py-2 hover:bg-amber-50/40"
+                  >
+                    <span className="text-xs font-bold text-slate-800">{channel}</span>
+                    <div className="relative w-28">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={brandOverrides[activeBrandTab]?.[channel] ?? ''}
+                        placeholder={String(channelRates[channel] ?? 0)}
+                        onChange={(e) => updateBrandOverride(activeBrandTab, channel, e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-2.5 pr-6 py-1.5 text-xs font-mono font-bold text-right text-slate-950 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:border-amber-400"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                Stored per brand, so EOD, Profitability and COGS use the right rate for every order.
+                Blank fields are deleted from the database and fall back to the channel default.
+              </p>
+            </div>
+          )}
 
           <button
             type="button"

@@ -15,6 +15,7 @@ const labelCls = 'block text-[11px] font-bold text-slate-500 uppercase tracking-
 export function OrdaCatalogView({
   restaurantId,
   branches = [],
+  brands = [],
   onCatalogChanged,
   canDelete = true,
   categories = [],
@@ -792,6 +793,7 @@ export function OrdaCatalogView({
         <CostingAndCommissionsPanel
           restaurantId={restaurantId}
           items={items}
+          brands={brands}
           onDataUpdated={() => {
             loadAll();
             onCatalogChanged?.();
