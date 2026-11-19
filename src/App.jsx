@@ -347,6 +347,7 @@ function App() {
   }, [tenant?.name, currentRoute]);
 
   useEffect(() => {
+    if (currentRoute === 'trader-invoices' || currentRoute === 'trader-invoice-public') return;
     const fetchStoreStatus = async () => {
       try {
         const pinUser = JSON.parse(localStorage.getItem('pin_staff_user') || '{}');
@@ -354,7 +355,7 @@ function App() {
         const storeId = pinUser.restaurantId || pinUser.restaurant_id;
 
         if (!storeSlug && !storeId) {
-          if (session && currentRoute !== 'home' && currentRoute !== 'retail-home' && currentRoute !== 'superadmin' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite' && currentRoute !== 'restaurants' && currentRoute !== 'status' && currentRoute !== 'privacy' && currentRoute !== 'terms') {
+          if (session && currentRoute !== 'home' && currentRoute !== 'retail-home' && currentRoute !== 'superadmin' && currentRoute !== 'trader-invoices' && currentRoute !== 'trader-invoice-public' && currentRoute !== 'feedback' && currentRoute !== 'links' && currentRoute !== 'microsite' && currentRoute !== 'restaurants' && currentRoute !== 'status' && currentRoute !== 'privacy' && currentRoute !== 'terms') {
             handleGlobalSignOut();
           }
           return;
@@ -577,7 +578,8 @@ function App() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
       if (isGenericPosHost()) return;
-      if (isNeutralMarketingHost() && currentRoute !== 'superadmin' && currentRoute !== 'trader-invoices' && currentRoute !== 'trader-invoice-public') return;
+      if (currentRoute === 'trader-invoices' || currentRoute === 'trader-invoice-public') return;
+      if (isNeutralMarketingHost() && currentRoute !== 'superadmin') return;
       if (activeSession) {
         const pinFallback = (() => {
           try {
@@ -669,7 +671,7 @@ function App() {
   useEffect(() => {
     if (!isNeutralMarketingHost()) return undefined;
     const dropCachedStaffSession = () => {
-      if (currentRoute === 'superadmin') return;
+      if (currentRoute === 'superadmin' || currentRoute === 'trader-invoices' || currentRoute === 'trader-invoice-public') return;
       wipeStaffSessionStorage();
       setSession(null);
     };
@@ -691,7 +693,11 @@ function App() {
     };
 
     window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, []);
 
   const goTo = (route, url) => {
