@@ -6,10 +6,12 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { reportError } from './lib/errorReporter'
 import { initSentry } from './lib/sentry'
 import { recoverFromChunkError } from './lib/chunkRecovery'
+import { initOtaUpdater } from './lib/otaUpdater'
 
 // Load Sentry only when a DSN is configured; otherwise the Telegram error
 // pipeline handles reporting.
 initSentry();
+initOtaUpdater();
 
 // Handle dynamic import failures (e.g. redeployments deleting old chunks)
 if (typeof window !== 'undefined') {

@@ -1,0 +1,81 @@
+name: OTA Live Update (Android & iOS)
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-ota:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production web bundle
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPER_ADMIN_EMAILS: ${{ secrets.VITE_SUPER_ADMIN_EMAILS }}
+        run: npm run build
+
+      - name: Package OTA zip bundle
+        id: pkg
+        run: |
+          VERSION="1.0.${{ github.run_number }}"
+          ZIP_NAME="manipos-ota-${VERSION}.zip"
+          (cd dist && zip -r "../${ZIP_NAME}" .)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release with OTA bundle
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ota-v${{ steps.pkg.outputs.version }}
+          name: ManiPOS OTA v${{ steps.pkg.outputs.version }}
+          files: ${{ steps.pkg.outputs.zip_name }}
+          generate_release_notes: true
+
+      - name: Upload to Capgo Cloud (when CAPGO_TOKEN is configured)
+        if: ${{ secrets.CAPGO_TOKEN != '' }}
+        env:
+          CAPGO_TOKEN: ${{ secrets.CAPGO_TOKEN }}
+        run: |
+          npx @capgo/cli bundle upload \
+            --apikey "${CAPGO_TOKEN}" \
+            --channel Production \
+            --bundle "${{ steps.pkg.outputs.version }}" \
+            --path dist
+
+      - name: Publish self-hosted latest.json to Hostinger (when HOSTINGER_FTP_PASSWORD is configured)
+        if: ${{ secrets.HOSTINGER_FTP_PASSWORD != '' }}
+        env:
+          FTP_HOST: ${{ secrets.HOSTINGER_FTP_HOST || 'ftp.manipos.com' }}
+          FTP_USER: ${{ secrets.HOSTINGER_FTP_USER || 'u414638948.deploy' }}
+          FTP_PASS: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+        run: |
+          cat <<EOF > latest.json
+          {
+            "version": "${{ steps.pkg.outputs.version }}",
+            "url": "https://github.com/${{ github.repository }}/releases/download/ota-v${{ steps.pkg.outputs.version }}/${{ steps.pkg.outputs.zip_name }}"
+          }
+          EOF
+          curl -sS --ftp-create-dirs -T latest.json \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            "ftp://${FTP_HOST}/ota/latest.json"

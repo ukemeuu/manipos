@@ -19,6 +19,11 @@
     },
     "PushNotifications": {
       "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": true,
+      "resetWhenUpdate": true,
+      "updateUrl": "https://manipos.com/ota/latest.json"
     }
   }
 }

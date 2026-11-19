@@ -15,6 +15,13 @@ export function WalletBillingView({
   orders = [],
   staffName = 'Admin',
 }) {
+  // Apple App Store Guideline 3.1.1: never show external subscription checkout
+  // or plan-upgrade purchase buttons inside the native iOS app.
+  const isNativeIos =
+    typeof window !== 'undefined' &&
+    Boolean(window.Capacitor?.isNativePlatform?.()) &&
+    window.Capacitor?.getPlatform?.() === 'ios';
+
   const [subTab, setSubTab] = useState(mode);
   useEffect(() => {
     setSubTab(mode);
@@ -333,38 +340,48 @@ export function WalletBillingView({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {plans.map((p) => {
-              const isCurrent = (subscription?.plan_id || 'growth') === p.id;
-              const price = billingCycle === 'annual' ? Number(p.annual_kes) : Number(p.monthly_kes);
-              return (
-                <div key={p.id} className={`rounded-2xl border p-5 space-y-4 bg-white ${isCurrent ? 'border-amber-400 ring-2 ring-emerald-600/20' : 'border-slate-200'}`}>
-                  <div>
-                    <p className="text-xs font-bold uppercase text-amber-700">{p.max_locations} Location(s)</p>
-                    <h3 className="text-lg font-black text-slate-900 mt-0.5">{p.name}</h3>
-                    <p className="text-2xl font-black text-slate-900 mt-2 font-mono">
-                      KES {price.toLocaleString()} <span className="text-xs font-semibold text-slate-400">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                    </p>
+          {isNativeIos ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-xs text-slate-600 space-y-1.5">
+              <p className="font-black text-slate-900 text-sm">Organization Plan Managed via Web</p>
+              <p>
+                Your store is currently on the <strong>{(subscription?.plan_id || 'growth').toUpperCase()}</strong> plan.
+                Plan changes and billing administration are managed by your account administrator on the web portal.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {plans.map((p) => {
+                const isCurrent = (subscription?.plan_id || 'growth') === p.id;
+                const price = billingCycle === 'annual' ? Number(p.annual_kes) : Number(p.monthly_kes);
+                return (
+                  <div key={p.id} className={`rounded-2xl border p-5 space-y-4 bg-white ${isCurrent ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-200'}`}>
+                    <div>
+                      <p className="text-xs font-bold uppercase text-amber-700">{p.max_locations} Location(s)</p>
+                      <h3 className="text-lg font-black text-slate-900 mt-0.5">{p.name}</h3>
+                      <p className="text-2xl font-black text-slate-900 mt-2 font-mono">
+                        KES {price.toLocaleString()} <span className="text-xs font-semibold text-slate-400">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                      </p>
+                    </div>
+                    <ul className="space-y-1.5 text-xs text-slate-600">
+                      {(p.features || []).map((f) => (
+                        <li key={f} className="flex items-center gap-2"><CheckCircle2 size={13} className="text-amber-600 shrink-0" /> {f}</li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      disabled={saving || isCurrent}
+                      onClick={() => handleSwitchPlan(p)}
+                      className={`w-full py-2.5 rounded-xl text-xs font-black ${
+                        isCurrent ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'bg-slate-900 hover:bg-amber-400 text-white hover:text-black'
+                      }`}
+                    >
+                      {isCurrent ? 'Current Plan' : `Switch to ${p.name}`}
+                    </button>
                   </div>
-                  <ul className="space-y-1.5 text-xs text-slate-600">
-                    {(p.features || []).map((f) => (
-                      <li key={f} className="flex items-center gap-2"><CheckCircle2 size={13} className="text-amber-600 shrink-0" /> {f}</li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button"
-                    disabled={saving || isCurrent}
-                    onClick={() => handleSwitchPlan(p)}
-                    className={`w-full py-2.5 rounded-xl text-xs font-black ${
-                      isCurrent ? 'bg-amber-50 text-slate-900 border border-amber-200' : 'bg-slate-900 hover:bg-amber-400 text-black'
-                    }`}
-                  >
-                    {isCurrent ? 'Current Plan' : `Switch to ${p.name}`}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
             <div className="p-4 border-b border-slate-100 font-black text-sm text-slate-900">Billing & Invoice History</div>
