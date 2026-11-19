@@ -1579,6 +1579,29 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 draftIdempotencyKeyRef.current = makeOrderIdempotencyKey();
             }
 
+            const orderItemsSnapshot = cart.map((item) => ({
+                item_name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                instructions: item.instructions || null,
+            }));
+            if (diningOption === 'Delivery' && calculatedDeliveryFee > 0) {
+                orderItemsSnapshot.push({
+                    item_name: 'Delivery Fee',
+                    quantity: 1,
+                    price: calculatedDeliveryFee,
+                    instructions: calculatedDistance ? `Distance: ${calculatedDistance.toFixed(1)} km` : 'Geocoded Delivery',
+                });
+            }
+            if ((diningOption === 'Takeaway' || diningOption === 'Delivery') && (whatsappSettings?.packaging_fee || 50) > 0) {
+                orderItemsSnapshot.push({
+                    item_name: 'Package Fee',
+                    quantity: 1,
+                    price: whatsappSettings?.packaging_fee || 50,
+                    instructions: 'Packaging Fee',
+                });
+            }
+
             const orderPayload = {
                 customer_name: finalCustomerName,
                 dining_option: diningOption,
@@ -1594,6 +1617,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 delivery_address: diningOption === "Delivery" ? activeDeliveryAddress : null,
                 guest_id: guestUser ? guestUser.id : null,
                 idempotency_key: draftIdempotencyKeyRef.current,
+                items: orderItemsSnapshot,
                 notes: finalNotes,
                 ...(restaurantId ? { restaurant_id: restaurantId } : {})
             };

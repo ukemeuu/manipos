@@ -165,4 +165,58 @@ describe('execDashboardMetrics & channel/payment normalization', () => {
     expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Bolt Food', order_channel: 'Bolt Food' }))).toBe('Bolt Food');
     expect(formatChannelDisplayName(normalizeChannelLabel({ sales_channel: 'Microsite', order_channel: 'Online' }))).toBe('Microsite');
   });
+
+  it('computes Aggregator Commission and Ideal Food Cost (25% COGS) on Executive Dashboard', () => {
+    const orders = [
+      {
+        id: 'agg-1',
+        status: 'Completed',
+        payment_status: 'Paid',
+        order_channel: 'Glovo',
+        sales_channel: 'Glovo',
+        brand: 'POT OF JOLLOF',
+        total_amount: 2000,
+        created_at: '2026-11-19T12:00:00Z',
+        pos_order_items: [
+          { item_name: 'Smoky Jollof', quantity: 2, price: 900 },
+          { item_name: 'Delivery Fee', quantity: 1, price: 200 },
+        ],
+      },
+      {
+        id: 'agg-2',
+        status: 'Preparing',
+        payment_status: 'Paid',
+        order_channel: 'Glovo',
+        sales_channel: 'Glovo',
+        brand: 'LITTLE LAGOS',
+        total_amount: 1000,
+        created_at: '2026-11-19T13:00:00Z',
+        pos_order_items: [
+          { item_name: 'Chapman', quantity: 2, price: 500 },
+        ],
+      },
+    ];
+    const menuCostMap = new Map([
+      ['smoky jollof', { cost: 0, cost_price: 0, cogs_percent: 25, price: 900 }],
+      ['chapman', { cost: 0, cost_price: 0, cogs_percent: 25, price: 500 }],
+    ]);
+    const channelCommRows = [
+      { channel: 'Glovo', brand: 'POT OF JOLLOF', commission_percent: 29, is_active: true },
+      { channel: 'Glovo', brand: 'LITTLE LAGOS', commission_percent: 27, is_active: true },
+    ];
+
+    const metrics = computeExecDashboardMetrics(orders, menuCostMap, {
+      channelCommRows,
+      defaultFoodCostPct: 25,
+    });
+
+    // Glovo POJ: 29% of 2000 = 580; Glovo Little Lagos: 27% of 1000 = 270 -> 850
+    expect(metrics.totalCommission).toBe(850);
+    // Ideal Food Cost: 25% of (1800 + 1000) = 700 (Delivery Fee excluded)
+    expect(metrics.idealFoodCost).toBe(700);
+    // Total Tax: 16% of (1800 + 1000) = 448 (Delivery Fee excluded)
+    expect(metrics.totalTax).toBe(448);
+    expect(metrics.byChannel[0].tax).toBe(448);
+    expect(metrics.netSales).toBe(2000 + 1000 - 448 - 850);
+  });
 });

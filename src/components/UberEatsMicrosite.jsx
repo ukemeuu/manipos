@@ -1845,6 +1845,24 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 draftIdempotencyKeyRef.current = makeOrderIdempotencyKey();
             }
 
+            const orderItemsSnapshot = cart.map((item) => ({
+                item_name: item.title,
+                quantity: item.quantity,
+                price: item.totalPrice,
+                instructions: [
+                    item.modifiers && item.modifiers.length > 0 ? item.modifiers.join(', ') : '',
+                    item.specialInstructions ? `Note: ${item.specialInstructions}` : ''
+                ].filter(Boolean).join(' | ') || null,
+            }));
+            if (diningMode === 'delivery' && deliveryFee > 0) {
+                orderItemsSnapshot.push({
+                    item_name: 'Delivery Fee',
+                    quantity: 1,
+                    price: deliveryFee,
+                    instructions: 'Delivery Dispatch',
+                });
+            }
+
             const orderPayload = {
                 customer_name: customerName.trim() || (guestUser ? `${guestUser.first_name || ''} ${guestUser.last_name || ''}`.trim() : 'Online Guest'),
                 customer_phone: customerPhone.trim() || null,
@@ -1867,7 +1885,8 @@ export function UberEatsMicrosite({ tenant, onStaffLogin, onAdminLogin, onBack }
                 charges_breakdown: chargesComputation.lines,
                 notes: finalNotes,
                 guest_id: guestUser ? guestUser.id : null,
-                idempotency_key: draftIdempotencyKeyRef.current
+                idempotency_key: draftIdempotencyKeyRef.current,
+                items: orderItemsSnapshot
             };
 
             // 1. Insert order header (idempotent: retries of the same cart never create a duplicate row)

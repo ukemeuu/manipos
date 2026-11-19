@@ -185,8 +185,12 @@ export function OrdaReportsView({
   const menuCostMap = useMemo(() => {
     const m = new Map();
     menuItems.forEach((it) => {
+      const explicitCost = Number(it.cost_price || it.unit_cost || 0);
       m.set(String(it.name || '').toLowerCase(), {
-        cost: Number(it.cost_price || it.unit_cost || 0),
+        cost: explicitCost,
+        cost_price: explicitCost,
+        cogs_percent: Number(it.cogs_percent || 0),
+        price: Number(it.price || 0),
         category: it.category || 'General',
       });
     });
@@ -356,8 +360,12 @@ export function OrdaReportsView({
 
   // Executive Dashboard Metrics (valid non-cancelled/voided/returned orders + Processing Stages + Channels + Payment Methods)
   const execMetrics = useMemo(
-    () => computeExecDashboardMetrics(scopedOrders, menuCostMap),
-    [scopedOrders, menuCostMap]
+    () => computeExecDashboardMetrics(scopedOrders, menuCostMap, {
+      channelCommRows,
+      channelCommMap,
+      defaultFoodCostPct,
+    }),
+    [scopedOrders, menuCostMap, channelCommRows, channelCommMap, defaultFoodCostPct]
   );
 
   // Sales Report Aggregations (Items, Modifiers, Combos)
@@ -659,6 +667,37 @@ export function OrdaReportsView({
       {/* 1. EXECUTIVE DASHBOARD (/dashboard) */}
       {reportKey === 'overview' && (
         <div className="space-y-5" data-testid="executive-dashboard-overview">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-black uppercase tracking-wider text-slate-500">Fulfillment Channel:</span>
+              <select
+                value={channelFilter}
+                onChange={(e) => setChannelFilter(e.target.value)}
+                aria-label="Filter dashboard and tax by fulfillment channel"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800"
+              >
+                {filterLists.channels.map((ch) => (
+                  <option key={ch} value={ch}>
+                    {ch === 'All' ? 'All Channels' : ch}
+                  </option>
+                ))}
+              </select>
+              {channelFilter !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setChannelFilter('All')}
+                  className="text-[11px] font-bold text-amber-700 hover:underline cursor-pointer"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] font-semibold text-slate-500">
+              Tax rate: <span className="font-black text-slate-800">16%</span> on menu items
+              {channelFilter !== 'All' ? ` · Filtered to ${channelFilter}` : ''}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {[
               {
@@ -824,6 +863,9 @@ export function OrdaReportsView({
                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div className="h-full bg-sky-600" style={{ width: `${c.sharePct}%` }} />
                       </div>
+                      <p className="text-[10px] font-semibold text-slate-500">
+                        Tax (16%): <span className="font-bold text-slate-700">KES {(c.tax || 0).toLocaleString()}</span>
+                      </p>
                     </div>
                   ))}
                 </div>

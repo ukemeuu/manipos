@@ -1,5 +1,6 @@
 const DEFAULT_OPTIONAL_ORDER_COLUMNS = [
     'idempotency_key',
+    'items',
     'sales_channel',
     'branch_id',
     'tax_amount',

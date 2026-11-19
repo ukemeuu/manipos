@@ -9,6 +9,7 @@ import {
   formatChannelDisplayName,
   normalizePaymentMethodLabel,
 } from './orderChannel';
+import { resolveChannelCommissionWithFallback } from './productCosting';
 
 export function toLocalDateKey(input = new Date()) {
   const dt = input instanceof Date ? input : new Date(input);
@@ -111,8 +112,14 @@ export function getOrderItemsList(order) {
   return [];
 }
 
-export function computeExecDashboardMetrics(scopedOrders = [], menuCostMap = new Map()) {
+export function computeExecDashboardMetrics(scopedOrders = [], menuCostMap = new Map(), options = {}) {
   const list = Array.isArray(scopedOrders) ? scopedOrders : [];
+  const {
+    channelCommRows = [],
+    channelCommMap = {},
+    defaultFoodCostPct = 0,
+    defaultTaxPct = 16,
+  } = options || {};
 
   const validOrders = [];
   const voided = [];
@@ -179,15 +186,65 @@ export function computeExecDashboardMetrics(scopedOrders = [], menuCostMap = new
       paidCount += 1;
     }
     totalDiscount += Number(o.discount || 0);
-    totalTax += Number(o.tax_amount || 0);
-    totalCommission += Number(o.aggregator_commission || 0);
+
+    const chDisplay = formatChannelDisplayName(normalizeChannelLabel(o));
+    const items = getOrderItemsList(o);
+
+    let orderTax = Number(o.tax_amount || 0);
+    if (orderTax <= 0 && Number(defaultTaxPct) > 0) {
+      if (items.length > 0) {
+        let taxableItemsTotal = 0;
+        for (const it of items) {
+          const itemName = String(it.item_name || it.name || '');
+          if (/delivery fee|package fee|packaging fee/i.test(itemName)) continue;
+          const meta = menuCostMap.get(itemName.toLowerCase());
+          const qty = Number(it.quantity || 1);
+          const unitPrice = Number(it.unit_price ?? it.price ?? meta?.price ?? 0);
+          const rev = Number(it.total_price ?? unitPrice * qty);
+          taxableItemsTotal += rev;
+        }
+        orderTax = Math.round(taxableItemsTotal * (Number(defaultTaxPct) / 100) * 100) / 100;
+      } else {
+        orderTax = Math.round(amt * (Number(defaultTaxPct) / 100) * 100) / 100;
+      }
+    }
+    totalTax += orderTax;
+
+    const explicitAggComm = Number(o.aggregator_commission || 0);
+    if (explicitAggComm > 0) {
+      totalCommission += explicitAggComm;
+    } else {
+      const chRate = resolveChannelCommissionWithFallback(
+        channelCommRows,
+        channelCommMap,
+        chDisplay,
+        o.brand || ''
+      );
+      if (chRate > 0) {
+        totalCommission += Math.round(amt * (chRate / 100) * 100) / 100;
+      }
+    }
 
     if (Number(o.ideal_food_cost || 0) > 0) {
       idealFoodCost += Number(o.ideal_food_cost);
     } else {
-      for (const it of getOrderItemsList(o)) {
-        const meta = menuCostMap.get(String(it.item_name || '').toLowerCase());
-        idealFoodCost += (meta?.cost || 0) * Number(it.quantity || 1);
+      if (items.length > 0) {
+        for (const it of items) {
+          const itemName = String(it.item_name || it.name || '');
+          if (/delivery fee|package fee|packaging fee/i.test(itemName)) continue;
+          const meta = menuCostMap.get(itemName.toLowerCase());
+          const qty = Number(it.quantity || 1);
+          const unitPrice = Number(it.unit_price ?? it.price ?? meta?.price ?? 0);
+          const rev = Number(it.total_price ?? unitPrice * qty);
+          const explicitCogs = Number(it.cogs_amount || 0);
+          const costPrice = Number(it.cost_price || meta?.cost_price || meta?.cost || 0);
+          const pct = Number(it.cogs_percent || meta?.cogs_percent || defaultFoodCostPct || 0);
+          idealFoodCost += explicitCogs > 0
+            ? explicitCogs
+            : (costPrice > 0 ? costPrice * qty : rev * (pct / 100));
+        }
+      } else if (Number(defaultFoodCostPct) > 0) {
+        idealFoodCost += amt * (Number(defaultFoodCostPct) / 100);
       }
     }
 
@@ -219,13 +276,14 @@ export function computeExecDashboardMetrics(scopedOrders = [], menuCostMap = new
     if (paid) byPayment[pm].paidAmount += amt;
     else byPayment[pm].pendingAmount += amt;
 
-    const chDisplay = formatChannelDisplayName(normalizeChannelLabel(o));
-    if (!byChannel[chDisplay]) {
-      byChannel[chDisplay] = { channel: chDisplay, count: 0, amount: 0, paidAmount: 0 };
+    const chDisplayKey = chDisplay;
+    if (!byChannel[chDisplayKey]) {
+      byChannel[chDisplayKey] = { channel: chDisplayKey, count: 0, amount: 0, paidAmount: 0, tax: 0 };
     }
-    byChannel[chDisplay].count += 1;
-    byChannel[chDisplay].amount += amt;
-    if (paid) byChannel[chDisplay].paidAmount += amt;
+    byChannel[chDisplayKey].count += 1;
+    byChannel[chDisplayKey].amount += amt;
+    byChannel[chDisplayKey].tax = Math.round((byChannel[chDisplayKey].tax + orderTax) * 100) / 100;
+    if (paid) byChannel[chDisplayKey].paidAmount += amt;
   }
 
   for (const o of [...cancelledReturned, ...failed]) {
@@ -233,6 +291,9 @@ export function computeExecDashboardMetrics(scopedOrders = [], menuCostMap = new
     failureReasons[r] = (failureReasons[r] || 0) + 1;
   }
 
+  totalTax = Math.round(totalTax * 100) / 100;
+  totalCommission = Math.round(totalCommission * 100) / 100;
+  idealFoodCost = Math.round(idealFoodCost * 100) / 100;
   const netSales = Math.max(0, totalSales - totalTax - totalCommission);
   const avgOrder = validOrders.length > 0 ? Math.round(totalSales / validOrders.length) : 0;
   const unpaidSales = Math.max(0, totalSales - paidSales);
