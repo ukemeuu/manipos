@@ -39,6 +39,8 @@ const InventoryView = lazy(() => import('./components/InventoryView').then(m => 
 const RestaurantDirectory = lazy(() => import('./components/RestaurantDirectory').then(m => ({ default: m.RestaurantDirectory })));
 const HrAndStaffPortalView = lazy(() => import('./components/orda/HrAndStaffPortalView').then(m => ({ default: m.HrAndStaffPortalView })));
 const PojOperationsView = lazy(() => import('./components/orda/PojOperationsView').then(m => ({ default: m.PojOperationsView })));
+const TraderInvoicesApp = lazy(() => import('./components/invoices/TraderInvoicesApp').then(m => ({ default: m.TraderInvoicesApp })));
+const PublicTraderInvoiceView = lazy(() => import('./components/invoices/PublicTraderInvoiceView').then(m => ({ default: m.PublicTraderInvoiceView })));
 
 const RouteFallback = () => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-400">
@@ -98,6 +100,8 @@ function resolveRoute() {
   if (page && PAGE_ROUTES[page]) return PAGE_ROUTES[page];
 
   if (path === '/superadmin' || hash === '#/superadmin') return 'superadmin';
+  if (path === '/invoices' || hash === '#/invoices') return 'trader-invoices';
+  if (path.startsWith('/inv/') || hash.startsWith('#/inv/')) return 'trader-invoice-public';
   if (path === '/app' || hash === '#/app') return 'app';
   if (hash === '#/onboarding') return 'onboarding';
   if (path === '/dashboard' || hash === '#/dashboard') return 'dashboard';
@@ -522,7 +526,7 @@ function App() {
     const restoreOrGetSession = async () => {
       // Never auto-restore a Supabase session on the neutral marketing site
       // (staff sign in on the tenant POS subdomain, not on manipos.com).
-      if (isNeutralMarketingHost() && currentRoute !== 'superadmin') {
+      if (isNeutralMarketingHost() && currentRoute !== 'superadmin' && currentRoute !== 'trader-invoices' && currentRoute !== 'trader-invoice-public') {
         setLoading(false);
         return;
       }
@@ -572,7 +576,7 @@ function App() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
       if (isGenericPosHost()) return;
-      if (isNeutralMarketingHost() && currentRoute !== 'superadmin') return;
+      if (isNeutralMarketingHost() && currentRoute !== 'superadmin' && currentRoute !== 'trader-invoices' && currentRoute !== 'trader-invoice-public') return;
       if (activeSession) {
         const pinFallback = (() => {
           try {
@@ -776,6 +780,24 @@ function App() {
   // Migrated staff must set a new password before using the terminal.
   if (mustChangePassword) {
     return <ChangePasswordModal onDone={() => setMustChangePassword(false)} />;
+  }
+
+  // ROUTE -2: Standalone Trader Invoice & Receipt Generator (manipos.com/#/invoices & #/inv/<token>)
+  if (currentRoute === 'trader-invoices') {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <TraderInvoicesApp />
+      </Suspense>
+    );
+  }
+  if (currentRoute === 'trader-invoice-public') {
+    const hashToken = (window.location.hash || '').replace(/^#\/inv\//, '').split('?')[0];
+    const pathToken = (window.location.pathname || '').replace(/^\/inv\//, '').split('?')[0];
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <PublicTraderInvoiceView publicToken={hashToken || pathToken} />
+      </Suspense>
+    );
   }
 
   // ROUTE -1: Platform Owner Super Admin Console (manipos.com?page=superadmin)
