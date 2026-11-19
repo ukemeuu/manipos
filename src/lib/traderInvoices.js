@@ -29,9 +29,12 @@ export const TRADER_PLANS = {
 export const TRADER_PAYMENT_METHODS = [
   'M-Pesa Till No',
   'M-Pesa Paybill',
+  'Send Money',
   'Cash',
   'Cheque',
 ];
+
+export const SEND_MONEY_PROVIDERS = ['M-Pesa', 'Airtel Money'];
 
 export function effectiveTraderPlan(profile) {
   const raw = String(profile?.plan || 'free').toLowerCase();
@@ -154,6 +157,9 @@ export function buildTraderWhatsAppShareUrl(invoice, profile, origin = 'https://
   if (profile?.mpesa_till_no) lines.push(`M-Pesa Till No: ${profile.mpesa_till_no}`);
   if (profile?.mpesa_paybill_no) {
     lines.push(`M-Pesa Paybill: ${profile.mpesa_paybill_no}${profile.mpesa_account_no ? ` · Acc: ${profile.mpesa_account_no}` : ''}`);
+  }
+  if (profile?.send_money_number) {
+    lines.push(`Send Money (${profile.send_money_provider || 'M-Pesa'}): ${profile.send_money_number}`);
   }
   lines.push(`View / Download PDF: ${publicUrl}`);
 

@@ -61,6 +61,9 @@ function buildEmailHtml(inv: Record<string, any>, profile: Record<string, any>, 
     profile?.mpesa_paybill_no
       ? `<li><strong>M-Pesa Paybill:</strong> ${profile.mpesa_paybill_no}${profile.mpesa_account_no ? ` (Account: ${profile.mpesa_account_no})` : ""}</li>`
       : "",
+    profile?.send_money_number
+      ? `<li><strong>Send Money (${profile.send_money_provider || "M-Pesa"}):</strong> ${profile.send_money_number}</li>`
+      : "",
     profile?.accepts_cash !== false ? `<li><strong>Cash</strong> or <strong>Cheque</strong></li>` : "",
   ]
     .filter(Boolean)

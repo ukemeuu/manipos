@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import {
   TRADER_PLANS,
   TRADER_PAYMENT_METHODS,
+  SEND_MONEY_PROVIDERS,
   buildTraderWhatsAppShareUrl,
   computeMonthlyQuotaStatus,
   computeTraderInvoiceTotals,
@@ -15,7 +16,11 @@ import {
   resolveInvoiceDisplayStatus,
 } from '../../lib/traderInvoices';
 import { generateTraderInvoicePdf } from '../../lib/traderInvoicePdf';
-import { TraderAuthScreen, TraderOnboardingSetup } from './TraderAuthAndOnboarding';
+import {
+  TraderAuthScreen,
+  TraderOnboardingSetup,
+  TraderPaymentSetupFields,
+} from './TraderAuthAndOnboarding';
 
 function addDaysIso(days) {
   const d = new Date();
@@ -58,6 +63,11 @@ export function TraderInvoicesApp() {
   const [dueDate, setDueDate] = useState(() => addDaysIso(7));
   const [includeVat, setIncludeVat] = useState(false);
   const [preferredPayMethod, setPreferredPayMethod] = useState('M-Pesa Till No');
+  const [payTillInput, setPayTillInput] = useState('');
+  const [payPaybillInput, setPayPaybillInput] = useState('');
+  const [payAccountInput, setPayAccountInput] = useState('');
+  const [sendMoneyProvInput, setSendMoneyProvInput] = useState('M-Pesa');
+  const [sendMoneyNumInput, setSendMoneyNumInput] = useState('');
   const [autoRemind, setAutoRemind] = useState(true);
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState([{ name: '', unit: 'kg', quantity: 1, unit_price: '' }]);
@@ -112,6 +122,13 @@ export function TraderInvoicesApp() {
       const p = profRes.data || null;
       setProfile(p);
       setProfileForm(p);
+      if (p) {
+        setPayTillInput(p.mpesa_till_no || '');
+        setPayPaybillInput(p.mpesa_paybill_no || '');
+        setPayAccountInput(p.mpesa_account_no || '');
+        setSendMoneyProvInput(p.send_money_provider || 'M-Pesa');
+        setSendMoneyNumInput(p.send_money_number || '');
+      }
       setInvoices(invRes.data || []);
       setCustomers(custRes.data || []);
       setVendors(vendRes.data || []);
@@ -212,6 +229,14 @@ export function TraderInvoicesApp() {
     try {
       const invNumber = nextTraderDocumentNumber(invoices, docType);
       const isInstantReceipt = docType === 'receipt';
+      const formattedPayRef =
+        preferredPayMethod === 'M-Pesa Till No'
+          ? (payTillInput.trim() || null)
+          : preferredPayMethod === 'M-Pesa Paybill'
+          ? ([payPaybillInput.trim(), payAccountInput.trim()].filter(Boolean).join(' / ') || null)
+          : preferredPayMethod === 'Send Money'
+          ? (sendMoneyNumInput.trim() ? `${sendMoneyProvInput}: ${sendMoneyNumInput.trim()}` : null)
+          : null;
       const payload = {
         trader_id: session.user.id,
         customer_id: selectedCustomerId || null,
@@ -234,6 +259,7 @@ export function TraderInvoicesApp() {
         total_amount: newDocTotals.totalAmount,
         amount_paid: isInstantReceipt ? newDocTotals.totalAmount : 0,
         payment_method: preferredPayMethod,
+        payment_reference: formattedPayRef,
         paid_at: isInstantReceipt ? new Date().toISOString() : null,
         notes: notes.trim() || null,
         auto_remind: isInstantReceipt ? false : autoRemind,
@@ -395,25 +421,39 @@ export function TraderInvoicesApp() {
       showToast('Business Name is required.');
       return;
     }
-    const { data, error } = await supabase
+    const updatePayload = {
+      business_name: profileForm.business_name.trim(),
+      logo_url: profileForm.logo_url || null,
+      kra_pin: profileForm.kra_pin || null,
+      location: profileForm.location || null,
+      phone: profileForm.phone || null,
+      mpesa_till_no: profileForm.mpesa_till_no || null,
+      mpesa_paybill_no: profileForm.mpesa_paybill_no || null,
+      mpesa_account_no: profileForm.mpesa_account_no || null,
+      send_money_provider: profileForm.send_money_number ? (profileForm.send_money_provider || 'M-Pesa') : null,
+      send_money_number: profileForm.send_money_number || null,
+      currency: profileForm.currency || 'KES',
+    };
+    let res = await supabase
       .from('trader_profiles')
-      .update({
-        business_name: profileForm.business_name.trim(),
-        logo_url: profileForm.logo_url || null,
-        kra_pin: profileForm.kra_pin || null,
-        location: profileForm.location || null,
-        phone: profileForm.phone || null,
-        mpesa_till_no: profileForm.mpesa_till_no || null,
-        mpesa_paybill_no: profileForm.mpesa_paybill_no || null,
-        mpesa_account_no: profileForm.mpesa_account_no || null,
-        currency: profileForm.currency || 'KES',
-      })
+      .update(updatePayload)
       .eq('id', session.user.id)
       .select('*')
       .single();
-    if (!error && data) {
-      setProfile(data);
-      setProfileForm(data);
+    if (res.error && String(res.error.message || '').toLowerCase().includes('send_money')) {
+      const fb = { ...updatePayload };
+      delete fb.send_money_provider;
+      delete fb.send_money_number;
+      res = await supabase
+        .from('trader_profiles')
+        .update(fb)
+        .eq('id', session.user.id)
+        .select('*')
+        .single();
+    }
+    if (!res.error && res.data) {
+      setProfile(res.data);
+      setProfileForm(res.data);
       showToast('Business profile updated.');
     }
   };
@@ -850,17 +890,73 @@ export function TraderInvoicesApp() {
 
                 {/* Payment Method & Due Date */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Payment Option</label>
+                  <div className="space-y-2">
+                    <label className="font-bold text-slate-700 block">Payment Option</label>
                     <select
                       value={preferredPayMethod}
                       onChange={(e) => setPreferredPayMethod(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                     >
-                      {TRADER_PAYMENT_METHODS.map((pm) => (
-                        <option key={pm} value={pm}>{pm}</option>
-                      ))}
+                      {TRADER_PAYMENT_METHODS.map((pm) => {
+                        let suffix = '';
+                        if (pm === 'M-Pesa Till No' && profile?.mpesa_till_no) suffix = ` (${profile.mpesa_till_no})`;
+                        if (pm === 'M-Pesa Paybill' && profile?.mpesa_paybill_no) {
+                          suffix = ` (${profile.mpesa_paybill_no}${profile.mpesa_account_no ? ` · Acc: ${profile.mpesa_account_no}` : ''})`;
+                        }
+                        if (pm === 'Send Money' && profile?.send_money_number) {
+                          suffix = ` (${profile.send_money_provider || 'M-Pesa'}: ${profile.send_money_number})`;
+                        }
+                        return <option key={pm} value={pm}>{pm}{suffix}</option>;
+                      })}
                     </select>
+
+                    {preferredPayMethod === 'M-Pesa Till No' && (
+                      <input
+                        type="text"
+                        value={payTillInput}
+                        onChange={(e) => setPayTillInput(e.target.value)}
+                        placeholder="M-Pesa Till No"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                      />
+                    )}
+                    {preferredPayMethod === 'M-Pesa Paybill' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={payPaybillInput}
+                          onChange={(e) => setPayPaybillInput(e.target.value)}
+                          placeholder="Paybill No"
+                          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={payAccountInput}
+                          onChange={(e) => setPayAccountInput(e.target.value)}
+                          placeholder="Account No"
+                          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                      </div>
+                    )}
+                    {preferredPayMethod === 'Send Money' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={sendMoneyProvInput}
+                          onChange={(e) => setSendMoneyProvInput(e.target.value)}
+                          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                        >
+                          {SEND_MONEY_PROVIDERS.map((prov) => (
+                            <option key={prov} value={prov}>{prov}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={sendMoneyNumInput}
+                          onChange={(e) => setSendMoneyNumInput(e.target.value)}
+                          placeholder="Phone Number"
+                          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {docType === 'invoice' && (
@@ -1084,29 +1180,11 @@ export function TraderInvoicesApp() {
                       className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      placeholder="M-Pesa Till No"
-                      value={profileForm.mpesa_till_no || ''}
-                      onChange={(e) => setProfileForm((p) => ({ ...p, mpesa_till_no: e.target.value }))}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                    <input
-                      type="text"
-                      placeholder="M-Pesa Paybill"
-                      value={profileForm.mpesa_paybill_no || ''}
-                      onChange={(e) => setProfileForm((p) => ({ ...p, mpesa_paybill_no: e.target.value }))}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Paybill Account"
-                      value={profileForm.mpesa_account_no || ''}
-                      onChange={(e) => setProfileForm((p) => ({ ...p, mpesa_account_no: e.target.value }))}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                  </div>
+                  <TraderPaymentSetupFields
+                    value={profileForm}
+                    onChange={setProfileForm}
+                    compact
+                  />
                   <label className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl cursor-pointer">
                     <Upload size={14} /> Upload / Change Logo (Optional)
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleProfileLogoUpload(e.target.files[0])} />

@@ -158,6 +158,9 @@ export function PublicTraderInvoiceView({ publicToken }) {
             {trader?.mpesa_paybill_no && (
               <p>M-Pesa Paybill: <strong>{trader.mpesa_paybill_no}</strong> {trader?.mpesa_account_no ? `· Account: ${trader.mpesa_account_no}` : ''}</p>
             )}
+            {trader?.send_money_number && (
+              <p>Send Money ({trader.send_money_provider || 'M-Pesa'}): <strong>{trader.send_money_number}</strong></p>
+            )}
             <p>Cash &amp; Cheque accepted{invoice.payment_method ? ` · Selected: ${invoice.payment_method}` : ''}</p>
           </div>
         </div>

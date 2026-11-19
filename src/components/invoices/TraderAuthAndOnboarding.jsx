@@ -1,6 +1,100 @@
 import React, { useState } from 'react';
 import { FileText, Loader2, Upload, CheckCircle2, Mail, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { SEND_MONEY_PROVIDERS } from '../../lib/traderInvoices';
+
+export function TraderPaymentSetupFields({ value, onChange, compact = false }) {
+  const [selectedType, setSelectedType] = useState(() => {
+    if (value?.mpesa_paybill_no) return 'paybill';
+    if (value?.send_money_number) return 'send_money';
+    return 'till';
+  });
+
+  const update = (patch) => onChange({ ...value, ...patch });
+
+  return (
+    <div className={compact ? 'p-3 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2.5' : 'p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2.5'}>
+      <p className="font-black text-amber-900 uppercase tracking-wider text-[10px]">
+        Payment Options Shown on Invoices &amp; Receipts (Optional)
+      </p>
+
+      <div>
+        <label className="text-[11px] font-bold text-amber-900 block mb-1">Select Payment Type</label>
+        <select
+          value={selectedType}
+          onChange={(e) => setSelectedType(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs font-bold text-slate-900"
+        >
+          <option value="till">M-Pesa Till No (Buy Goods)</option>
+          <option value="paybill">M-Pesa Paybill</option>
+          <option value="send_money">Send Money (M-Pesa / Airtel)</option>
+        </select>
+      </div>
+
+      {selectedType === 'till' && (
+        <input
+          type="text"
+          value={value?.mpesa_till_no || ''}
+          onChange={(e) => update({ mpesa_till_no: e.target.value })}
+          placeholder="Enter M-Pesa Till No"
+          className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
+        />
+      )}
+
+      {selectedType === 'paybill' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input
+            type="text"
+            value={value?.mpesa_paybill_no || ''}
+            onChange={(e) => update({ mpesa_paybill_no: e.target.value })}
+            placeholder="Paybill No"
+            className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
+          />
+          <input
+            type="text"
+            value={value?.mpesa_account_no || ''}
+            onChange={(e) => update({ mpesa_account_no: e.target.value })}
+            placeholder="Account No"
+            className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
+          />
+        </div>
+      )}
+
+      {selectedType === 'send_money' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <select
+            value={value?.send_money_provider || 'M-Pesa'}
+            onChange={(e) => update({ send_money_provider: e.target.value })}
+            className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs font-bold text-slate-900"
+          >
+            {SEND_MONEY_PROVIDERS.map((prov) => (
+              <option key={prov} value={prov}>{prov}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={value?.send_money_number || ''}
+            onChange={(e) => update({ send_money_number: e.target.value })}
+            placeholder="Phone Number (e.g. 0712345678)"
+            className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
+          />
+        </div>
+      )}
+
+      {(value?.mpesa_till_no || value?.mpesa_paybill_no || value?.send_money_number) && (
+        <p className="text-[11px] text-amber-900 font-semibold">
+          Saved:{' '}
+          {[
+            value?.mpesa_till_no ? `Till ${value.mpesa_till_no}` : '',
+            value?.mpesa_paybill_no ? `Paybill ${value.mpesa_paybill_no}${value.mpesa_account_no ? ` (${value.mpesa_account_no})` : ''}` : '',
+            value?.send_money_number ? `${value.send_money_provider || 'M-Pesa'} ${value.send_money_number}` : '',
+          ].filter(Boolean).join(' · ')}
+        </p>
+      )}
+      <p className="text-[11px] text-amber-800">Cash &amp; Cheque options are enabled by default.</p>
+    </div>
+  );
+}
 
 export function TraderAuthScreen({ onSignedIn }) {
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'magic'
@@ -161,9 +255,13 @@ export function TraderOnboardingSetup({ user, onCompleted }) {
   const [kraPin, setKraPin] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
-  const [mpesaTillNo, setMpesaTillNo] = useState('');
-  const [mpesaPaybillNo, setMpesaPaybillNo] = useState('');
-  const [mpesaAccountNo, setMpesaAccountNo] = useState('');
+  const [paymentCfg, setPaymentCfg] = useState({
+    mpesa_till_no: '',
+    mpesa_paybill_no: '',
+    mpesa_account_no: '',
+    send_money_provider: 'M-Pesa',
+    send_money_number: '',
+  });
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -202,21 +300,33 @@ export function TraderOnboardingSetup({ user, onCompleted }) {
         location: location.trim() || null,
         phone: phone.trim() || null,
         email: user.email || null,
-        mpesa_till_no: mpesaTillNo.trim() || null,
-        mpesa_paybill_no: mpesaPaybillNo.trim() || null,
-        mpesa_account_no: mpesaAccountNo.trim() || null,
+        mpesa_till_no: paymentCfg.mpesa_till_no.trim() || null,
+        mpesa_paybill_no: paymentCfg.mpesa_paybill_no.trim() || null,
+        mpesa_account_no: paymentCfg.mpesa_account_no.trim() || null,
+        send_money_provider: paymentCfg.send_money_number.trim() ? (paymentCfg.send_money_provider || 'M-Pesa') : null,
+        send_money_number: paymentCfg.send_money_number.trim() || null,
         accepts_cash: true,
         accepts_cheque: true,
         currency: 'KES',
         plan: 'free',
       };
-      const { data, error: err } = await supabase
+      let res = await supabase
         .from('trader_profiles')
         .upsert([payload])
         .select('*')
         .single();
-      if (err) throw err;
-      onCompleted?.(data);
+      if (res.error && String(res.error.message || '').toLowerCase().includes('send_money')) {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.send_money_provider;
+        delete fallbackPayload.send_money_number;
+        res = await supabase
+          .from('trader_profiles')
+          .upsert([fallbackPayload])
+          .select('*')
+          .single();
+      }
+      if (res.error) throw res.error;
+      onCompleted?.(res.data);
     } catch (err) {
       setError(err.message || 'Could not save profile');
     } finally {
@@ -300,35 +410,7 @@ export function TraderOnboardingSetup({ user, onCompleted }) {
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2.5">
-            <p className="font-black text-amber-900 uppercase tracking-wider text-[10px]">
-              Payment Options Shown on Invoices &amp; Receipts (Optional)
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <input
-                type="text"
-                value={mpesaTillNo}
-                onChange={(e) => setMpesaTillNo(e.target.value)}
-                placeholder="M-Pesa Till No"
-                className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
-              />
-              <input
-                type="text"
-                value={mpesaPaybillNo}
-                onChange={(e) => setMpesaPaybillNo(e.target.value)}
-                placeholder="M-Pesa Paybill"
-                className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
-              />
-              <input
-                type="text"
-                value={mpesaAccountNo}
-                onChange={(e) => setMpesaAccountNo(e.target.value)}
-                placeholder="Paybill Account"
-                className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-900"
-              />
-            </div>
-            <p className="text-[11px] text-amber-800">Cash &amp; Cheque options are enabled by default.</p>
-          </div>
+          <TraderPaymentSetupFields value={paymentCfg} onChange={setPaymentCfg} />
 
           <button
             type="submit"

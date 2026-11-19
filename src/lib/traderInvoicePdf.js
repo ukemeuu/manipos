@@ -213,6 +213,9 @@ export async function generateTraderInvoicePdf(invoice, profile, { download = tr
   if (profile?.mpesa_paybill_no) {
     optLines.push(`• M-Pesa Paybill: ${profile.mpesa_paybill_no}${profile.mpesa_account_no ? ` (Account: ${profile.mpesa_account_no})` : ''}`);
   }
+  if (profile?.send_money_number) {
+    optLines.push(`• Send Money (${profile.send_money_provider || 'M-Pesa'}): ${profile.send_money_number}`);
+  }
   const otherAccepted = [
     profile?.accepts_cash !== false ? 'Cash' : null,
     profile?.accepts_cheque !== false ? 'Cheque' : null,
