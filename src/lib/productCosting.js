@@ -177,39 +177,55 @@ function isMissingColumnError(error) {
   );
 }
 
+function extractMissingColumn(error) {
+  if (!error) return null;
+  const msg = String(error.message || '') + ' ' + String(error.details || '');
+  const m1 = msg.match(/could not find the ['"]([^'"]+)['"] column/i);
+  if (m1?.[1]) return m1[1];
+  const m2 = msg.match(/column ['"]?([a-z0-9_]+)['"]?(?: of relation [^ ]+)? does not exist/i);
+  if (m2?.[1]) return m2[1];
+  return null;
+}
+
 /**
- * Insert order lines, gracefully dropping the costing columns when the
- * COGS/commission migration has not been run yet. Never let a reporting-only
- * schema gap block a sale or drop order items.
+ * Insert order lines, stripping ONLY the specific optional column(s) reported
+ * missing by PostgREST/Postgres so required columns like `cost_price NOT NULL`
+ * are preserved and sales are never blocked or left without items.
  */
 export async function insertOrderItems(supabaseClient, rows) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length === 0) return { error: null };
 
-  const firstRes = await supabaseClient.from('pos_order_items').insert(list);
-  if (!firstRes.error) return firstRes;
+  let attempt = list.map((row) => ({
+    ...row,
+    cost_price: Number(row.cost_price) || 0,
+  }));
 
-  if (isMissingColumnError(firstRes.error)) {
-    const stripped = list.map((row) => {
-      const next = { ...row };
-      COSTING_COLS.forEach((col) => delete next[col]);
-      return next;
-    });
-    const secondRes = await supabaseClient.from('pos_order_items').insert(stripped);
-    if (!secondRes.error) return secondRes;
+  for (let i = 0; i <= COSTING_COLS.length + 4; i += 1) {
+    const res = await supabaseClient.from('pos_order_items').insert(attempt);
+    if (!res.error) return res;
 
-    if (isMissingColumnError(secondRes.error)) {
-      const minimal = list.map((row) => ({
-        order_id: row.order_id,
-        item_name: row.item_name || row.name || 'Item',
-        quantity: Number(row.quantity ?? 1),
-        price: Number(row.price ?? 0),
-        instructions: row.instructions || null,
-      }));
-      return supabaseClient.from('pos_order_items').insert(minimal);
+    const missingCol = extractMissingColumn(res.error);
+    if (missingCol && attempt.some((r) => missingCol in r)) {
+      attempt = attempt.map((r) => {
+        const next = { ...r };
+        delete next[missingCol];
+        return next;
+      });
+      continue;
     }
-    return secondRes;
+
+    if (isMissingColumnError(res.error)) {
+      const stripped = attempt.map((row) => {
+        const next = { ...row };
+        COSTING_COLS.filter((col) => col !== 'cost_price').forEach((col) => delete next[col]);
+        return next;
+      });
+      return supabaseClient.from('pos_order_items').insert(stripped);
+    }
+
+    return res;
   }
 
-  return firstRes;
+  return supabaseClient.from('pos_order_items').insert(attempt);
 }
