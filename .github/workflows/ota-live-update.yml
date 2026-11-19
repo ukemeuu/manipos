@@ -15,6 +15,12 @@ permissions:
 jobs:
   publish-ota:
     runs-on: ubuntu-latest
+    env:
+      # `secrets` cannot be referenced inside `if:` expressions — that makes the
+      # whole workflow invalid and it fails with zero jobs. Expose the optional
+      # integrations as job-level env and test those instead.
+      CAPGO_TOKEN: ${{ secrets.CAPGO_TOKEN }}
+      HOSTINGER_FTP_PASSWORD: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -53,9 +59,7 @@ jobs:
           generate_release_notes: true
 
       - name: Upload to Capgo Cloud (when CAPGO_TOKEN is configured)
-        if: ${{ secrets.CAPGO_TOKEN != '' }}
-        env:
-          CAPGO_TOKEN: ${{ secrets.CAPGO_TOKEN }}
+        if: ${{ env.CAPGO_TOKEN != '' }}
         run: |
           npx @capgo/cli bundle upload \
             --apikey "${CAPGO_TOKEN}" \
@@ -64,7 +68,7 @@ jobs:
             --path dist
 
       - name: Publish self-hosted latest.json to Hostinger (when HOSTINGER_FTP_PASSWORD is configured)
-        if: ${{ secrets.HOSTINGER_FTP_PASSWORD != '' }}
+        if: ${{ env.HOSTINGER_FTP_PASSWORD != '' }}
         env:
           FTP_HOST: ${{ secrets.HOSTINGER_FTP_HOST || 'ftp.manipos.com' }}
           FTP_USER: ${{ secrets.HOSTINGER_FTP_USER || 'u414638948.deploy' }}
