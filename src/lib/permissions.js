@@ -12,14 +12,21 @@ import { supabase } from './supabase';
 
 export const PERMISSIONS = [
   { key: 'view_dashboard', label: 'View management dashboard', group: 'Access' },
-  { key: 'view_analytics', label: 'View analytics & reports', group: 'Insights' },
+  { key: 'view_analytics', label: 'View sales dashboard & analytics', group: 'Insights' },
+  { key: 'view_previous_days', label: 'View sales dashboard & orders from previous days', group: 'Insights' },
+  { key: 'export_reports', label: 'Export sales CSV & PDF reports', group: 'Insights' },
+  { key: 'manage_expenses', label: 'Record expenses & upload supplier receipts', group: 'Insights' },
   { key: 'view_orders', label: 'View order history', group: 'Sales' },
-  { key: 'void_orders', label: 'Void & refund orders', group: 'Sales' },
-  { key: 'view_previous_days', label: 'View previous days orders & sales', group: 'Sales' },
+  { key: 'view_my_dashboard', label: 'View personal shift & orders breakdown dashboard', group: 'Sales' },
+  { key: 'upload_receipts', label: 'Upload payment receipts & proof of payment', group: 'Sales' },
+  { key: 'reprint_receipts', label: 'Reprint customer receipts & KOT tickets', group: 'Sales' },
+  { key: 'void_orders', label: 'Request order return / void', group: 'Sales' },
+  { key: 'approve_returns', label: 'Approve / reject returned & voided orders', group: 'Sales' },
+  { key: 'close_shift', label: 'Open & close cashier shifts / Z-reports', group: 'Sales' },
   { key: 'manage_discounts', label: 'Manage discounts', group: 'Sales' },
   { key: 'manage_offers', label: 'Manage offers & promotions', group: 'Sales' },
   { key: 'manage_menu', label: 'Edit menu & categories', group: 'Catalogue' },
-  { key: 'manage_inventory', label: 'Manage inventory & recipes', group: 'Catalogue' },
+  { key: 'manage_inventory', label: 'Access & manage inventory & recipes', group: 'Catalogue' },
   { key: 'manage_suppliers', label: 'Manage suppliers', group: 'Catalogue' },
   { key: 'manage_guests', label: 'Manage guest CRM & loyalty', group: 'Customers' },
   { key: 'manage_feedback', label: 'Manage customer feedback', group: 'Customers' },
@@ -48,11 +55,11 @@ export function roleDefaults(role) {
     case 'manager':
       return PERMISSION_KEYS.filter((k) => k !== 'manage_staff' && k !== 'view_previous_days');
     case 'cashier':
-      return ['view_orders', 'manage_menu'];
+      return ['view_orders', 'manage_menu', 'view_my_dashboard', 'reprint_receipts', 'close_shift'];
     case 'waiter':
-      return ['view_orders', 'manage_menu'];
+      return ['view_orders', 'manage_menu', 'view_my_dashboard', 'reprint_receipts'];
     case 'accountant':
-      return ['view_analytics', 'view_orders'];
+      return ['view_analytics', 'view_orders', 'export_reports', 'manage_expenses'];
     case 'stock_controller':
     case 'store_clerk':
     case 'issuer':
@@ -61,6 +68,7 @@ export function roleDefaults(role) {
     case 'chef':
       return ['manage_inventory'];
     case 'expense_clerk':
+      return ['manage_expenses', 'upload_receipts'];
     case 'staff':
     case 'kds':
       return [];

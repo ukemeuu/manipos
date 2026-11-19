@@ -152,6 +152,7 @@ export function AuthenticatedHome({
           {/* Operations, CRM, HR & Accounting Modules */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
             {[
+              { dashboardTab: 'my-dashboard', page: 'my-dashboard', label: 'My Orders Dashboard', desc: 'View your personal shift breakdown & orders punched.', Icon: ClipboardList, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
               { page: 'menu-builder', label: 'Menu Builder', desc: 'Categories, items, images and microsite visibility.', Icon: ClipboardList, tone: 'text-violet-400 border-violet-500/30 hover:border-violet-400/60', bg: 'bg-violet-500/10' },
               { page: 'kds', label: 'Kitchen Display', desc: 'Live tickets, prep timers and station filters.', Icon: ChefHat, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
               { page: 'floor', label: 'Floor & Reservations', desc: 'Tables, seating zones and guest bookings.', Icon: Armchair, tone: 'text-sky-400 border-sky-500/30 hover:border-sky-400/60', bg: 'bg-sky-500/10' },

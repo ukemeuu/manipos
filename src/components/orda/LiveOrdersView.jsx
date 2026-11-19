@@ -32,6 +32,7 @@ function classifyOrderBucket(order) {
   const status = String(order?.status || 'Pending').toLowerCase().trim();
 
   if (status === 'open' || status === 'saved') return 'open';
+  if (status === 'return pending' || status === 'return_pending' || status === 'return requested') return 'return_pending';
   if (status === 'returned' || status === 'refunded') return 'returned';
   if (status === 'void' || status === 'voided') return 'voided';
   if (status === 'cancelled' || status === 'canceled') return 'cancelled';
@@ -62,7 +63,7 @@ function classifyOrderBucket(order) {
 export function canReturnOrder(order) {
   if (!order) return false;
   const b = classifyOrderBucket(order);
-  return !['returned', 'voided', 'cancelled', 'declined'].includes(b);
+  return !['returned', 'voided', 'cancelled', 'declined', 'return_pending'].includes(b);
 }
 
 export function summarizeOrdersCumulativeTotals(orders = [], statusFilter = 'active') {
@@ -106,6 +107,7 @@ export function computeOrderBucketCounts(orders = []) {
     declined: 0,
     ready: 0,
     completed: 0,
+    return_pending: 0,
     returned: 0,
     voided: 0,
     unknown: 0,
@@ -114,7 +116,7 @@ export function computeOrderBucketCounts(orders = []) {
   orders.forEach((o) => {
     const b = classifyOrderBucket(o);
     if (counts[b] !== undefined) counts[b] += 1;
-    if (['new', 'processing', 'ready'].includes(b)) {
+    if (['new', 'processing', 'ready', 'return_pending'].includes(b)) {
       counts.active += 1;
     }
   });
@@ -169,6 +171,8 @@ function statusPillMeta(bucket, order) {
       return { label: 'Declined', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
     case 'cancelled':
       return { label: 'Cancelled', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
+    case 'return_pending':
+      return { label: 'Return Pending Approval', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
     case 'returned':
       return { label: 'Returned', cls: 'bg-orange-50 text-orange-800 border-orange-200' };
     case 'voided':
@@ -230,6 +234,9 @@ export function LiveOrdersView({
   restrictToToday = false,
   voidCompletedAllowed = true,
   voidWindowHours = 168,
+  canApproveReturns = false,
+  canUploadReceipts = false,
+  staffName = 'Staff',
   onRefresh,
   onCreateOrder,
   onResumeOpenOrder,
@@ -263,6 +270,7 @@ export function LiveOrdersView({
   const [editPaymentMethod, setEditPaymentMethod] = useState('Cash');
   const [editPaymentStatus, setEditPaymentStatus] = useState('Paid');
   const [editPaymentRef, setEditPaymentRef] = useState('');
+  const [receiptUploading, setReceiptUploading] = useState(false);
   const [editPaymentReason, setEditPaymentReason] = useState('');
   const [paymentSaving, setPaymentSaving] = useState(false);
 
@@ -552,7 +560,8 @@ export function LiveOrdersView({
   const confirmVoidOrder = async () => {
     if (!voidTarget?.id || !restaurantId) return;
     const isReturn = voidActionMode !== 'Voided';
-    const targetStatus = isReturn ? 'Returned' : 'Voided';
+    const requiresApproval = isReturn && !canApproveReturns;
+    const targetStatus = requiresApproval ? 'Return Pending' : (isReturn ? 'Returned' : 'Voided');
     const fallbackLabel = isReturn ? 'Returned by staff' : 'Voided by staff';
     const finalReason = voidReason === 'Other' ? (voidCustomReason.trim() || fallbackLabel) : voidReason;
     const lines = renderLines(voidTarget);
@@ -568,17 +577,22 @@ export function LiveOrdersView({
       const wasPaid = ['paid', 'settled', 'completed'].includes(
         String(voidTarget.payment_status || '').toLowerCase().trim()
       );
-      const targetPaymentStatus = isReturn ? (wasPaid ? 'Refunded' : 'Voided') : 'Voided';
+      const targetPaymentStatus = requiresApproval
+        ? voidTarget.payment_status
+        : (isReturn ? (wasPaid ? 'Refunded' : 'Voided') : 'Voided');
       const fullPatch = {
         status: targetStatus,
-        payment_status: targetPaymentStatus,
+        ...(targetPaymentStatus ? { payment_status: targetPaymentStatus } : {}),
         ...(isReturn ? { return_reason: finalReason } : {}),
         void_reason: finalReason,
         void_disposition: dispositionDetails,
+        ...(requiresApproval ? {
+          notes: [voidTarget.notes, `[RETURN REQUESTED by ${staffName}: ${finalReason}]`].filter(Boolean).join(' | '),
+        } : {}),
       };
       let updatedLocally = false;
       if (!voidTarget._fromPoj) {
-        const optionalCols = ['return_reason', 'void_disposition', 'void_reason', 'payment_status'];
+        const optionalCols = ['return_reason', 'void_disposition', 'void_reason', 'payment_status', 'notes'];
         let workingPatch = { ...fullPatch };
         let res = null;
         for (let i = 0; i <= optionalCols.length; i += 1) {
@@ -599,7 +613,7 @@ export function LiveOrdersView({
         if (res?.error) {
           const fallbackPatch = {
             status: targetStatus,
-            notes: [voidTarget.notes, `[${isReturn ? 'RETURN' : 'VOID'}: ${finalReason}]`].filter(Boolean).join(' | '),
+            notes: [voidTarget.notes, `[${requiresApproval ? 'RETURN REQUESTED' : (isReturn ? 'RETURN' : 'VOID')}: ${finalReason}]`].filter(Boolean).join(' | '),
           };
           const fbRes = await supabase
             .from('pos_orders')
@@ -629,13 +643,15 @@ export function LiveOrdersView({
       if (!updatedLocally && !updatedPoj) {
         throw new Error('Could not find active order record to update. Please refresh and try again.');
       }
-      processVoidOrderInventoryDisposition({
-        restaurantId,
-        order: voidTarget,
-        dispositionDetails,
-        voidReason: finalReason,
-        staffName: 'Staff',
-      });
+      if (!requiresApproval) {
+        processVoidOrderInventoryDisposition({
+          restaurantId,
+          order: voidTarget,
+          dispositionDetails,
+          voidReason: finalReason,
+          staffName: staffName || 'Staff',
+        });
+      }
       if (selectedOrder?.id === voidTarget.id) {
         setSelectedOrder((prev) => (prev ? { ...prev, ...fullPatch } : null));
       }
@@ -656,6 +672,123 @@ export function LiveOrdersView({
       alert(`Failed to ${isReturn ? 'return' : 'void'} order: ` + (err.message || err));
     } finally {
       setVoidSubmitting(false);
+    }
+  };
+
+  const approveReturnOrder = async (order) => {
+    if (!order?.id || !restaurantId || !canApproveReturns) return;
+    setTenantContext(restaurantId);
+    setUpdatingId(order.id);
+    try {
+      const wasPaid = ['paid', 'settled', 'completed'].includes(
+        String(order.payment_status || '').toLowerCase().trim()
+      );
+      const patch = {
+        status: 'Returned',
+        payment_status: wasPaid ? 'Refunded' : 'Voided',
+        notes: [order.notes, `[RETURN APPROVED by ${staffName}]`].filter(Boolean).join(' | '),
+      };
+      if (!order._fromPoj) {
+        const { error } = await supabase
+          .from('pos_orders')
+          .update(patch)
+          .eq('id', order.id)
+          .eq('restaurant_id', restaurantId);
+        if (error) throw error;
+      } else {
+        await updatePojOrderStatus({
+          tenantSlug,
+          restaurantId,
+          pojOrderId: order.source_poj_id || order.id,
+          patch,
+        });
+      }
+      const lines = renderLines(order);
+      const dispositionDetails = Array.isArray(order.void_disposition) && order.void_disposition.length > 0
+        ? order.void_disposition
+        : lines.map((l) => ({
+            item_name: l.item_name || l.name || 'Item',
+            quantity: Number(l.quantity || 1),
+            disposition: 'return_to_stock',
+          }));
+      processVoidOrderInventoryDisposition({
+        restaurantId,
+        order,
+        dispositionDetails,
+        voidReason: order.return_reason || order.void_reason || 'Approved Return',
+        staffName: staffName || 'Manager',
+      });
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : null));
+      }
+      await onRefresh?.();
+    } catch (err) {
+      alert('Failed to approve return: ' + (err.message || err));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const rejectReturnOrder = async (order) => {
+    if (!order?.id || !restaurantId || !canApproveReturns) return;
+    setTenantContext(restaurantId);
+    setUpdatingId(order.id);
+    try {
+      const restoredStatus = order.completed_at ? 'Completed' : (order.accepted_at ? 'Preparing' : 'Completed');
+      const patch = {
+        status: restoredStatus,
+        notes: [order.notes, `[RETURN REJECTED by ${staffName}]`].filter(Boolean).join(' | '),
+      };
+      if (!order._fromPoj) {
+        const { error } = await supabase
+          .from('pos_orders')
+          .update(patch)
+          .eq('id', order.id)
+          .eq('restaurant_id', restaurantId);
+        if (error) throw error;
+      } else {
+        await updatePojOrderStatus({
+          tenantSlug,
+          restaurantId,
+          pojOrderId: order.source_poj_id || order.id,
+          patch,
+        });
+      }
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : null));
+      }
+      await onRefresh?.();
+    } catch (err) {
+      alert('Failed to reject return: ' + (err.message || err));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleOrderReceiptUpload = async (order, file) => {
+    if (!order?.id || !restaurantId || !file || !canUploadReceipts) return;
+    setReceiptUploading(true);
+    setTenantContext(restaurantId);
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const path = `receipts/${restaurantId}/${order.id}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: pubData } = supabase.storage.from('menu_images').getPublicUrl(path);
+      const url = pubData?.publicUrl || '';
+      const updatedNotes = [order.notes, `[Receipt Uploaded by ${staffName}: ${url}]`].filter(Boolean).join('\n');
+      const { error: updErr } = await supabase
+        .from('pos_orders')
+        .update({ notes: updatedNotes })
+        .eq('id', order.id)
+        .eq('restaurant_id', restaurantId);
+      if (updErr) throw updErr;
+      setSelectedOrder((prev) => (prev && prev.id === order.id ? { ...prev, notes: updatedNotes } : prev));
+      await onRefresh?.();
+    } catch (err) {
+      alert('Receipt upload failed: ' + (err.message || err));
+    } finally {
+      setReceiptUploading(false);
     }
   };
 
@@ -1278,6 +1411,35 @@ export function LiveOrdersView({
                   </div>
                 )}
 
+                {bucket === 'return_pending' && (
+                  <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-40 shrink-0">
+                    {canApproveReturns ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => approveReturnOrder(order)}
+                          className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          <CheckCircle2 size={14} /> Approve Return
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => rejectReturnOrder(order)}
+                          className="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          <XCircle size={13} /> Reject
+                        </button>
+                      </>
+                    ) : (
+                      <div className="flex-1 py-3 px-3 bg-rose-50 text-rose-700 text-[11px] font-black flex items-center justify-center text-center">
+                        Awaiting Admin / Manager Approval
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {bucket === 'open' && onResumeOpenOrder && (
                   <div className="flex md:flex-col border-t md:border-t-0 md:border-l border-slate-200 md:w-36 shrink-0">
                     <button
@@ -1379,6 +1541,26 @@ export function LiveOrdersView({
                   </button>
                 </>
               )}
+              {classifyOrderBucket(selectedOrder) === 'return_pending' && canApproveReturns && (
+                <>
+                  <button
+                    type="button"
+                    disabled={updatingId === selectedOrder.id}
+                    onClick={() => approveReturnOrder(selectedOrder)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    Approve Return
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingId === selectedOrder.id}
+                    onClick={() => rejectReturnOrder(selectedOrder)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    Reject Return
+                  </button>
+                </>
+              )}
               {canVoidOrder(selectedOrder) && (
                 <button
                   type="button"
@@ -1447,6 +1629,25 @@ export function LiveOrdersView({
                 <div className="col-span-2">
                   <span className="text-slate-400 font-bold uppercase text-[10px]">M-Pesa Receipt</span>
                   <p className="font-mono font-bold text-amber-700 mt-0.5">{selectedOrder.mpesa_receipt_number}</p>
+                </div>
+              )}
+              {canUploadReceipts && (
+                <div className="col-span-2 flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
+                  <span className="text-slate-500 font-bold text-[11px]">Proof of Payment / Receipt</span>
+                  <label className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold cursor-pointer">
+                    {receiptUploading ? 'Uploading...' : 'Upload Receipt'}
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      disabled={receiptUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleOrderReceiptUpload(selectedOrder, file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
                 </div>
               )}
               {selectedOrder.notes && (
@@ -1815,8 +2016,10 @@ export function LiveOrdersView({
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black disabled:opacity-50"
               >
                 {voidSubmitting
-                  ? (voidActionMode === 'Voided' ? 'Voiding...' : 'Returning...')
-                  : (voidActionMode === 'Voided' ? 'Confirm Void Order' : 'Confirm Return Order')}
+                  ? (voidActionMode === 'Voided' ? 'Voiding...' : 'Submitting...')
+                  : (voidActionMode === 'Voided'
+                      ? 'Confirm Void Order'
+                      : (canApproveReturns ? 'Confirm Return Order' : 'Submit Return for Approval'))}
               </button>
             </div>
           </div>

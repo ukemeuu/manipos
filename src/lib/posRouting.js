@@ -162,7 +162,8 @@ export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
 
   const has = (perm) => Array.isArray(permissions) && permissions.includes(perm);
   const ids = ['orders'];
-  if (has('view_analytics')) ids.push('dashboard');
+  if (has('view_my_dashboard')) ids.push('my-dashboard');
+  if (has('view_analytics') || has('view_dashboard')) ids.push('dashboard');
   if (has('manage_offers') || has('manage_feedback') || has('manage_guests')) ids.push('customers');
   if (canAccessMenuModule({ staffUser, permissions })) ids.push('menu');
   if (has('manage_settings')) ids.push('storefront');

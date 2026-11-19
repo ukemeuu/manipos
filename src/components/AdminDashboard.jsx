@@ -83,6 +83,7 @@ const OrdaCatalogView = lazy(() => import('./orda/OrdaCatalogView').then(m => ({
 const WebPosView = lazy(() => import('./orda/WebPosView').then(m => ({ default: m.WebPosView })));
 const LocationsManagerView = lazy(() => import('./orda/LocationsManagerView').then(m => ({ default: m.LocationsManagerView })));
 const OrdaReportsView = lazy(() => import('./orda/OrdaReportsView').then(m => ({ default: m.OrdaReportsView })));
+const StaffOrdersDashboardView = lazy(() => import('./orda/StaffOrdersDashboardView').then(m => ({ default: m.StaffOrdersDashboardView })));
 const OrderAndPaymentSettingsView = lazy(() => import('./orda/OrderAndPaymentSettingsView').then(m => ({ default: m.OrderAndPaymentSettingsView })));
 const CustomersCrmView = lazy(() => import('./orda/CustomersCrmView').then(m => ({ default: m.CustomersCrmView })));
 const PromotionsVouchersLoyaltyView = lazy(() => import('./orda/PromotionsVouchersLoyaltyView').then(m => ({ default: m.PromotionsVouchersLoyaltyView })));
@@ -1490,6 +1491,7 @@ export function AdminDashboard({
     { id: 'processing', label: 'In Progress', count: bucketCounts.processing },
     { id: 'ready', label: 'Ready', count: bucketCounts.ready },
     { id: 'completed', label: 'Completed', count: bucketCounts.completed },
+    { id: 'return_pending', label: 'Return Approvals', count: bucketCounts.return_pending || 0 },
     { id: 'cancelled', label: 'Cancelled', count: bucketCounts.cancelled },
     { id: 'declined', label: 'Declined', count: bucketCounts.declined },
     { id: 'returned', label: 'Returned', count: bucketCounts.returned },
@@ -1500,7 +1502,8 @@ export function AdminDashboard({
 
   const railNavItems = [
     { id: 'orders', label: 'Orders', icon: ClipboardList, tab: 'orders', badge: bucketCounts.active },
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) },
+    { id: 'my-dashboard', label: 'My Dashboard', icon: BarChart3, tab: 'my-dashboard', visible: canDo('view_my_dashboard') || ['cashier', 'waiter'].includes(String(effectiveStaffUser?.role || '').toLowerCase()) },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) || canDo('view_dashboard') },
     { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
     { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu') },
     { id: 'storefront', label: 'Storefront', icon: Store, tab: 'storefront', visible: canDo(TAB_PERMISSION.settings) || visibleRailIds.includes('storefront') },
@@ -2377,7 +2380,15 @@ export function AdminDashboard({
               }}
               onOrderPlaced={() => fetchDashboardData({ silent: true })}
             />
-          ) : (activeTab === 'orders' || (!isAdmin && activeTab !== 'menu')) ? (
+          ) : activeTab === 'my-dashboard' ? (
+            <StaffOrdersDashboardView
+              orders={scopedOrders}
+              staffName={pinStaffName}
+              staffId={effectiveStaffUser?.id || null}
+              staffRole={effectiveStaffUser?.role || 'staff'}
+              canViewPreviousDays={canViewPreviousDays}
+            />
+          ) : (activeTab === 'orders' || (!isAdmin && !['menu', 'reports', 'inventory', 'my-dashboard'].includes(activeTab))) ? (
             <LiveOrdersView
               orders={orders}
               restaurantId={activeRestaurantId}
@@ -2388,6 +2399,9 @@ export function AdminDashboard({
               restrictToToday={!canViewPreviousDays}
               voidCompletedAllowed={settings.void_completed_allowed !== false}
               voidWindowHours={settings.void_window_hours ?? 168}
+              canApproveReturns={isAdmin || String(effectiveStaffUser?.role || '').toLowerCase() === 'manager' || canDo('approve_returns')}
+              canUploadReceipts={isAdmin || canDo('upload_receipts')}
+              staffName={pinStaffName}
               onRefresh={() => fetchDashboardData({ silent: true })}
               onFetchDateRange={handleFetchDateRange}
               onCreateOrder={() => {
