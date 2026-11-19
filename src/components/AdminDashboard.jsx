@@ -100,7 +100,7 @@ const FeedbackDashboardView = lazy(() => import('./FeedbackDashboardView').then(
 import { applyOrderStatusUpdate, fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 import { authenticateStaffQuickPin } from '../services/data/staffService';
 import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
-import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, printZReport, printCashierSlips } from '../lib/posPrintService';
+import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, getAutoPrintPrefs, setAutoPrintPrefs, printZReport, printCashierSlips } from '../lib/posPrintService';
 import {
   getBusinessDayStartIso,
   fetchActiveShift,
@@ -236,6 +236,7 @@ export function AdminDashboard({
   const [qzPrinters, setQzPrinters] = useState([]);
   const [printerModalOpen, setPrinterModalOpen] = useState(false);
   const [printerPrefs, setPrinterPrefsState] = useState(() => getPrinterPrefs());
+  const [autoPrintPrefs, setAutoPrintPrefsState] = useState(() => getAutoPrintPrefs());
   const [autoAcceptOrders, setAutoAcceptOrders] = useState(() => {
     try {
       return localStorage.getItem('pos_auto_accept_orders') === 'true';
@@ -4752,6 +4753,36 @@ export function AdminDashboard({
               </div>
             </div>
 
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">After Place Order</p>
+              <label className="flex items-start gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoPrintPrefs.autoReceipt}
+                  onChange={(e) => {
+                    const next = { ...autoPrintPrefs, autoReceipt: e.target.checked };
+                    setAutoPrintPrefsState(next);
+                    setAutoPrintPrefs(next);
+                  }}
+                  className="mt-0.5 rounded border-slate-300 text-amber-600 cursor-pointer"
+                />
+                <span>Print the customer receipt automatically</span>
+              </label>
+              <label className="flex items-start gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoPrintPrefs.autoKot}
+                  onChange={(e) => {
+                    const next = { ...autoPrintPrefs, autoKot: e.target.checked };
+                    setAutoPrintPrefsState(next);
+                    setAutoPrintPrefs(next);
+                  }}
+                  className="mt-0.5 rounded border-slate-300 text-amber-600 cursor-pointer"
+                />
+                <span>Print the kitchen docket (KOT) automatically too</span>
+              </label>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
               <div className="flex items-center gap-2">
                 <button
@@ -4784,6 +4815,7 @@ export function AdminDashboard({
                 type="button"
                 onClick={() => {
                   setPrinterPrefs(printerPrefs);
+                  setAutoPrintPrefs(autoPrintPrefs);
                   setPrinterModalOpen(false);
                 }}
                 className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black cursor-pointer"

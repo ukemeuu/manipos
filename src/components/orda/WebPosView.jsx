@@ -9,7 +9,7 @@ import { resolveEffectivePrice } from '../../lib/tenantConfig';
 import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
-import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
+import { printCashierSlips, printKitchenSlips, printAllOrderSlips, autoPrintOrder } from '../../lib/posPrintService';
 import { attachLineCosting, insertOrderItems, resolveChannelCommissionWithFallback } from '../../lib/productCosting';
 import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
 import {
@@ -45,6 +45,7 @@ const PAYMENT_TENDERS = [
   { id: 'Cash', label: 'Cash', aliases: ['Cash'], icon: Banknote },
   { id: 'Card', label: 'Card', aliases: ['CARD', 'Card / PDQ', 'Credit Card', 'Debit Card'], icon: CreditCard },
   { id: 'Paid to App', label: 'Paid to App', aliases: ['Paid to App'], icon: GlobeIcon },
+  { id: 'Split Payment', label: 'Split Payment', aliases: ['Split', 'Split Tender', 'Split Payment'], icon: Layers },
 ];
 
 function GlobeIcon(props) {
@@ -704,6 +705,7 @@ export function WebPosView({
   const appliedDeliveryFee = Math.max(0, rawDeliveryFee - (promoEval.valid ? promoEval.deliveryDiscount : 0));
 
   const availableTenders = useMemo(() => {
+    const splitTender = PAYMENT_TENDERS.find((t) => t.id === 'Split Payment');
     if (!Array.isArray(tendersConfig) || tendersConfig.length === 0) return PAYMENT_TENDERS;
     const enabledSet = new Set(
       tendersConfig
@@ -717,7 +719,10 @@ export function WebPosView({
         enabledSet.has(t.label.toLowerCase()) ||
         (t.aliases || []).some((a) => enabledSet.has(a.toLowerCase()))
     );
-    return filtered.length > 0 ? filtered : PAYMENT_TENDERS;
+    if (filtered.length === 0) return PAYMENT_TENDERS;
+    // Split is a POS behaviour rather than a tender a store configures, so it is
+    // always offered even when the tenant only enables Cash / M-Pesa / Card.
+    return filtered.some((t) => t.id === 'Split Payment') ? filtered : [...filtered, splitTender];
   }, [tendersConfig]);
 
   const chargesComputation = useMemo(
@@ -791,6 +796,20 @@ export function WebPosView({
       }
     }
 
+    if (!saveAsOpen && paymentTender === 'Split Payment') {
+      const splitTotal = Number(splitCash || 0) + Number(splitMpesa || 0) + Number(splitCard || 0);
+      if (splitTotal <= 0) {
+        setErrorMsg('Enter how much was paid in cash, M-Pesa and card for this split payment.');
+        return;
+      }
+      if (Math.abs(splitTotal - grandTotal) > 0.5) {
+        setErrorMsg(
+          `Split amounts must add up to KES ${grandTotal.toLocaleString()} (entered KES ${splitTotal.toLocaleString()}).`
+        );
+        return;
+      }
+    }
+
     submittingRef.current = true;
     setErrorMsg('');
     setSubmitting(true);
@@ -798,11 +817,14 @@ export function WebPosView({
       setTenantContext(restaurantId);
       const diningVal = diningMode === 'Pickup' ? 'Takeaway' : diningMode;
       const isSettledNow = !saveAsOpen && paymentTender !== 'Paid to App';
-      const resolvedSplitText = splitBreakdown.trim() || [
+      const splitAmountsText = [
         Number(splitCash || 0) > 0 ? `Cash (KES ${Number(splitCash).toLocaleString()})` : '',
         Number(splitMpesa || 0) > 0 ? `M-Pesa (KES ${Number(splitMpesa).toLocaleString()})` : '',
         Number(splitCard || 0) > 0 ? `Card (KES ${Number(splitCard).toLocaleString()})` : '',
       ].filter(Boolean).join(' + ');
+      // Keep the amounts even when the cashier writes a note: the shift
+      // reconciliation reads them back to split the sale per tender.
+      const resolvedSplitText = [splitAmountsText, splitBreakdown.trim()].filter(Boolean).join(' · ');
 
       const noteParts = [
         orderInstructions.trim(),
@@ -868,6 +890,9 @@ export function WebPosView({
           status: saveAsOpen ? 'Open' : 'Completed',
           receipt: receiptSnap,
         });
+        if (!saveAsOpen) {
+          autoPrintOrder(receiptSnap).catch((err) => console.warn('Auto print failed:', err));
+        }
         if (onOrderPlaced) onOrderPlaced();
         return;
       }
@@ -1047,6 +1072,7 @@ export function WebPosView({
       }
 
       const receiptSnapshot = {
+        id: orderData.id,
         ticketNumber: orderData.ticket_number,
         customerName: customerName.trim() || 'Walk-in Guest',
         customerPhone: customerPhone.trim() || '',
@@ -1088,6 +1114,10 @@ export function WebPosView({
         status: saveAsOpen ? 'Open' : 'Processing',
         receipt: receiptSnapshot,
       });
+      if (!saveAsOpen) {
+        // The receipt should leave the printer without the cashier tapping anything.
+        autoPrintOrder(receiptSnapshot).catch((err) => console.warn('Auto print failed:', err));
+      }
       draftIdempotencyKeyRef.current = null;
       createdOrderRef.current = null;
       setCart([]);

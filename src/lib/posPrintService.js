@@ -49,6 +49,52 @@ export function setPrinterPrefs({ frontDeskPrinter, kitchenPrinter }) {
   } catch (_) {}
 }
 
+const AUTO_PRINT_RECEIPT_KEY = 'pos_auto_print_receipt';
+const AUTO_PRINT_KOT_KEY = 'pos_auto_print_kot';
+
+/**
+ * Auto-print preferences for the POS "Place Order" flow.
+ * The customer receipt is on unless a cashier has explicitly turned it off;
+ * the kitchen docket is opt-in so stores without a kitchen printer do not
+ * get a second copy on the receipt printer.
+ */
+export function getAutoPrintPrefs() {
+  try {
+    return {
+      autoReceipt: localStorage.getItem(AUTO_PRINT_RECEIPT_KEY) !== 'false',
+      autoKot: localStorage.getItem(AUTO_PRINT_KOT_KEY) === 'true',
+    };
+  } catch (_) {
+    return { autoReceipt: true, autoKot: false };
+  }
+}
+
+export function setAutoPrintPrefs({ autoReceipt, autoKot }) {
+  try {
+    if (autoReceipt !== undefined) {
+      localStorage.setItem(AUTO_PRINT_RECEIPT_KEY, autoReceipt ? 'true' : 'false');
+    }
+    if (autoKot !== undefined) {
+      localStorage.setItem(AUTO_PRINT_KOT_KEY, autoKot ? 'true' : 'false');
+    }
+  } catch (_) {}
+}
+
+/**
+ * Prints the slips a cashier expects immediately after "Place Order".
+ * Uses the same printers/locks as the manual buttons, so an auto print
+ * followed by a manual tap cannot produce two copies.
+ */
+export async function autoPrintOrder(receipt, prefs = null) {
+  const { autoReceipt, autoKot } = prefs || getAutoPrintPrefs();
+  if (!autoReceipt && !autoKot) return false;
+  const jobs = [];
+  if (autoReceipt) jobs.push(printCashierSlips(receipt));
+  if (autoKot) jobs.push(printKitchenSlips(receipt));
+  const results = await Promise.allSettled(jobs);
+  return results.some((r) => r.status === 'fulfilled' && r.value);
+}
+
 export async function loadReceiptBrandForTenant(restaurantId, fallbackName = 'ManiPOS') {
   if (!restaurantId) return getReceiptBrand();
   try {
