@@ -1634,9 +1634,7 @@ export function MenuMicrosite({ onBack, onStaffLogin, onAdminLogin, defaultBrand
                 });
             }
 
-            const { error: itemsError } = await supabase
-                .from('pos_order_items')
-                .insert(itemPayloads);
+            const { error: itemsError } = await insertOrderItems(supabase, itemPayloads);
 
             if (itemsError) throw itemsError;
 

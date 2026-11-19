@@ -99,7 +99,7 @@ import { getTenantInfo } from '../lib/tenant';
 const FeedbackDashboardView = lazy(() => import('./FeedbackDashboardView').then(m => ({ default: m.FeedbackDashboardView })));
 import { applyOrderStatusUpdate, fetchPojOrdersForRange, mergeOrdersWithPoj } from '../services/data/pojSyncService';
 import { authenticateStaffQuickPin } from '../services/data/staffService';
-import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds } from '../lib/posRouting';
+import { isAdminAccount, resolveOrdaEntryState, getVisibleOrdaRailIds, buildAppUrl } from '../lib/posRouting';
 import { loadReceiptBrandForTenant, getPrinterPrefs, setPrinterPrefs, getAutoPrintPrefs, setAutoPrintPrefs, printZReport, printCashierSlips } from '../lib/posPrintService';
 import {
   getBusinessDayStartIso,
@@ -2022,21 +2022,21 @@ export function AdminDashboard({
               <div className="pt-3 mt-2 border-t border-slate-100 space-y-1">
                 <button
                   type="button"
-                  onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = '/?page=inventory')}
+                  onClick={() => onOpenModule ? onOpenModule('inventory') : (window.location.href = buildAppUrl('inventory', { tab: null }))}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
                 >
                   <Package size={14} /> Quick Stock Hub →
                 </button>
                 <button
                   type="button"
-                  onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = '/?page=kds')}
+                  onClick={() => onOpenModule ? onOpenModule('kds') : (window.location.href = buildAppUrl('kds', { tab: null }))}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
                 >
                   <ChefHat size={14} /> Kitchen Display →
                 </button>
                 <button
                   type="button"
-                  onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor')}
+                  onClick={() => onOpenModule ? onOpenModule('floor') : (window.location.href = buildAppUrl('floor', { tab: null }))}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
                 >
                   <Armchair size={14} /> Floor & Reservations →
@@ -2504,7 +2504,7 @@ export function AdminDashboard({
               branches={branches}
               settings={settings}
               onSettingsUpdated={fetchDashboardData}
-              onOpenFloorPlan={() => (onOpenModule ? onOpenModule('floor') : (window.location.href = '/?page=floor'))}
+              onOpenFloorPlan={() => (onOpenModule ? onOpenModule('floor') : (window.location.href = buildAppUrl('floor', { tab: null })))}
             />
           ) : activeTab === 'team-roles' || activeTab === 'account' ? (
             <TeamRolesAndAccountView

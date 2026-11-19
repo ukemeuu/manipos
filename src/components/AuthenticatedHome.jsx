@@ -12,9 +12,9 @@ import {
   Armchair,
   Package,
   ClipboardList,
-  Link2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { buildAppUrl } from '../lib/posRouting';
 
 export function AuthenticatedHome({ 
   restaurantName, 
@@ -156,23 +156,28 @@ export function AuthenticatedHome({
               { page: 'kds', label: 'Kitchen Display', desc: 'Live tickets, prep timers and station filters.', Icon: ChefHat, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
               { page: 'floor', label: 'Floor & Reservations', desc: 'Tables, seating zones and guest bookings.', Icon: Armchair, tone: 'text-sky-400 border-sky-500/30 hover:border-sky-400/60', bg: 'bg-sky-500/10' },
               { page: 'inventory', label: 'Inventory & Recipes', desc: 'Stock levels, reorder alerts and recipe links.', Icon: Package, tone: 'text-amber-400 border-amber-400/30 hover:border-amber-400/60', bg: 'bg-amber-400/10' },
-              { url: '/?page=dashboard&tab=guest-crm', page: 'crm', label: 'Guest CRM & Retention', desc: 'Guest directory, VIP tags, visits, retention & feedback.', Icon: UserCheck, tone: 'text-teal-400 border-teal-500/30 hover:border-teal-400/60', bg: 'bg-teal-500/10' },
-              { url: '/?page=dashboard&tab=hr-admin', page: 'hr', label: 'Staff HR & Approvals', desc: 'Leave, overtime, advances, loans, warnings & checklists.', Icon: UserCheck, tone: 'text-indigo-400 border-indigo-500/30 hover:border-indigo-400/60', bg: 'bg-indigo-500/10' },
-              { url: '/?page=dashboard&tab=fpa-expenses', page: 'accountant', label: 'Accountant & Expenses', desc: 'Gross sales P&L, operating expenses & department budgets.', Icon: Building2, tone: 'text-rose-400 border-rose-500/30 hover:border-rose-400/60', bg: 'bg-rose-500/10' },
-              { url: '/?page=dashboard&tab=staff-portal', page: 'staff-portal', label: 'My Staff Portal', desc: 'Leave, loans, salary advances, shifts, HR signatures & ID card.', Icon: Sparkles, tone: 'text-lime-400 border-lime-500/30 hover:border-lime-400/60', bg: 'bg-lime-500/10' },
-              { url: '/?page=dashboard&tab=poj-sync', page: 'poj-sync', label: 'Data Migration & Sync', desc: 'Import staff accounts, loans, leave, CRM & keep stores linked.', Icon: Link2, tone: 'text-amber-400 border-amber-500/30 hover:border-amber-400/60', bg: 'bg-amber-500/10' },
+              { dashboardTab: 'customers', page: 'crm', label: 'Guest CRM & Retention', desc: 'Guest directory, VIP tags, visits, retention & feedback.', Icon: UserCheck, tone: 'text-teal-400 border-teal-500/30 hover:border-teal-400/60', bg: 'bg-teal-500/10' },
+              { dashboardTab: 'hr-admin', page: 'hr', label: 'Staff HR & Approvals', desc: 'Leave, overtime, advances, loans, warnings & checklists.', Icon: UserCheck, tone: 'text-indigo-400 border-indigo-500/30 hover:border-indigo-400/60', bg: 'bg-indigo-500/10' },
+              { dashboardTab: 'fpa-expenses', page: 'accountant', label: 'Accountant & Expenses', desc: 'Gross sales P&L, operating expenses & department budgets.', Icon: Building2, tone: 'text-rose-400 border-rose-500/30 hover:border-rose-400/60', bg: 'bg-rose-500/10' },
+              { dashboardTab: 'staff-portal', page: 'staff-portal', label: 'My Staff Portal', desc: 'Leave, loans, salary advances, shifts, HR signatures & ID card.', Icon: Sparkles, tone: 'text-lime-400 border-lime-500/30 hover:border-lime-400/60', bg: 'bg-lime-500/10' },
             ].map((mod) => (
               <motion.button
                 key={mod.page}
                 whileHover={{ scale: 1.02, y: -3 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => {
-                  if (mod.url) {
-                    window.location.href = mod.url;
+                  if (mod.dashboardTab) {
+                    const nextUrl = buildAppUrl('dashboard', { tab: mod.dashboardTab });
+                    window.history.pushState({}, '', nextUrl);
+                    try {
+                      window.dispatchEvent(new PopStateEvent('popstate'));
+                    } catch (_) {
+                      window.dispatchEvent(new Event('popstate'));
+                    }
                   } else if (onOpenModule) {
                     onOpenModule(mod.page);
                   } else {
-                    window.location.href = `/?page=${mod.page}`;
+                    window.location.href = buildAppUrl(mod.page, { tab: null });
                   }
                 }}
                 className={`bg-slate-900/80 border ${mod.tone} p-5 rounded-2xl text-left transition-all cursor-pointer group`}
