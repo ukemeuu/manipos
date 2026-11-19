@@ -51,6 +51,7 @@ const RouteFallback = () => (
 
 const PAGE_ROUTES = {
   superadmin: 'superadmin',
+  invoices: 'trader-invoices',
   app: 'app',
   onboarding: 'onboarding',
   dashboard: 'dashboard',

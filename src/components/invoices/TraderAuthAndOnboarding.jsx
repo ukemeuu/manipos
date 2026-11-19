@@ -15,25 +15,45 @@ export function TraderAuthScreen({ onSignedIn }) {
     setError('');
     setNotice('');
     setBusy(true);
+    const redirectOrigin =
+      typeof window !== 'undefined' && !window.location.origin.includes('localhost')
+        ? window.location.origin
+        : 'https://manipos.com';
+    const emailRedirectTo = `${redirectOrigin}/?page=invoices`;
+
     try {
       if (mode === 'magic') {
-        const { error: err } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-          options: { emailRedirectTo: `${window.location.origin}/#/invoices` },
+        const { data: fnData, error: fnErr } = await supabase.functions.invoke('send-trader-auth-email', {
+          body: { email: email.trim(), mode: 'magic', redirectTo: emailRedirectTo },
         });
-        if (err) throw err;
-        setNotice('Check your email for a 1-click sign-in link.');
+        if (fnErr || fnData?.error) {
+          const { error: err } = await supabase.auth.signInWithOtp({
+            email: email.trim(),
+            options: { emailRedirectTo },
+          });
+          if (err) throw err;
+        }
+        setNotice('Check your email for a 1-click ManiPOS sign-in link.');
       } else if (mode === 'signup') {
-        const { data, error: err } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
+        const { data: fnData, error: fnErr } = await supabase.functions.invoke('send-trader-auth-email', {
+          body: { email: email.trim(), password, mode: 'signup', redirectTo: emailRedirectTo },
         });
-        if (err) throw err;
-        if (data?.user && data?.session) {
-          onSignedIn?.(data.session);
-        } else {
-          setNotice('Account created! Check your email to confirm, or sign in below.');
+        if (!fnErr && !fnData?.error) {
+          setNotice('Verification email sent from ManiPOS! Check your inbox and click Verify Email.');
           setMode('signin');
+        } else {
+          const { data, error: err } = await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: { emailRedirectTo },
+          });
+          if (err) throw err;
+          if (data?.user && data?.session) {
+            onSignedIn?.(data.session);
+          } else {
+            setNotice('Account created! Check your email to verify, then sign in.');
+            setMode('signin');
+          }
         }
       } else {
         const { data, error: err } = await supabase.auth.signInWithPassword({
