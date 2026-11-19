@@ -9,7 +9,16 @@ import { resolveEffectivePrice } from '../../lib/tenantConfig';
 import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
-import { printCashierSlips, printKitchenSlips, printAllOrderSlips, autoPrintOrder } from '../../lib/posPrintService';
+import { printCashierSlips, printKitchenSlips, printAllOrderSlips, autoPrintOrder, printGuestReceipts, autoPrintGuestReceipts, getAutoPrintPrefs } from '../../lib/posPrintService';
+import {
+  GUEST_SPLIT_METHODS,
+  isPaybillMethod,
+  cartLineKey,
+  makeGuestRow,
+  splitTotalEqually,
+  buildGuestReceipts,
+  buildSplitNote,
+} from '../../lib/posSplitPayment';
 import { attachLineCosting, insertOrderItems, resolveChannelCommissionWithFallback } from '../../lib/productCosting';
 import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
 import {
@@ -245,6 +254,14 @@ export function WebPosView({
   const [splitCash, setSplitCash] = useState('');
   const [splitMpesa, setSplitMpesa] = useState('');
   const [splitCard, setSplitCard] = useState('');
+  const [splitImRef, setSplitImRef] = useState('');
+  // Two different things can be "split":
+  //   guests -> the bill is divided between diners (one receipt each)
+  //   tender -> one guest pays part cash/card and part I&M Paybill
+  const [splitMode, setSplitMode] = useState('guests');
+  const [splitGuests, setSplitGuests] = useState(() => [makeGuestRow(0), makeGuestRow(1)]);
+  const [guestItemMap, setGuestItemMap] = useState({});
+  const [showGuestItems, setShowGuestItems] = useState(false);
   const [sendStk, setSendStk] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -743,6 +760,79 @@ export function WebPosView({
     subtotal - discountAmount + appliedDeliveryFee + Number(packagingFee || 0) + chargesComputation.totalChargesAndTax
   );
 
+  const guestSplitEntered = useMemo(
+    () => splitGuests.reduce((sum, g) => sum + Number(g.amount || 0), 0),
+    [splitGuests]
+  );
+  const tenderSplitEntered = useMemo(
+    () => Number(splitCash || 0) + Number(splitMpesa || 0) + Number(splitCard || 0),
+    [splitCash, splitMpesa, splitCard]
+  );
+
+  // Item assignment is optional: when a diner's items are tagged, their share
+  // is derived from those items (shared dishes split evenly) and scaled to the
+  // grand total so discounts/taxes are apportioned too.
+  const guestItemShares = useMemo(() => {
+    const count = splitGuests.length;
+    if (count === 0 || cart.length === 0) return null;
+    const anyAssigned = Object.values(guestItemMap).some((v) => v != null);
+    if (!anyAssigned) return null;
+
+    const totals = new Array(count).fill(0);
+    let sharedTotal = 0;
+    cart.forEach((line) => {
+      const lineTotal = Number(line.unitPrice || 0) * Number(line.quantity || 1);
+      const owner = guestItemMap[cartLineKey(line)];
+      if (owner != null && totals[owner] != null) totals[owner] += lineTotal;
+      else sharedTotal += lineTotal;
+    });
+    if (sharedTotal > 0) {
+      const each = sharedTotal / count;
+      for (let i = 0; i < count; i += 1) totals[i] += each;
+    }
+
+    const raw = totals.reduce((s, v) => s + v, 0);
+    const scale = raw > 0 ? grandTotal / raw : 0;
+    const scaled = totals.map((v) => Math.round(v * scale));
+    const drift = Math.round(grandTotal) - scaled.reduce((s, v) => s + v, 0);
+    if (scaled.length > 0 && drift !== 0) scaled[scaled.length - 1] += drift;
+    return scaled;
+  }, [cart, guestItemMap, splitGuests.length, grandTotal]);
+
+  const updateGuest = (index, patch) => {
+    setSplitGuests((prev) => prev.map((g, i) => (i === index ? { ...g, ...patch } : g)));
+  };
+
+  const addGuest = () => {
+    setSplitGuests((prev) => [...prev, makeGuestRow(prev.length)]);
+  };
+
+  const removeGuest = (index) => {
+    if (splitGuests.length <= 2) return;
+    setSplitGuests((prev) => prev.filter((_, i) => i !== index));
+    // Re-index item assignments so they stay pointed at the right person.
+    setGuestItemMap((map) => {
+      const updated = {};
+      Object.entries(map).forEach(([key, owner]) => {
+        if (owner === index) return;
+        updated[key] = owner > index ? owner - 1 : owner;
+      });
+      return updated;
+    });
+  };
+
+  const splitGuestsEqually = () => {
+    const shares = splitTotalEqually(grandTotal, splitGuests.length);
+    setSplitGuests((prev) => prev.map((g, i) => ({ ...g, amount: String(shares[i] ?? 0) })));
+  };
+
+  const applyGuestItemShares = () => {
+    if (!guestItemShares) return;
+    setSplitGuests((prev) =>
+      prev.map((g, i) => ({ ...g, amount: String(guestItemShares[i] ?? g.amount) }))
+    );
+  };
+
   const handleApplyPromo = async () => {
     setPromoError('');
     const code = promoCode.trim().toUpperCase();
@@ -777,6 +867,19 @@ export function WebPosView({
     setAppliedDiscount(data);
   };
 
+  const autoPrintSplitOrOrder = (receipt, guestReceipts = []) => {
+    const perGuest = Array.isArray(guestReceipts) ? guestReceipts.filter(Boolean) : [];
+    const job = perGuest.length > 0
+      ? autoPrintGuestReceipts(perGuest).then(async (printed) => {
+        if (getAutoPrintPrefs().autoKot) {
+          await printKitchenSlips(receipt).catch(() => false);
+        }
+        return printed;
+      })
+      : autoPrintOrder(receipt);
+    job.catch((err) => console.warn('Auto print failed:', err));
+  };
+
   const handleSubmitOrder = async ({ saveAsOpen = false }) => {
     // Synchronous guard prevents rapid double/multi-taps from firing parallel inserts
     if (submittingRef.current) return;
@@ -797,16 +900,45 @@ export function WebPosView({
     }
 
     if (!saveAsOpen && paymentTender === 'Split Payment') {
-      const splitTotal = Number(splitCash || 0) + Number(splitMpesa || 0) + Number(splitCard || 0);
-      if (splitTotal <= 0) {
-        setErrorMsg('Enter how much was paid in cash, M-Pesa and card for this split payment.');
-        return;
-      }
-      if (Math.abs(splitTotal - grandTotal) > 0.5) {
-        setErrorMsg(
-          `Split amounts must add up to KES ${grandTotal.toLocaleString()} (entered KES ${splitTotal.toLocaleString()}).`
+      if (splitMode === 'guests') {
+        if (splitGuests.length < 2) {
+          setErrorMsg('A split between guests needs at least two guests.');
+          return;
+        }
+        if (splitGuests.some((g) => Number(g.amount || 0) <= 0)) {
+          setErrorMsg('Enter an amount for every guest, or remove the unused guest row.');
+          return;
+        }
+        if (Math.abs(guestSplitEntered - grandTotal) > 0.5) {
+          setErrorMsg(
+            `Guest shares must add up to KES ${grandTotal.toLocaleString()} (entered KES ${guestSplitEntered.toLocaleString()}).`
+          );
+          return;
+        }
+        const missingRef = splitGuests.find(
+          (g) => isPaybillMethod(g.method) && String(g.reference || '').trim().length < 4
         );
-        return;
+        if (missingRef) {
+          setErrorMsg(
+            `Enter the I&M Paybill reference for ${missingRef.name || 'the guest paying by Paybill'} (at least 4 characters).`
+          );
+          return;
+        }
+      } else {
+        if (tenderSplitEntered <= 0) {
+          setErrorMsg('Enter how much was paid in cash, I&M Paybill and card for this split payment.');
+          return;
+        }
+        if (Math.abs(tenderSplitEntered - grandTotal) > 0.5) {
+          setErrorMsg(
+            `Split amounts must add up to KES ${grandTotal.toLocaleString()} (entered KES ${tenderSplitEntered.toLocaleString()}).`
+          );
+          return;
+        }
+        if (Number(splitMpesa || 0) > 0 && String(splitImRef || '').trim().length < 4) {
+          setErrorMsg('Enter the I&M Paybill reference for the Paybill amount (at least 4 characters).');
+          return;
+        }
       }
     }
 
@@ -817,14 +949,18 @@ export function WebPosView({
       setTenantContext(restaurantId);
       const diningVal = diningMode === 'Pickup' ? 'Takeaway' : diningMode;
       const isSettledNow = !saveAsOpen && paymentTender !== 'Paid to App';
-      const splitAmountsText = [
-        Number(splitCash || 0) > 0 ? `Cash (KES ${Number(splitCash).toLocaleString()})` : '',
-        Number(splitMpesa || 0) > 0 ? `M-Pesa (KES ${Number(splitMpesa).toLocaleString()})` : '',
-        Number(splitCard || 0) > 0 ? `Card (KES ${Number(splitCard).toLocaleString()})` : '',
-      ].filter(Boolean).join(' + ');
+      const isGuestSplit = paymentTender === 'Split Payment' && splitMode === 'guests';
       // Keep the amounts even when the cashier writes a note: the shift
       // reconciliation reads them back to split the sale per tender.
-      const resolvedSplitText = [splitAmountsText, splitBreakdown.trim()].filter(Boolean).join(' · ');
+      const resolvedSplitText = buildSplitNote({
+        mode: splitMode,
+        guests: splitGuests,
+        cash: splitCash,
+        paybill: splitMpesa,
+        paybillRef: splitImRef,
+        card: splitCard,
+        notes: splitBreakdown,
+      });
 
       const noteParts = [
         orderInstructions.trim(),
@@ -883,15 +1019,26 @@ export function WebPosView({
           })),
         };
 
+        const guestReceipts = isGuestSplit
+          ? buildGuestReceipts({
+            baseReceipt: receiptSnap,
+            guests: splitGuests,
+            orderTotal: grandTotal,
+            cart,
+            assignments: guestItemMap,
+          })
+          : [];
+
         setPlacedOrder({
           id: initialOrder.id,
           ticketNumber: initialOrder.ticket_number || 'UPDATED',
           total: grandTotal,
           status: saveAsOpen ? 'Open' : 'Completed',
           receipt: receiptSnap,
+          receipts: guestReceipts,
         });
         if (!saveAsOpen) {
-          autoPrintOrder(receiptSnap).catch((err) => console.warn('Auto print failed:', err));
+          autoPrintSplitOrOrder(receiptSnap, guestReceipts);
         }
         if (onOrderPlaced) onOrderPlaced();
         return;
@@ -1107,16 +1254,27 @@ export function WebPosView({
         branch: activeBranch?.name || 'Main Branch',
       };
 
+      const guestReceipts = isGuestSplit
+        ? buildGuestReceipts({
+          baseReceipt: receiptSnapshot,
+          guests: splitGuests,
+          orderTotal: grandTotal,
+          cart,
+          assignments: guestItemMap,
+        })
+        : [];
+
       setPlacedOrder({
         id: orderData.id,
         ticketNumber: orderData.ticket_number,
         total: grandTotal,
         status: saveAsOpen ? 'Open' : 'Processing',
         receipt: receiptSnapshot,
+        receipts: guestReceipts,
       });
       if (!saveAsOpen) {
         // The receipt should leave the printer without the cashier tapping anything.
-        autoPrintOrder(receiptSnapshot).catch((err) => console.warn('Auto print failed:', err));
+        autoPrintSplitOrOrder(receiptSnapshot, guestReceipts);
       }
       draftIdempotencyKeyRef.current = null;
       createdOrderRef.current = null;
@@ -1147,14 +1305,25 @@ export function WebPosView({
 
         {placedOrder.receipt && (
           <div className="flex flex-wrap items-center justify-center gap-2 mt-5 p-3 rounded-xl bg-slate-50 border border-slate-200">
-            <button
-              type="button"
-              onClick={() => printCashierSlips(placedOrder.receipt)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Print Customer Receipt
-            </button>
+            {Array.isArray(placedOrder.receipts) && placedOrder.receipts.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => printGuestReceipts(placedOrder.receipts)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print {placedOrder.receipts.length} Guest Receipts
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => printCashierSlips(placedOrder.receipt)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print Customer Receipt
+              </button>
+            )}
             <button
               type="button"
               onClick={() => printKitchenSlips(placedOrder.receipt)}
@@ -1185,7 +1354,12 @@ export function WebPosView({
               setSplitCash('');
               setSplitMpesa('');
               setSplitCard('');
+              setSplitImRef('');
               setSplitBreakdown('');
+              setSplitMode('guests');
+              setSplitGuests([makeGuestRow(0), makeGuestRow(1)]);
+              setGuestItemMap({});
+              setShowGuestItems(false);
               setAppliedDiscount(null);
               setPromoCode('');
               setManualDiscountValue('');
@@ -1930,70 +2104,258 @@ export function WebPosView({
 
               {paymentTender === 'Split Payment' && (
                 <div className="space-y-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('guests')}
+                      className={`px-2.5 py-2 rounded-xl border text-left transition cursor-pointer ${splitMode === 'guests'
+                        ? 'bg-amber-50 border-amber-400 text-slate-950 ring-1 ring-amber-400'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                    >
+                      <span className="block text-[11px] font-black">Between Guests</span>
+                      <span className="block text-[10px] font-semibold text-slate-500">One receipt per person</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('tender')}
+                      className={`px-2.5 py-2 rounded-xl border text-left transition cursor-pointer ${splitMode === 'tender'
+                        ? 'bg-amber-50 border-amber-400 text-slate-950 ring-1 ring-amber-400'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                    >
+                      <span className="block text-[11px] font-black">By Payment Method</span>
+                      <span className="block text-[10px] font-semibold text-slate-500">Cash/card + I&amp;M Paybill</span>
+                    </button>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <label className="block text-[11px] font-bold uppercase text-slate-500">
-                      Split Breakdown (KES)
+                      {splitMode === 'guests' ? `Guests (${splitGuests.length}) — KES` : 'Split Breakdown (KES)'}
                     </label>
                     {(() => {
-                      const entered =
-                        Number(splitCash || 0) + Number(splitMpesa || 0) + Number(splitCard || 0);
-                      const diff = grandTotal - entered;
-                      return entered > 0 ? (
+                      const entered = splitMode === 'guests' ? guestSplitEntered : tenderSplitEntered;
+                      const diff = Math.round((grandTotal - entered) * 100) / 100;
+                      if (entered <= 0) return null;
+                      return (
                         <span
-                          className={`text-[11px] font-bold ${diff === 0 ? 'text-amber-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
+                          className={`text-[11px] font-bold ${Math.abs(diff) <= 0.5 ? 'text-emerald-700' : diff > 0 ? 'text-amber-700' : 'text-rose-600'
                             }`}
                         >
-                          {diff === 0
+                          {Math.abs(diff) <= 0.5
                             ? 'Matched exact total'
                             : diff > 0
                               ? `Remaining: KES ${diff.toLocaleString()}`
                               : `Over by: KES ${Math.abs(diff).toLocaleString()}`}
                         </span>
-                      ) : null;
+                      );
                     })()}
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 mb-1">Cash</span>
+
+                  {splitMode === 'guests' ? (
+                    <div className="space-y-2">
+                      {splitGuests.map((guest, index) => (
+                        <div key={index} className="p-2 rounded-lg bg-white border border-slate-200 space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={guest.name}
+                              onChange={(e) => updateGuest(index, { name: e.target.value })}
+                              placeholder={`Guest ${index + 1}`}
+                              className="w-24 shrink-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              value={guest.amount}
+                              onChange={(e) => updateGuest(index, { amount: e.target.value })}
+                              placeholder="0"
+                              className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-black text-slate-900"
+                            />
+                            <select
+                              value={guest.method}
+                              onChange={(e) => updateGuest(index, {
+                                method: e.target.value,
+                                reference: isPaybillMethod(e.target.value) ? guest.reference : '',
+                              })}
+                              className="w-28 shrink-0 bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1.5 text-[11px] font-bold text-slate-900"
+                            >
+                              {GUEST_SPLIT_METHODS.map((m) => (
+                                <option key={m.id} value={m.id}>{m.label}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => removeGuest(index)}
+                              disabled={splitGuests.length <= 2}
+                              title="Remove guest"
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {isPaybillMethod(guest.method) && (
+                            <input
+                              type="text"
+                              value={guest.reference}
+                              onChange={(e) => updateGuest(index, { reference: e.target.value })}
+                              placeholder="I&M Paybill reference (e.g. ABC123)"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-mono uppercase text-slate-900"
+                            />
+                          )}
+                        </div>
+                      ))}
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={splitGuestsEqually}
+                          className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-[11px] font-bold text-amber-800 cursor-pointer"
+                        >
+                          Split equally
+                        </button>
+                        <button
+                          type="button"
+                          onClick={addGuest}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-[11px] font-bold text-slate-700 cursor-pointer"
+                        >
+                          + Add guest
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowGuestItems((v) => !v)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer ${showGuestItems
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                            }`}
+                        >
+                          {showGuestItems ? 'Hide items' : 'Assign items'}
+                        </button>
+                        {guestItemShares && (
+                          <button
+                            type="button"
+                            onClick={applyGuestItemShares}
+                            className="px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-[11px] font-bold text-emerald-800 cursor-pointer"
+                          >
+                            Use item totals
+                          </button>
+                        )}
+                      </div>
+
+                      {showGuestItems && (
+                        <div className="space-y-1.5 p-2 rounded-lg bg-white border border-slate-200 max-h-60 overflow-auto">
+                          <p className="text-[10px] font-bold uppercase text-slate-500">
+                            Tap who had each item · untagged = shared
+                          </p>
+                          {cart.length === 0 ? (
+                            <p className="text-[11px] text-slate-500">Add items to the cart first.</p>
+                          ) : (
+                            cart.map((line) => {
+                              const key = cartLineKey(line);
+                              const owner = guestItemMap[key];
+                              const chipClass = (active) => `px-1.5 py-0.5 rounded-md border text-[10px] font-bold cursor-pointer ${active
+                                ? 'border-slate-900 bg-slate-900 text-white'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                }`;
+                              return (
+                                <div key={key} className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-800 truncate">
+                                      {line.title} ×{Number(line.quantity || 1)}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500">
+                                      KES {(Number(line.unitPrice || 0) * Number(line.quantity || 1)).toLocaleString()}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setGuestItemMap((prev) => ({ ...prev, [key]: null }))}
+                                      className={chipClass(owner == null)}
+                                    >
+                                      Shared
+                                    </button>
+                                    {splitGuests.map((g, gi) => (
+                                      <button
+                                        type="button"
+                                        key={gi}
+                                        onClick={() => setGuestItemMap((prev) => ({ ...prev, [key]: gi }))}
+                                        className={chipClass(owner === gi)}
+                                      >
+                                        G{gi + 1}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+
                       <input
-                        type="number"
-                        min="0"
-                        value={splitCash}
-                        onChange={(e) => setSplitCash(e.target.value)}
-                        placeholder="0"
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                        type="text"
+                        value={splitBreakdown}
+                        onChange={(e) => setSplitBreakdown(e.target.value)}
+                        placeholder="Optional notes (e.g. who had what)"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
                       />
                     </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 mb-1">M-Pesa</span>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Cash</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={splitCash}
+                            onChange={(e) => setSplitCash(e.target.value)}
+                            placeholder="0"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">I&amp;M Paybill</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={splitMpesa}
+                            onChange={(e) => setSplitMpesa(e.target.value)}
+                            placeholder="0"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Card</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={splitCard}
+                            onChange={(e) => setSplitCard(e.target.value)}
+                            placeholder="0"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                          />
+                        </div>
+                      </div>
+                      {Number(splitMpesa || 0) > 0 && (
+                        <input
+                          type="text"
+                          value={splitImRef}
+                          onChange={(e) => setSplitImRef(e.target.value)}
+                          placeholder="I&M Paybill reference (e.g. ABC123)"
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono uppercase text-slate-900"
+                        />
+                      )}
                       <input
-                        type="number"
-                        min="0"
-                        value={splitMpesa}
-                        onChange={(e) => setSplitMpesa(e.target.value)}
-                        placeholder="0"
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
+                        type="text"
+                        value={splitBreakdown}
+                        onChange={(e) => setSplitBreakdown(e.target.value)}
+                        placeholder="Optional notes"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
                       />
                     </div>
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 mb-1">Card</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={splitCard}
-                        onChange={(e) => setSplitCard(e.target.value)}
-                        placeholder="0"
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
-                      />
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    value={splitBreakdown}
-                    onChange={(e) => setSplitBreakdown(e.target.value)}
-                    placeholder="Optional notes (e.g. M-Pesa ref + Cash)"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
-                  />
+                  )}
                 </div>
               )}
             </div>

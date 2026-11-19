@@ -95,6 +95,36 @@ export async function autoPrintOrder(receipt, prefs = null) {
   return results.some((r) => r.status === 'fulfilled' && r.value);
 }
 
+/**
+ * Prints one customer copy per guest when a bill is split between diners.
+ * Each slip is a normal receipt whose total is that guest's share, so the
+ * printed TOTAL always matches what the guest handed over. The id is made
+ * unique per guest, which also keeps the 3s print cooldown from swallowing
+ * the second and third slips.
+ */
+export async function printGuestReceipts(receipts = []) {
+  const list = (Array.isArray(receipts) ? receipts : []).filter(Boolean);
+  let printed = false;
+  for (let i = 0; i < list.length; i += 1) {
+    const receipt = list[i];
+    const ok = await printCashierSlips(receipt, null, {
+      lockKey: `cashier:${receipt?.id || receipt?.ticket_number || 'generic'}:guest-${i + 1}`,
+    }).catch(() => false);
+    printed = Boolean(ok) || printed;
+    // Give the spooler a moment before feeding the next slip.
+    if (i < list.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    }
+  }
+  return printed;
+}
+
+export async function autoPrintGuestReceipts(receipts = [], prefs = null) {
+  const { autoReceipt } = prefs || getAutoPrintPrefs();
+  if (!autoReceipt) return false;
+  return printGuestReceipts(receipts);
+}
+
 export async function loadReceiptBrandForTenant(restaurantId, fallbackName = 'ManiPOS') {
   if (!restaurantId) return getReceiptBrand();
   try {
@@ -595,8 +625,8 @@ async function runWithPrintLock(lockKey, task) {
   }
 }
 
-export async function printCashierSlips(receipt, printerName = null) {
-  const key = `cashier:${receipt?.id || receipt?.ticket_number || 'generic'}`;
+export async function printCashierSlips(receipt, printerName = null, { lockKey = null } = {}) {
+  const key = lockKey || `cashier:${receipt?.id || receipt?.ticket_number || 'generic'}`;
   return runWithPrintLock(key, () => {
     const target = printerName ?? getPrinterPrefs().frontDeskPrinter;
     const html = buildCashierSlipsHTML(receipt, brandOverrideFromReceipt(receipt));

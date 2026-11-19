@@ -120,12 +120,19 @@ export function summarizeShiftSales({ orders = [], openingCash = 0, staffName = 
       cardSales += total;
     } else if (method.includes('split')) {
       const notes = String(order.notes || '');
-      const cashMatch = notes.match(/Cash[^\d]*([\d,.]+)/i);
-      const mpesaMatch = notes.match(/M-?Pesa[^\d]*([\d,.]+)/i);
-      const cardMatch = notes.match(/Card[^\d]*([\d,.]+)/i);
-      const cAmt = cashMatch ? Number(cashMatch[1].replace(/,/g, '')) || 0 : 0;
-      const mAmt = mpesaMatch ? Number(mpesaMatch[1].replace(/,/g, '')) || 0 : 0;
-      const kAmt = cardMatch ? Number(cardMatch[1].replace(/,/g, '')) || 0 : 0;
+      // A split order can carry several parts paid with the same tender
+      // (e.g. two guests both paying cash). Sum every match instead of
+      // taking only the first one.
+      const sumTender = (pattern) => {
+        let sum = 0;
+        for (const match of notes.matchAll(pattern)) {
+          sum += Number(String(match[1]).replace(/,/g, '')) || 0;
+        }
+        return sum;
+      };
+      const cAmt = sumTender(/Cash[^\d]*([\d,.]+)/gi);
+      const mAmt = sumTender(/(?:I&M\s*Paybill|M-?Pesa|MPESA|Paybill|Till)[^\d]*([\d,.]+)/gi);
+      const kAmt = sumTender(/Card[^\d]*([\d,.]+)/gi);
       const matchedSum = cAmt + mAmt + kAmt;
       cashSales += cAmt;
       mpesaSales += mAmt;

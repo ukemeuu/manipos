@@ -198,6 +198,40 @@ describe('POS Shift Reconciliation & Business Day Window', () => {
     expect(summary.totalSales).toBe(6200);
     expect(summary.expectedCash).toBe(3700); // 2000 float + 1700 cash
   });
+
+  it('sums every tender in a multi-guest split instead of only the first match', () => {
+    const summary = summarizeShiftSales({
+      openingCash: 0,
+      shiftStartIso: '2026-11-15T04:00:00.000Z',
+      orders: [
+        {
+          id: 'guest-split',
+          total_amount: 3400,
+          payment_method: 'Split Payment',
+          notes:
+            'Split: Guest 1: Cash (KES 1,200); Guest 2: Cash (KES 800); Guest 3: I&M Paybill (KES 1,400, Ref ABC123)',
+          payment_status: 'paid',
+          status: 'Completed',
+          created_at: '2026-11-15T10:00:00.000Z',
+        },
+        {
+          id: 'tender-split',
+          total_amount: 2000,
+          payment_method: 'Split Payment',
+          notes: 'Split: Cash (KES 500) + I&M Paybill (KES 1,500, Ref XYZ9)',
+          payment_status: 'paid',
+          status: 'Completed',
+          created_at: '2026-11-15T11:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(summary.cashSales).toBe(2500); // 1200 + 800 + 500
+    expect(summary.mpesaSales).toBe(2900); // 1400 + 1500
+    expect(summary.cardSales).toBe(0);
+    expect(summary.totalSales).toBe(5400);
+    expect(summary.expectedCash).toBe(2500);
+  });
 });
 
 describe('Thermal Receipt, Kitchen KOT & Z-Report Print Builders', () => {
