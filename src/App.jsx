@@ -24,6 +24,7 @@ import {
   broadcastAuthEvent,
   subscribeAuthEvents,
 } from './lib/crossTabSession';
+import { unregisterNativeOrderPush } from './lib/nativePushService';
 
 const RetailPosTerminal = lazy(() => import('./components/RetailPosTerminal').then(m => ({ default: m.RetailPosTerminal })));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
@@ -702,6 +703,7 @@ function App() {
   };
 
   const handleGlobalSignOut = async () => {
+    await unregisterNativeOrderPush().catch(() => {});
     try {
       await supabase.auth.signOut();
     } catch (e) {}

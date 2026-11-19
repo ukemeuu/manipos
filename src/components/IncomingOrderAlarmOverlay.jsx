@@ -16,6 +16,7 @@ import {
   getBrowserNotificationState,
   requestOrderPushPermission,
 } from '../lib/orderAlarm';
+import { initNativeOrderPush } from '../lib/nativePushService';
 
 /**
  * Determines whether a pending pos_orders row came from a guest microsite/self-service
@@ -153,9 +154,20 @@ export function IncomingOrderAlarmOverlay({ restaurantId, tenantSlug = '', staff
       }
     };
     window.addEventListener('manipos:orders-updated', onOrdersSync);
+    window.addEventListener('manipos:incoming-order-push', onOrdersSync);
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibility);
     }
+
+    // Register native FCM/APNs push token when running inside Capacitor Android/iOS
+    const pinUser = (() => {
+      try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch { return {}; }
+    })();
+    initNativeOrderPush({
+      restaurantId,
+      staffId: pinUser?.id || null,
+      deviceLabel: `${staffName || 'POS'} (${tenantSlug || 'store'})`,
+    }).catch(() => {});
 
     let cleanupNative = null;
     registerOrderAlarmNotificationListeners(() => {
@@ -167,6 +179,7 @@ export function IncomingOrderAlarmOverlay({ restaurantId, tenantSlug = '', staff
     return () => {
       clearInterval(pollId);
       window.removeEventListener('manipos:orders-updated', onOrdersSync);
+      window.removeEventListener('manipos:incoming-order-push', onOrdersSync);
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', onVisibility);
       }
