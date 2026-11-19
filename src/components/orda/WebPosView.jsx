@@ -62,6 +62,7 @@ function makeUuid() {
 
 const OPTIONAL_ORDER_COLS = [
   'idempotency_key',
+  'items',
   'sales_channel',
   'order_channel',
   'branch_id',
@@ -899,6 +900,12 @@ export function WebPosView({
         notes: noteParts.join(' | ') || null,
         guest_id: selectedGuest?.id || null,
         idempotency_key: draftIdempotencyKeyRef.current,
+        items: cart.map((item) => ({
+          item_name: item.title,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          instructions: item.summary || null,
+        })),
         ...(customCreatedAt ? { created_at: customCreatedAt } : {}),
       };
 

@@ -97,21 +97,52 @@ export function resolveChannelCommission(configs, channel, brand) {
   return row ? Number(row.commission_percent) || 0 : 0;
 }
 
+function isMissingColumnError(error) {
+  if (!error) return false;
+  const code = String(error.code || '');
+  const msg = String(error.message || '') + ' ' + String(error.details || '');
+  return (
+    code === 'PGRST204' ||
+    code === '42703' ||
+    /column .* does not exist/i.test(msg) ||
+    /could not find .* column/i.test(msg) ||
+    /schema cache/i.test(msg)
+  );
+}
+
 /**
  * Insert order lines, gracefully dropping the costing columns when the
- * 20261120_cogs_commission migration has not been run yet. Never let a
- * reporting-only schema gap block a sale.
+ * COGS/commission migration has not been run yet. Never let a reporting-only
+ * schema gap block a sale or drop order items.
  */
 export async function insertOrderItems(supabaseClient, rows) {
   const list = Array.isArray(rows) ? rows : [];
-  const { error } = await supabaseClient.from('pos_order_items').insert(list);
-  if (error && /column .* does not exist/i.test(String(error.message || ''))) {
+  if (list.length === 0) return { error: null };
+
+  const firstRes = await supabaseClient.from('pos_order_items').insert(list);
+  if (!firstRes.error) return firstRes;
+
+  if (isMissingColumnError(firstRes.error)) {
     const stripped = list.map((row) => {
       const next = { ...row };
       COSTING_COLS.forEach((col) => delete next[col]);
       return next;
     });
-    return supabaseClient.from('pos_order_items').insert(stripped);
+    const secondRes = await supabaseClient.from('pos_order_items').insert(stripped);
+    if (!secondRes.error) return secondRes;
+
+    if (isMissingColumnError(secondRes.error)) {
+      const minimal = list.map((row) => ({
+        order_id: row.order_id,
+        item_name: row.item_name || row.name || 'Item',
+        quantity: Number(row.quantity ?? 1),
+        price: Number(row.price ?? 0),
+        instructions: row.instructions || null,
+      }));
+      return supabaseClient.from('pos_order_items').insert(minimal);
+    }
+    return secondRes;
   }
-  return { error };
+
+  return firstRes;
 }
