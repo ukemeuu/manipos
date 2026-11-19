@@ -339,7 +339,7 @@ export function AdminDashboard({
       Promise.allSettled([
         supabase
           .from('pos_orders')
-          .select('*, items:pos_order_items(*)')
+          .select('*, pos_order_items(*)')
           .eq('restaurant_id', restId)
           .order('created_at', { ascending: false }),
         fetchPojOrdersForRange({
@@ -533,7 +533,7 @@ export function AdminDashboard({
       const phase1Promise = Promise.allSettled([
         supabase
           .from('pos_orders')
-          .select('*, items:pos_order_items(*)')
+          .select('*, pos_order_items(*)')
           .eq('restaurant_id', currentRestaurantId)
           .order('created_at', { ascending: false })
           .limit(1000),
@@ -749,7 +749,7 @@ export function AdminDashboard({
       const [maniposRes, pojRes] = await Promise.allSettled([
         supabase
           .from('pos_orders')
-          .select('*, items:pos_order_items(*)')
+          .select('*, pos_order_items(*)')
           .eq('restaurant_id', restId)
           .gte('created_at', startIso)
           .lt('created_at', endIso)

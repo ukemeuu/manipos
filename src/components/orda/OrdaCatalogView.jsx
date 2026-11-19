@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Search, Edit3, Trash2, Upload, Download, Image as ImageIcon,
-  Check, Loader2, Layers, Sliders, Gift, Eye, EyeOff, Star, Globe, X, RefreshCw
+  Check, Loader2, Layers, Sliders, Gift, Eye, EyeOff, Star, Globe, X, RefreshCw, Percent
 } from 'lucide-react';
 import { supabase, setTenantContext } from '../../lib/supabase';
 import { SlideOverDrawer } from './SlideOverDrawer';
+import { CostingAndCommissionsPanel } from './CostingAndCommissionsPanel';
 import { fetchPojCatalogEnrichment, syncPojCatalogAndModifiersToManiPos } from '../../services/data/pojSyncService';
 
 const inputCls =
@@ -489,12 +490,13 @@ export function OrdaCatalogView({
           </button>
         </div>
 
-        {/* 3 Orda Tabs: Menu Items | Modifier Items | Combo Items */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1">
+        {/* 4 Catalog Tabs: Menu Items | Modifier Items | Combo Items | Food Cost & Commissions */}
+        <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl gap-1">
           {[
             { id: 'items', label: `Menu Items (${items.length})`, icon: Layers },
             { id: 'modifiers', label: `Modifier Items (${modifiers.length})`, icon: Sliders },
             { id: 'combos', label: `Combo Items (${combos.length})`, icon: Gift },
+            { id: 'costing', label: 'Food Cost & Commissions', icon: Percent },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -784,6 +786,17 @@ export function OrdaCatalogView({
           </table>
           </div>
         </div>
+      )}
+
+      {catalogTab === 'costing' && (
+        <CostingAndCommissionsPanel
+          restaurantId={restaurantId}
+          items={items}
+          onDataUpdated={() => {
+            loadAll();
+            onCatalogChanged?.();
+          }}
+        />
       )}
 
       {/* Slide-Over: New / Edit Item Drawer (Orda exact fields) */}

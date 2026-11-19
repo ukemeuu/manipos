@@ -824,6 +824,40 @@ export function LiveOrdersView({
     };
   };
 
+  // On-demand fallback: if an order's line items weren't embedded in the list query,
+  // load them directly from pos_order_items when the drawer opens or before printing.
+  const ensureOrderItemsLoaded = async (order) => {
+    if (!order?.id) return order;
+    if (renderLines(order).length > 0) return order;
+    try {
+      const { data, error } = await supabase
+        .from('pos_order_items')
+        .select('*')
+        .eq('order_id', order.id);
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return { ...order, pos_order_items: data };
+      }
+    } catch (_) {}
+    return order;
+  };
+
+  useEffect(() => {
+    if (!selectedOrder?.id) return;
+    if (renderLines(selectedOrder).length > 0) return;
+    let active = true;
+    ensureOrderItemsLoaded(selectedOrder).then((hydrated) => {
+      if (active && hydrated !== selectedOrder) {
+        setSelectedOrder(hydrated);
+      }
+    });
+    return () => { active = false; };
+  }, [selectedOrder?.id]);
+
+  const printOrderWithItems = async (order, printFn) => {
+    const hydrated = await ensureOrderItemsLoaded(order);
+    return printFn(buildPrintableReceipt(hydrated));
+  };
+
   const titles = {
     active: 'Active Orders',
     new: 'New Orders',
@@ -1054,7 +1088,7 @@ export function LiveOrdersView({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          printCashierSlips(buildPrintableReceipt(order));
+                          printOrderWithItems(order, printCashierSlips);
                         }}
                         className="p-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 cursor-pointer"
                         title="Print Thermal Receipt"
@@ -1065,7 +1099,7 @@ export function LiveOrdersView({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          printKitchenSlips(buildPrintableReceipt(order));
+                          printOrderWithItems(order, printKitchenSlips);
                         }}
                         className="px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold cursor-pointer"
                         title="Print Kitchen KOT"
@@ -1307,14 +1341,14 @@ export function LiveOrdersView({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => printCashierSlips(buildPrintableReceipt(selectedOrder))}
+                onClick={() => printOrderWithItems(selectedOrder, printCashierSlips)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 cursor-pointer"
               >
                 <Printer size={14} /> Print Receipt
               </button>
               <button
                 type="button"
-                onClick={() => printKitchenSlips(buildPrintableReceipt(selectedOrder))}
+                onClick={() => printOrderWithItems(selectedOrder, printKitchenSlips)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-900 cursor-pointer"
               >
                 <Printer size={14} /> Print KOT

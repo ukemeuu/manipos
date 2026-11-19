@@ -21,6 +21,11 @@ import {
   formatChannelDisplayName,
   normalizePaymentMethodLabel,
 } from '../../lib/orderChannel';
+import {
+  DEFAULT_FOOD_COST_PERCENT,
+  resolveChannelCommissionWithFallback,
+  resolvePaymentCommissionPercent,
+} from '../../lib/productCosting';
 
 const DATE_PRESETS = [
   { id: 'today', label: 'Today' },
@@ -121,6 +126,10 @@ export function OrdaReportsView({
   const [chargeLines, setChargeLines] = useState([]);
   const [eodHistory, setEodHistory] = useState([]);
   const [devices, setDevices] = useState([]);
+  const [channelCommRows, setChannelCommRows] = useState([]);
+  const [channelCommMap, setChannelCommMap] = useState({});
+  const [paymentCommMap, setPaymentCommMap] = useState({ Card: 2.5 });
+  const [defaultFoodCostPct, setDefaultFoodCostPct] = useState(DEFAULT_FOOD_COST_PERCENT);
   const [posRefFilter, setPosRefFilter] = useState('');
   const [posStatusFilter, setPosStatusFilter] = useState('All');
   const [posDrawerOrder, setPosDrawerOrder] = useState(null);
@@ -137,15 +146,32 @@ export function OrdaReportsView({
     let active = true;
     (async () => {
       try {
-        const [clRes, eodRes, devRes] = await Promise.all([
+        const [clRes, eodRes, devRes, setRes, chCommRes] = await Promise.allSettled([
           supabase.from('order_charge_lines').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false }).limit(500),
           supabase.from('eod_reports').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false }).limit(50),
           supabase.from('pos_devices').select('*').eq('restaurant_id', restaurantId).order('last_seen', { ascending: false }),
+          supabase.from('restaurant_settings').select('base_cogs_percent, payment_tenders_config').eq('restaurant_id', restaurantId).limit(1).maybeSingle(),
+          supabase.from('pos_channel_commissions').select('*').eq('restaurant_id', restaurantId),
         ]);
         if (!active) return;
-        if (!clRes.error) setChargeLines(clRes.data || []);
-        if (!eodRes.error) setEodHistory(eodRes.data || []);
-        if (!devRes.error) setDevices(devRes.data || []);
+        if (clRes.status === 'fulfilled' && !clRes.value?.error) setChargeLines(clRes.value.data || []);
+        if (eodRes.status === 'fulfilled' && !eodRes.value?.error) setEodHistory(eodRes.value.data || []);
+        if (devRes.status === 'fulfilled' && !devRes.value?.error) setDevices(devRes.value.data || []);
+        if (setRes.status === 'fulfilled' && setRes.value?.data) {
+          const s = setRes.value.data;
+          const cfg = s.payment_tenders_config && typeof s.payment_tenders_config === 'object' ? s.payment_tenders_config : {};
+          const cogsVal = Number(s.base_cogs_percent || cfg.default_food_cost_percent);
+          if (Number.isFinite(cogsVal) && cogsVal > 0) setDefaultFoodCostPct(cogsVal);
+          if (cfg.channel_commissions && typeof cfg.channel_commissions === 'object') {
+            setChannelCommMap(cfg.channel_commissions);
+          }
+          if (cfg.method_commissions && typeof cfg.method_commissions === 'object') {
+            setPaymentCommMap(cfg.method_commissions);
+          }
+        }
+        if (chCommRes.status === 'fulfilled' && Array.isArray(chCommRes.value?.data)) {
+          setChannelCommRows(chCommRes.value.data);
+        }
       } catch (_) { }
     })();
     return () => { active = false; };
@@ -201,25 +227,31 @@ export function OrdaReportsView({
     });
   }, [orders, activeBranch, startDate, endDate, deliveryFilter, paymentFilter, channelFilter, clerkFilter]);
 
-  // Per-item profitability (revenue - discount - COGS - commission).
+  // Per-item profitability (revenue - discount - COGS - channel commission).
   const profitabilityRows = useMemo(() => {
     const map = new Map();
-    scopedOrders.forEach((o) => {
-      const items = Array.isArray(o.items) ? o.items : Array.isArray(o.pos_order_items) ? o.pos_order_items : [];
+    scopedOrders.filter(isSalesValidOrder).forEach((o) => {
+      const chName = formatChannelDisplayName(normalizeChannelLabel(o));
+      const orderChRate = resolveChannelCommissionWithFallback(channelCommRows, channelCommMap, chName, o.brand || '');
+      const items = orderItemsOf(o);
       items.forEach((line) => {
-        const name = String(line.item_name || 'Item');
+        const name = String(line.item_name || line.name || 'Item');
         if (/delivery fee|package fee|packaging fee/i.test(name)) return;
         const qty = Number(line.quantity || 1);
         const revenue = Number(line.price || 0) * qty;
-        const costPrice = Number(line.cost_price || 0);
-        const cogs = Number(line.cogs_amount || 0) || (costPrice > 0 ? costPrice * qty : 0);
-        const commission = Number(line.commission_amount || 0) || (revenue * (Number(line.commission_percent || 0) / 100));
+        const key = name.toLowerCase();
+        const menuMeta = menuCostMap.get(key) || {};
+        const costPrice = Number(line.cost_price || menuMeta.cost_price || 0);
+        const itemCogsPct = Number(line.cogs_percent || menuMeta.cogs_percent || defaultFoodCostPct || 0);
+        const cogs = Number(line.cogs_amount || 0)
+          || (costPrice > 0 ? costPrice * qty : revenue * (itemCogsPct / 100));
+        const effCommPct = Number(line.commission_percent || 0) || orderChRate;
+        const commission = Number(line.commission_amount || 0) || (revenue * (effCommPct / 100));
         const discount = Number(line.discount_amount || 0);
         const profit = revenue - discount - cogs - commission;
-        const key = name.toLowerCase();
         const row = map.get(key) || {
           name,
-          category: menuCostMap.get(key)?.category || '',
+          category: menuMeta.category || '',
           brand: line.brand || '',
           units: 0,
           revenue: 0,
@@ -248,7 +280,79 @@ export function OrdaReportsView({
       r.margin = Math.round(r.margin * 100) / 100;
     });
     return rows;
-  }, [scopedOrders, menuCostMap]);
+  }, [scopedOrders, menuCostMap, channelCommRows, channelCommMap, defaultFoodCostPct]);
+
+  // Daily / window order-level profitability: Gross Sales, Channel Commissions, Payment Method Commissions, & Food Cost
+  const dailyProfitability = useMemo(() => {
+    const valid = scopedOrders.filter(isSalesValidOrder);
+    const chMap = new Map();
+    const pmMap = new Map();
+    let grossSales = 0;
+    let totalDiscounts = 0;
+    let totalChannelCommission = 0;
+    let totalPaymentCommission = 0;
+    let totalFoodCost = 0;
+
+    valid.forEach((o) => {
+      const orderTotal = Number(o.total_amount || 0);
+      const orderDisc = Number(o.discount || 0);
+      grossSales += orderTotal;
+      totalDiscounts += orderDisc;
+
+      const chName = formatChannelDisplayName(normalizeChannelLabel(o));
+      const chRate = resolveChannelCommissionWithFallback(channelCommRows, channelCommMap, chName, o.brand || '');
+      const chCommAmt = Math.round(orderTotal * (chRate / 100) * 100) / 100;
+      totalChannelCommission += chCommAmt;
+      const chRow = chMap.get(chName) || { channel: chName, orders: 0, sales: 0, rate: chRate, commission: 0 };
+      chRow.orders += 1;
+      chRow.sales += orderTotal;
+      chRow.commission += chCommAmt;
+      chMap.set(chName, chRow);
+
+      const pmName = normalizePaymentMethodLabel(o);
+      const pmRate = resolvePaymentCommissionPercent(paymentCommMap, pmName);
+      const pmCommAmt = Math.round(orderTotal * (pmRate / 100) * 100) / 100;
+      totalPaymentCommission += pmCommAmt;
+      const pmRow = pmMap.get(pmName) || { method: pmName, orders: 0, sales: 0, rate: pmRate, commission: 0 };
+      pmRow.orders += 1;
+      pmRow.sales += orderTotal;
+      pmRow.commission += pmCommAmt;
+      pmMap.set(pmName, pmRow);
+
+      // Compute order food cost from items (or fallback to store's defaultFoodCostPct)
+      const items = orderItemsOf(o);
+      if (items.length > 0) {
+        items.forEach((line) => {
+          const nm = String(line.item_name || line.name || '');
+          if (/delivery fee|package fee|packaging fee/i.test(nm)) return;
+          const qty = Number(line.quantity || 1);
+          const rev = Number(line.price || 0) * qty;
+          const meta = menuCostMap.get(nm.toLowerCase()) || {};
+          const cp = Number(line.cost_price || meta.cost_price || 0);
+          const pct = Number(line.cogs_percent || meta.cogs_percent || defaultFoodCostPct || 0);
+          totalFoodCost += Number(line.cogs_amount || 0) || (cp > 0 ? cp * qty : rev * (pct / 100));
+        });
+      } else {
+        totalFoodCost += orderTotal * ((Number(defaultFoodCostPct) || 0) / 100);
+      }
+    });
+
+    const netProfit = grossSales - totalChannelCommission - totalPaymentCommission - totalFoodCost;
+    const netMargin = grossSales > 0 ? (netProfit / grossSales) * 100 : 0;
+
+    return {
+      orderCount: valid.length,
+      grossSales: Math.round(grossSales * 100) / 100,
+      totalDiscounts: Math.round(totalDiscounts * 100) / 100,
+      totalChannelCommission: Math.round(totalChannelCommission * 100) / 100,
+      totalPaymentCommission: Math.round(totalPaymentCommission * 100) / 100,
+      totalFoodCost: Math.round(totalFoodCost * 100) / 100,
+      netProfit: Math.round(netProfit * 100) / 100,
+      netMargin: Math.round(netMargin * 10) / 10,
+      channels: Array.from(chMap.values()).sort((a, b) => b.sales - a.sales),
+      payments: Array.from(pmMap.values()).sort((a, b) => b.sales - a.sales),
+    };
+  }, [scopedOrders, channelCommRows, channelCommMap, paymentCommMap, menuCostMap, defaultFoodCostPct]);
 
   // Executive Dashboard Metrics (valid non-cancelled/voided/returned orders + Processing Stages + Channels + Payment Methods)
   const execMetrics = useMemo(
@@ -987,93 +1091,148 @@ export function OrdaReportsView({
         </div>
       )}
 
-      {/* PRODUCT PROFITABILITY */}
+      {/* PRODUCT PROFITABILITY & DAILY COMMISSIONS */}
       {reportKey === 'profitability' && (() => {
-        const totals = profitabilityRows.reduce(
-          (acc, r) => ({
-            revenue: acc.revenue + r.revenue,
-            discount: acc.discount + r.discount,
-            cogs: acc.cogs + r.cogs,
-            commission: acc.commission + r.commission,
-            profit: acc.profit + r.profit,
-          }),
-          { revenue: 0, discount: 0, cogs: 0, commission: 0, profit: 0 }
-        );
-        const margin = totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
         return (
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-black text-slate-900">Product Profitability</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Revenue, COGS, commission and profit per menu item for the selected window.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => downloadCsv(
-                  `product-profitability-${startDate}.csv`,
-                  ['Item', 'Category', 'Units', 'Revenue', 'Discount', 'COGS', 'Commission', 'Profit', 'Margin %'],
-                  profitabilityRows.map((r) => [r.name, r.category, r.units, r.revenue, r.discount, r.cogs, r.commission, r.profit, r.margin])
-                )}
-                className="px-3 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-bold flex items-center gap-1"
-              >
-                <Download size={13} /> Export Profitability
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              {[
-                { label: 'Revenue', value: totals.revenue, cls: 'text-slate-900' },
-                { label: 'Discounts', value: totals.discount, cls: 'text-rose-600' },
-                { label: 'COGS', value: totals.cogs, cls: 'text-slate-900' },
-                { label: 'Commission', value: totals.commission, cls: 'text-amber-700' },
-                { label: 'Net Profit', value: totals.profit, cls: totals.profit >= 0 ? 'text-emerald-700' : 'text-rose-600' },
-              ].map((c) => (
-                <div key={c.label} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{c.label}</p>
-                  <p className={`text-lg font-black mt-1 ${c.cls}`}>KES {c.value.toLocaleString()}</p>
+          <div className="space-y-5">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Daily Profitability, Channel &amp; Payment Commissions</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Gross sales, channel commissions, payment processing fees, food cost ({defaultFoodCostPct}% default), and net profit across {dailyProfitability.orderCount} orders.
+                  </p>
                 </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Overall margin: <strong className="text-slate-700">{margin.toFixed(1)}%</strong>. COGS uses each item's cost price, or its COGS % / the store base COGS %.
-            </p>
-
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-4">Item</th>
-                    <th className="py-2.5 px-4">Category</th>
-                    <th className="py-2.5 px-4 text-right">Units</th>
-                    <th className="py-2.5 px-4 text-right">Revenue</th>
-                    <th className="py-2.5 px-4 text-right">Discount</th>
-                    <th className="py-2.5 px-4 text-right">COGS</th>
-                    <th className="py-2.5 px-4 text-right">Commission</th>
-                    <th className="py-2.5 px-4 text-right">Profit</th>
-                    <th className="py-2.5 px-4 text-right">Margin</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profitabilityRows.length === 0 && (
-                    <tr><td colSpan={9} className="py-8 text-center text-slate-400">No item sales in this window.</td></tr>
+                <button
+                  type="button"
+                  onClick={() => downloadCsv(
+                    `profitability-${startDate}.csv`,
+                    ['Item', 'Category', 'Units', 'Revenue', 'Discount', 'Food Cost (COGS)', 'Channel Commission', 'Profit', 'Margin %'],
+                    profitabilityRows.map((r) => [r.name, r.category, r.units, r.revenue, r.discount, r.cogs, r.commission, r.profit, r.margin])
                   )}
-                  {profitabilityRows.map((r) => (
-                    <tr key={r.name} className="border-b border-slate-100 last:border-0">
-                      <td className="py-2.5 px-4 font-bold text-slate-800">{r.name}</td>
-                      <td className="py-2.5 px-4 text-slate-500">{r.category || '—'}</td>
-                      <td className="py-2.5 px-4 text-right font-mono">{r.units}</td>
-                      <td className="py-2.5 px-4 text-right font-mono">{r.revenue.toLocaleString()}</td>
-                      <td className="py-2.5 px-4 text-right font-mono text-rose-600">{r.discount.toLocaleString()}</td>
-                      <td className="py-2.5 px-4 text-right font-mono">{r.cogs.toLocaleString()}</td>
-                      <td className="py-2.5 px-4 text-right font-mono text-amber-700">{r.commission.toLocaleString()}</td>
-                      <td className={`py-2.5 px-4 text-right font-mono font-bold ${r.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{r.profit.toLocaleString()}</td>
-                      <td className="py-2.5 px-4 text-right font-mono">{r.margin.toFixed(1)}%</td>
+                  className="px-3 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-bold flex items-center gap-1"
+                >
+                  <Download size={13} /> Export Profitability CSV
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+                {[
+                  { label: 'Gross Sales', value: dailyProfitability.grossSales, cls: 'text-slate-950' },
+                  { label: 'Food Cost (COGS)', value: dailyProfitability.totalFoodCost, cls: 'text-slate-800' },
+                  { label: 'Channel Commissions', value: dailyProfitability.totalChannelCommission, cls: 'text-amber-700' },
+                  { label: 'Payment Fees', value: dailyProfitability.totalPaymentCommission, cls: 'text-amber-700' },
+                  { label: 'Discounts', value: dailyProfitability.totalDiscounts, cls: 'text-rose-600' },
+                  { label: `Net Profit (${dailyProfitability.netMargin.toFixed(1)}%)`, value: dailyProfitability.netProfit, cls: dailyProfitability.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-600' },
+                ].map((c) => (
+                  <div key={c.label} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{c.label}</p>
+                    <p className={`text-base font-black mt-1 font-mono ${c.cls}`}>KES {c.value.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Channel & Payment Method Commission Breakdown Tables */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-900 uppercase tracking-wider">
+                    Sales &amp; Commission by Channel
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white text-slate-500 uppercase font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">Channel</th>
+                        <th className="py-2 px-3 text-right">Orders</th>
+                        <th className="py-2 px-3 text-right">Sales</th>
+                        <th className="py-2 px-3 text-right">Rate</th>
+                        <th className="py-2 px-3 text-right">Commission</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyProfitability.channels.length === 0 ? (
+                        <tr><td colSpan={5} className="py-6 text-center text-slate-400">No channel sales in this window.</td></tr>
+                      ) : dailyProfitability.channels.map((ch) => (
+                        <tr key={ch.channel} className="border-b border-slate-100 last:border-0">
+                          <td className="py-2 px-3 font-bold text-slate-800">{ch.channel}</td>
+                          <td className="py-2 px-3 text-right font-mono">{ch.orders}</td>
+                          <td className="py-2 px-3 text-right font-mono">KES {Math.round(ch.sales).toLocaleString()}</td>
+                          <td className="py-2 px-3 text-right font-mono text-slate-500">{ch.rate}%</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-amber-700">KES {Math.round(ch.commission).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-900 uppercase tracking-wider">
+                    Payment Method Processing Fees
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white text-slate-500 uppercase font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">Payment Method</th>
+                        <th className="py-2 px-3 text-right">Orders</th>
+                        <th className="py-2 px-3 text-right">Settled</th>
+                        <th className="py-2 px-3 text-right">Fee %</th>
+                        <th className="py-2 px-3 text-right">Fee Incurred</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyProfitability.payments.length === 0 ? (
+                        <tr><td colSpan={5} className="py-6 text-center text-slate-400">No settlements in this window.</td></tr>
+                      ) : dailyProfitability.payments.map((pm) => (
+                        <tr key={pm.method} className="border-b border-slate-100 last:border-0">
+                          <td className="py-2 px-3 font-bold text-slate-800">{pm.method}</td>
+                          <td className="py-2 px-3 text-right font-mono">{pm.orders}</td>
+                          <td className="py-2 px-3 text-right font-mono">KES {Math.round(pm.sales).toLocaleString()}</td>
+                          <td className="py-2 px-3 text-right font-mono text-slate-500">{pm.rate}%</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-amber-700">KES {Math.round(pm.commission).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+              <div className="text-xs font-black text-slate-900 uppercase tracking-wider">Per-Item Food Cost &amp; Profitability</div>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-4">Item</th>
+                      <th className="py-2.5 px-4">Category</th>
+                      <th className="py-2.5 px-4 text-right">Units</th>
+                      <th className="py-2.5 px-4 text-right">Revenue</th>
+                      <th className="py-2.5 px-4 text-right">Discount</th>
+                      <th className="py-2.5 px-4 text-right">Food Cost</th>
+                      <th className="py-2.5 px-4 text-right">Ch. Comm</th>
+                      <th className="py-2.5 px-4 text-right">Profit</th>
+                      <th className="py-2.5 px-4 text-right">Margin</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {profitabilityRows.length === 0 && (
+                      <tr><td colSpan={9} className="py-8 text-center text-slate-400">No item sales in this window.</td></tr>
+                    )}
+                    {profitabilityRows.map((r) => (
+                      <tr key={r.name} className="border-b border-slate-100 last:border-0">
+                        <td className="py-2.5 px-4 font-bold text-slate-800">{r.name}</td>
+                        <td className="py-2.5 px-4 text-slate-500">{r.category || '—'}</td>
+                        <td className="py-2.5 px-4 text-right font-mono">{r.units}</td>
+                        <td className="py-2.5 px-4 text-right font-mono">{r.revenue.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono text-rose-600">{r.discount.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono">{r.cogs.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono text-amber-700">{r.commission.toLocaleString()}</td>
+                        <td className={`py-2.5 px-4 text-right font-mono font-bold ${r.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{r.profit.toLocaleString()}</td>
+                        <td className="py-2.5 px-4 text-right font-mono">{r.margin.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         );

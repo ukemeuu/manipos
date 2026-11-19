@@ -5,6 +5,73 @@
  * per-product profit stay accurate even after the menu changes.
  */
 
+export const STANDARD_SALES_CHANNELS = [
+  'Web POS',
+  'Microsite',
+  'Glovo',
+  'Ubereats',
+  'Bolt Food',
+  'Whatsapp',
+  'Instagram',
+  'Phone Call',
+  'Walk-in',
+];
+
+export const STANDARD_PAYMENT_METHODS = [
+  'Card',
+  'M-Pesa',
+  'M-Pesa STK',
+  'Cash',
+  'Bank Transfer',
+  'Paid to App',
+  'Store Credit',
+  'Voucher',
+];
+
+export const DEFAULT_FOOD_COST_PERCENT = 25;
+
+export function normalizePaymentKey(value) {
+  const s = String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  if (!s) return '';
+  if (s.includes('card') || s.includes('visa') || s.includes('mastercard') || s.includes('pdq')) return 'card';
+  if (s.includes('stk')) return 'm-pesa stk';
+  if (s.includes('mpesa') || s.includes('m-pesa') || s.includes('paybill') || s.includes('till')) return 'm-pesa';
+  if (s.includes('cash')) return 'cash';
+  if (s.includes('bank') || s.includes('transfer') || s.includes('eft')) return 'bank transfer';
+  if (s.includes('paid to app') || s.includes('prepaid')) return 'paid to app';
+  if (s.includes('credit')) return 'store credit';
+  if (s.includes('voucher')) return 'voucher';
+  return s;
+}
+
+export function resolvePaymentCommissionPercent(methodCommissionsMap, paymentMethod) {
+  if (!methodCommissionsMap || typeof methodCommissionsMap !== 'object') return 0;
+  const target = normalizePaymentKey(paymentMethod);
+  if (!target) return 0;
+  for (const [key, val] of Object.entries(methodCommissionsMap)) {
+    if (normalizePaymentKey(key) === target) {
+      const num = Number(val);
+      return Number.isFinite(num) && num > 0 ? num : 0;
+    }
+  }
+  return 0;
+}
+
+export function resolveChannelCommissionWithFallback(configs, channelCommissionsMap, channel, brand = '') {
+  const fromTable = resolveChannelCommission(configs, channel, brand);
+  if (fromTable > 0) return fromTable;
+  if (!channelCommissionsMap || typeof channelCommissionsMap !== 'object') return 0;
+  const ch = normChannel(channel);
+  if (!ch) return 0;
+  for (const [key, val] of Object.entries(channelCommissionsMap)) {
+    if (normChannel(key) === ch) {
+      const num = Number(val);
+      return Number.isFinite(num) && num > 0 ? num : 0;
+    }
+  }
+  return 0;
+}
+
 export function round2(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }

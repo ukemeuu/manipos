@@ -10,7 +10,7 @@ import { initiateStkPush } from '../../lib/mpesa';
 import { fetchActiveOrderCharges, computeOrderCharges, recordOrderChargeLines } from '../../lib/orderCharges';
 import { evaluatePromotionDiscount, awardLoyaltyPointsForOrder } from '../../lib/promoEngine';
 import { printCashierSlips, printKitchenSlips, printAllOrderSlips } from '../../lib/posPrintService';
-import { attachLineCosting, insertOrderItems, resolveChannelCommission } from '../../lib/productCosting';
+import { attachLineCosting, insertOrderItems, resolveChannelCommissionWithFallback } from '../../lib/productCosting';
 import { fetchPojCatalogEnrichment } from '../../services/data/pojSyncService';
 import {
   extractBrandTabs,
@@ -249,14 +249,17 @@ export function WebPosView({
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const draftIdempotencyKeyRef = useRef(null);
+  const createdOrderRef = useRef(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [placedOrder, setPlacedOrder] = useState(null);
 
-  // Reset the cart draft idempotency key whenever the cart is emptied so the
-  // next order gets a fresh key, while retries of the SAME cart reuse one key.
+  // Reset the cart draft idempotency key & created-order guard whenever the cart
+  // is emptied so the next order gets a fresh key, while retries of the SAME cart
+  // never insert a second pos_orders row even if a downstream step fails.
   useEffect(() => {
     if (cart.length === 0) {
       draftIdempotencyKeyRef.current = null;
+      createdOrderRef.current = null;
     }
   }, [cart.length]);
 
@@ -909,8 +912,17 @@ export function WebPosView({
         ...(customCreatedAt ? { created_at: customCreatedAt } : {}),
       };
 
-      const { data: orderData, error: orderErr, deduplicated } = await safeInsertOrder(payload);
-      if (orderErr) throw orderErr;
+      let orderData = createdOrderRef.current;
+      let deduplicated = Boolean(orderData?.id);
+      if (!orderData?.id) {
+        const insertRes = await safeInsertOrder(payload);
+        if (insertRes.error) throw insertRes.error;
+        orderData = insertRes.data;
+        deduplicated = Boolean(insertRes.deduplicated);
+        if (orderData?.id) {
+          createdOrderRef.current = orderData;
+        }
+      }
 
       if (chargesComputation.lines.length > 0 && orderData?.id) {
         recordOrderChargeLines({
@@ -927,7 +939,12 @@ export function WebPosView({
         (promoEval.valid ? promoEval.lineDiscounts || [] : []).map((d) => [String(d.id), Number(d.amount) || 0])
       );
       const orderBrand = selectedBrand !== 'All' ? selectedBrand : String(restaurantName || '').toUpperCase();
-      const channelCommission = resolveChannelCommission(channelCommissions, salesChannel, orderBrand);
+      const channelCommission = resolveChannelCommissionWithFallback(
+        channelCommissions,
+        tendersConfig?.channel_commissions,
+        salesChannel,
+        orderBrand
+      );
       const itemsPayload = attachLineCosting(cart.map((item) => ({
         order_id: orderData.id,
         item_name: item.title,
@@ -1072,6 +1089,7 @@ export function WebPosView({
         receipt: receiptSnapshot,
       });
       draftIdempotencyKeyRef.current = null;
+      createdOrderRef.current = null;
       setCart([]);
       if (onOrderPlaced) onOrderPlaced();
     } catch (err) {
