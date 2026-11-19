@@ -532,28 +532,54 @@ async function openPrintPopup(html) {
   return true;
 }
 
+const activePrintJobs = new Map();
+const PRINT_COOLDOWN_MS = 3000;
+
+async function runWithPrintLock(lockKey, task) {
+  const now = Date.now();
+  const last = activePrintJobs.get(lockKey);
+  if (last && (last.inFlight || now - last.finishedAt < PRINT_COOLDOWN_MS)) {
+    return false;
+  }
+  activePrintJobs.set(lockKey, { inFlight: true, finishedAt: 0 });
+  try {
+    return await task();
+  } finally {
+    activePrintJobs.set(lockKey, { inFlight: false, finishedAt: Date.now() });
+  }
+}
+
 export async function printCashierSlips(receipt, printerName = null) {
-  const target = printerName ?? getPrinterPrefs().frontDeskPrinter;
-  const html = buildCashierSlipsHTML(receipt, brandOverrideFromReceipt(receipt));
-  return printOrFallback(target, html, () => openPrintPopup(html));
+  const key = `cashier:${receipt?.id || receipt?.ticket_number || 'generic'}`;
+  return runWithPrintLock(key, () => {
+    const target = printerName ?? getPrinterPrefs().frontDeskPrinter;
+    const html = buildCashierSlipsHTML(receipt, brandOverrideFromReceipt(receipt));
+    return printOrFallback(target, html, () => openPrintPopup(html));
+  });
 }
 
 export async function printKitchenSlips(receipt, printerName = null) {
-  const target = printerName ?? getPrinterPrefs().kitchenPrinter;
-  const html = buildKitchenSlipsHTML(receipt, brandOverrideFromReceipt(receipt));
-  return printOrFallback(target, html, () => openPrintPopup(html));
+  const key = `kitchen:${receipt?.id || receipt?.ticket_number || 'generic'}`;
+  return runWithPrintLock(key, () => {
+    const target = printerName ?? getPrinterPrefs().kitchenPrinter;
+    const html = buildKitchenSlipsHTML(receipt, brandOverrideFromReceipt(receipt));
+    return printOrFallback(target, html, () => openPrintPopup(html));
+  });
 }
 
 export async function printAllOrderSlips(receipt, prefs = null) {
-  const { frontDeskPrinter, kitchenPrinter } = prefs || getPrinterPrefs();
-  const brandOverride = brandOverrideFromReceipt(receipt);
-  if (!frontDeskPrinter && !kitchenPrinter) {
-    const combinedHtml = buildCashierSlipsHTML(receipt, brandOverride, { includeKot: true });
-    return openPrintPopup(combinedHtml);
-  }
-  const cashierPrinted = await printCashierSlips(receipt, frontDeskPrinter).catch(() => false);
-  const kotPrinted = await printKitchenSlips(receipt, kitchenPrinter).catch(() => false);
-  return Boolean(cashierPrinted || kotPrinted);
+  const key = `all:${receipt?.id || receipt?.ticket_number || 'generic'}`;
+  return runWithPrintLock(key, async () => {
+    const { frontDeskPrinter, kitchenPrinter } = prefs || getPrinterPrefs();
+    const brandOverride = brandOverrideFromReceipt(receipt);
+    if (!frontDeskPrinter && !kitchenPrinter) {
+      const combinedHtml = buildCashierSlipsHTML(receipt, brandOverride, { includeKot: true });
+      return openPrintPopup(combinedHtml);
+    }
+    const cashierPrinted = await printCashierSlips(receipt, frontDeskPrinter).catch(() => false);
+    const kotPrinted = await printKitchenSlips(receipt, kitchenPrinter).catch(() => false);
+    return Boolean(cashierPrinted || kotPrinted);
+  });
 }
 
 export async function printZReport(zReport, printerName = null) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Search, ShoppingBag, Plus, Minus, Trash2, User, Phone,
   MapPin, Tag, CreditCard, Banknote, Smartphone, CheckCircle2, Loader2,
@@ -105,13 +105,27 @@ async function runOrderMutationWithFallback(payload, execute) {
 }
 
 async function safeInsertOrder(payload) {
-  return runOrderMutationWithFallback(payload, (attempt) => (
+  const res = await runOrderMutationWithFallback(payload, (attempt) => (
     supabase
       .from('pos_orders')
       .insert([attempt])
-      .select('id, ticket_number')
+      .select('id, ticket_number, created_at')
       .single()
   ));
+
+  // If the same cart draft was already persisted (23505 unique idempotency_key),
+  // return the existing order row instead of failing or allowing a duplicate.
+  if (res.error && res.error.code === '23505' && payload.idempotency_key) {
+    const { data: existing, error: lookupErr } = await supabase
+      .from('pos_orders')
+      .select('id, ticket_number, created_at')
+      .eq('idempotency_key', payload.idempotency_key)
+      .maybeSingle();
+    if (!lookupErr && existing?.id) {
+      return { data: existing, error: null, deduplicated: true };
+    }
+  }
+  return res;
 }
 
 async function safeUpdateOrder(orderId, payload) {
@@ -232,8 +246,18 @@ export function WebPosView({
   const [sendStk, setSendStk] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const draftIdempotencyKeyRef = useRef(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [placedOrder, setPlacedOrder] = useState(null);
+
+  // Reset the cart draft idempotency key whenever the cart is emptied so the
+  // next order gets a fresh key, while retries of the SAME cart reuse one key.
+  useEffect(() => {
+    if (cart.length === 0) {
+      draftIdempotencyKeyRef.current = null;
+    }
+  }, [cart.length]);
 
   // Item customization modal state
   const [customizingItem, setCustomizingItem] = useState(null);
@@ -745,6 +769,8 @@ export function WebPosView({
   };
 
   const handleSubmitOrder = async ({ saveAsOpen = false }) => {
+    // Synchronous guard prevents rapid double/multi-taps from firing parallel inserts
+    if (submittingRef.current) return;
     if (cart.length === 0) {
       setErrorMsg('Add at least one item to the order first.');
       return;
@@ -761,6 +787,7 @@ export function WebPosView({
       }
     }
 
+    submittingRef.current = true;
     setErrorMsg('');
     setSubmitting(true);
     try {
@@ -841,6 +868,9 @@ export function WebPosView({
         return;
       }
 
+      if (!draftIdempotencyKeyRef.current) {
+        draftIdempotencyKeyRef.current = makeUuid();
+      }
       const customCreatedAt = buildOrderCreatedAtForDate(orderDate);
       const payload = {
         restaurant_id: restaurantId,
@@ -868,11 +898,11 @@ export function WebPosView({
         mpesa_receipt_number: paymentReference.trim() || null,
         notes: noteParts.join(' | ') || null,
         guest_id: selectedGuest?.id || null,
-        idempotency_key: makeUuid(),
+        idempotency_key: draftIdempotencyKeyRef.current,
         ...(customCreatedAt ? { created_at: customCreatedAt } : {}),
       };
 
-      const { data: orderData, error: orderErr } = await safeInsertOrder(payload);
+      const { data: orderData, error: orderErr, deduplicated } = await safeInsertOrder(payload);
       if (orderErr) throw orderErr;
 
       if (chargesComputation.lines.length > 0 && orderData?.id) {
@@ -915,8 +945,21 @@ export function WebPosView({
         });
       }
 
-      const { error: itemsErr } = await insertOrderItems(supabase, itemsPayload);
-      if (itemsErr) throw itemsErr;
+      let shouldInsertItems = true;
+      if (deduplicated && orderData?.id) {
+        const { data: existingItems } = await supabase
+          .from('pos_order_items')
+          .select('id')
+          .eq('order_id', orderData.id)
+          .limit(1);
+        if (existingItems && existingItems.length > 0) {
+          shouldInsertItems = false;
+        }
+      }
+      if (shouldInsertItems) {
+        const { error: itemsErr } = await insertOrderItems(supabase, itemsPayload);
+        if (itemsErr) throw itemsErr;
+      }
 
       // Best-effort Store Credit debit, Voucher redemption & Loyalty Points award
       if (!saveAsOpen && orderData?.id) {
@@ -1021,12 +1064,14 @@ export function WebPosView({
         status: saveAsOpen ? 'Open' : 'Processing',
         receipt: receiptSnapshot,
       });
+      draftIdempotencyKeyRef.current = null;
       setCart([]);
       if (onOrderPlaced) onOrderPlaced();
     } catch (err) {
       console.error('WebPOS submit error:', err);
       setErrorMsg(err.message || 'Could not save order.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
