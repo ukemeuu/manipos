@@ -267,6 +267,25 @@ export function CostingAndCommissionsPanel({
         const norm = (value) => String(value || '').trim().toLowerCase();
         const findRow = (channel, brand) =>
           rows.find((r) => norm(r.channel) === norm(channel) && norm(r.brand) === norm(brand));
+        // Keep whatever casing the tenant already stores for a brand, so the
+        // unique (channel, brand) index never collides on "Little Lagos" vs
+        // "LITTLE LAGOS".
+        const pickBrand = (name) => {
+          const key = norm(name);
+          const fromTable = rows.find((r) => r.brand && norm(r.brand) === key)?.brand;
+          return (
+            fromTable ||
+            brandNames.find((b) => norm(b) === key) ||
+            String(name || '').trim()
+          );
+        };
+
+        // Normalise override keys to canonical brand names before writing.
+        const persistedOverrides = {};
+        Object.entries(cleanOverrides).forEach(([brand, perChannel]) => {
+          const key = pickBrand(brand);
+          persistedOverrides[key] = { ...(persistedOverrides[key] || {}), ...perChannel };
+        });
 
         const writes = [];
         const saveRow = (channel, brand, pct) => {
@@ -295,7 +314,7 @@ export function CostingAndCommissionsPanel({
         };
 
         Object.entries(cleanMap).forEach(([channel, pct]) => saveRow(channel, '', pct));
-        Object.entries(cleanOverrides).forEach(([brand, perChannel]) => {
+        Object.entries(persistedOverrides).forEach(([brand, perChannel]) => {
           Object.entries(perChannel).forEach(([channel, pct]) => saveRow(channel, brand, pct));
         });
         // Cleared override -> delete the row so the channel default takes over.
