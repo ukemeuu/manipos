@@ -24,6 +24,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build
@@ -69,6 +73,7 @@ jobs:
     name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # The deploy job only downloads the build artifact, so it needs its own
       # checkout to get the deploy script itself.

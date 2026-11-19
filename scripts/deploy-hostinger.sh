@@ -85,8 +85,8 @@ cd dist
 upload_with_retry() {
   local file="$1" remote="$2" attempt base
   base="$(basename "$remote")"
-  for attempt in 1 2 3 4; do
-    if curl -sS --ftp-create-dirs --connect-timeout 30 --max-time 180 \
+  for attempt in 1 2 3; do
+    if curl -sS --disable-epsv --ftp-pasv --ftp-create-dirs --connect-timeout 15 --max-time 60 \
          -T "$file" \
          --user "${FTP_USER}:${FTP_PASS}" \
          "ftp://${FTP_HOST}:${FTP_PORT}${FTP_REMOTE_DIR}${remote}" 2>/dev/null; then
@@ -94,12 +94,12 @@ upload_with_retry() {
     fi
     # Some servers leave a hidden ".in.<file>." temp file after a dropped STOR,
     # which makes every retry fail with 550. Clear it before trying again.
-    curl -sS --connect-timeout 15 --max-time 30 \
+    curl -sS --disable-epsv --ftp-pasv --connect-timeout 10 --max-time 20 \
       --user "${FTP_USER}:${FTP_PASS}" \
       "ftp://${FTP_HOST}:${FTP_PORT}${FTP_REMOTE_DIR}" \
       -Q "DELE .in.${base}." >/dev/null 2>&1 || true
     echo "  ! retry ${attempt} for ${remote}"
-    sleep 3
+    sleep 2
   done
   return 1
 }
@@ -108,6 +108,7 @@ upload_with_retry() {
 # before its chunks are on the server produces "Failed to fetch dynamically
 # imported module" errors for anyone who loads the app during the deploy.
 upload_failed=0
+consecutive_failures=0
 while read -r file; do
   remote="${file#./}"
   encoded="$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))' "$remote")"
@@ -115,6 +116,13 @@ while read -r file; do
   if ! upload_with_retry "$file" "$encoded"; then
     echo "  ! FAILED $remote"
     upload_failed=1
+    consecutive_failures=$((consecutive_failures + 1))
+    if [[ "$consecutive_failures" -ge 3 ]]; then
+      echo "  ! Aborting deploy after 3 consecutive upload failures (check FTP credentials / host)." >&2
+      break
+    fi
+  else
+    consecutive_failures=0
   fi
 done < <(find . -type f ! -name 'index.html' | sort)
 
