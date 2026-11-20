@@ -704,10 +704,19 @@ export function AdminDashboard({
         }
 
         if (isAdmin) {
-          if (staffRes?.status === 'fulfilled' && !staffRes.value?.error) {
-            setStaffList(staffRes.value?.data || []);
+          const rpcStaff = (staffRes?.status === 'fulfilled' && !staffRes.value?.error && Array.isArray(staffRes.value?.data))
+            ? staffRes.value.data
+            : null;
+          if (rpcStaff && rpcStaff.length > 0) {
+            setStaffList(rpcStaff);
           } else {
-            setStaffList([]);
+            supabase
+              .from('staff_access')
+              .select('id, name, email, role, active, permissions, branch_id, staff_code, department, designation, phone, created_at')
+              .eq('restaurant_id', currentRestaurantId)
+              .order('name')
+              .then(({ data: fbStaff }) => setStaffList(fbStaff || []))
+              .catch(() => setStaffList([]));
           }
           if (feedbackRes?.status === 'fulfilled' && !feedbackRes.value?.error) {
             setFeedbackList(feedbackRes.value?.data || []);
@@ -1070,8 +1079,23 @@ export function AdminDashboard({
         // null keeps the role defaults; an array is an explicit override.
         p_permissions: staffPermissions,
       });
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data.error || 'Could not save staff member.');
+      if (error || data?.success === false) {
+        if (editingStaff?.id && currentRestaurantId) {
+          const { error: directErr } = await supabase
+            .from('staff_access')
+            .update({
+              name: form.staffName.value,
+              email: form.email ? form.email.value : editingStaff.email,
+              role: form.role.value,
+              permissions: staffPermissions,
+            })
+            .eq('id', editingStaff.id)
+            .eq('restaurant_id', currentRestaurantId);
+          if (directErr) throw directErr;
+        } else {
+          throw error || new Error(data?.error || 'Could not save staff member.');
+        }
+      }
 
       setEditingStaff(null);
       setStaffPermissions(null);
@@ -2928,12 +2952,36 @@ export function AdminDashboard({
                         <h2 className="text-2xl font-black text-white">Staff Management</h2>
                         <p className="text-slate-400 text-sm mt-1">Configure staff authorization credentials and role permissions.</p>
                       </div>
-                      <button
-                        onClick={() => openStaffModal({ name: '', email: '', role: 'cashier', password: '' })}
-                        className="flex items-center gap-1 bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
-                      >
-                        <Plus size={16} /> Add Staff Account
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const { data, error } = await supabase.functions.invoke('poj-orders-sync', {
+                                body: {
+                                  action: 'sync_staff_and_hr',
+                                  restaurant_id: activeRestaurantId,
+                                  tenant_slug: tenantSlug || 'potofjollof',
+                                },
+                              });
+                              if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Sync failed');
+                              alert(`Synced ${data.staffImported || 0} staff accounts and ${data.requestsImported || 0} HR requests from POJ.`);
+                              fetchDashboardData();
+                            } catch (err) {
+                              alert('POJ staff sync note: ' + (err.message || err));
+                            }
+                          }}
+                          className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-200 font-bold px-3.5 py-2.5 rounded-xl text-xs hover:bg-slate-700 transition-all cursor-pointer"
+                        >
+                          Sync POJ Staff &amp; HR
+                        </button>
+                        <button
+                          onClick={() => openStaffModal({ name: '', email: '', role: 'cashier', password: '' })}
+                          className="flex items-center gap-1 bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-emerald-500/10 hover:brightness-110 transition-all"
+                        >
+                          <Plus size={16} /> Add Staff Account
+                        </button>
+                      </div>
                     </div>
 
                     {/* Staff Access Table */}

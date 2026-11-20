@@ -123,6 +123,220 @@ serve(async (req) => {
       'Content-Type': 'application/json',
     };
 
+    // Sync all POJ staff (profiles + staff_access + staff_details) and their submitted HR requests
+    if (body.action === 'sync_staff_and_hr') {
+      const warnings: string[] = [];
+      const fetchPojTable = async (table: string) => {
+        const resp = await fetch(`${pojBaseUrl}/rest/v1/${table}?select=*&limit=500`, { headers: pojHeaders });
+        if (!resp.ok) {
+          warnings.push(`${table}: HTTP ${resp.status}`);
+          return [];
+        }
+        const json = await resp.json().catch(() => []);
+        return Array.isArray(json) ? json : [];
+      };
+
+      const [pojProfiles, pojStaffDetails, pojTerminalPins] = await Promise.all([
+        fetchPojTable('profiles'),
+        fetchPojTable('staff_details'),
+        fetchPojTable('staff_access'),
+      ]);
+
+      const detailsByUid = new Map<string, Record<string, unknown>>();
+      for (const d of pojStaffDetails) {
+        const uid = String(d.user_id || d.id || '');
+        if (uid) detailsByUid.set(uid, d);
+      }
+
+      const normRole = (r: unknown) => {
+        const s = String(r || 'staff').toLowerCase().trim();
+        if (['owner', 'super_admin', 'superadmin', 'admin'].includes(s)) return 'admin';
+        if (['manager', 'branch_manager'].includes(s)) return 'manager';
+        if (s === 'cashier') return 'cashier';
+        if (s === 'waiter' || s === 'server') return 'waiter';
+        if (s === 'chef' || s === 'kitchen') return 'chef';
+        if (s === 'accountant') return 'accountant';
+        return 'staff';
+      };
+
+      const { data: existingStaff } = await maniAdmin
+        .from('staff_access')
+        .select('id, name, email, source_poj_user_id')
+        .eq('restaurant_id', restaurantId);
+
+      const byPojUid = new Map<string, string>();
+      const byEmail = new Map<string, string>();
+      const byName = new Map<string, string>();
+      for (const s of existingStaff || []) {
+        if (s.source_poj_user_id) byPojUid.set(String(s.source_poj_user_id), String(s.id));
+        if (s.email) byEmail.set(String(s.email).toLowerCase(), String(s.id));
+        if (s.name) byName.set(normalizeName(s.name), String(s.id));
+      }
+
+      let staffImported = 0;
+      const candidateRows: Array<Record<string, unknown>> = [];
+
+      for (const p of pojProfiles) {
+        const uid = String(p.id || p.user_id || '');
+        const d = detailsByUid.get(uid) || {};
+        const name = String(p.full_name || p.name || p.email || 'Staff').trim();
+        const email = p.email ? String(p.email).trim().toLowerCase() : null;
+        candidateRows.push({
+          restaurant_id: restaurantId,
+          source_poj_user_id: uid || null,
+          name,
+          email,
+          role: normRole(p.role || d.role),
+          phone: d.phone || p.phone || null,
+          department: d.department || null,
+          designation: d.designation || null,
+          active: p.is_active !== false,
+        });
+      }
+
+      for (const pinRow of pojTerminalPins) {
+        const name = String(pinRow.name || pinRow.full_name || pinRow.email || 'Staff').trim();
+        const email = pinRow.email ? String(pinRow.email).trim().toLowerCase() : null;
+        const already = candidateRows.find(
+          (c) => (email && c.email === email) || normalizeName(c.name) === normalizeName(name)
+        );
+        if (already) {
+          if (pinRow.pin_hash) already.pin_hash = pinRow.pin_hash;
+          if (pinRow.pin_code) already.pin_code = pinRow.pin_code;
+        } else {
+          candidateRows.push({
+            restaurant_id: restaurantId,
+            source_poj_user_id: pinRow.id ? String(pinRow.id) : null,
+            name,
+            email,
+            role: normRole(pinRow.role),
+            pin_hash: pinRow.pin_hash || null,
+            pin_code: pinRow.pin_code || null,
+            active: pinRow.active !== false,
+          });
+        }
+      }
+
+      for (const row of candidateRows) {
+        const existingId =
+          (row.source_poj_user_id ? byPojUid.get(String(row.source_poj_user_id)) : null) ||
+          (row.email ? byEmail.get(String(row.email).toLowerCase()) : null) ||
+          byName.get(normalizeName(row.name));
+
+        if (existingId) {
+          await maniAdmin.from('staff_access').update(row).eq('id', existingId);
+          if (row.source_poj_user_id) byPojUid.set(String(row.source_poj_user_id), existingId);
+          staffImported += 1;
+        } else {
+          const { data: ins, error: insErr } = await maniAdmin
+            .from('staff_access')
+            .insert([row])
+            .select('id')
+            .maybeSingle();
+          if (!insErr && ins?.id) {
+            if (row.source_poj_user_id) byPojUid.set(String(row.source_poj_user_id), String(ins.id));
+            if (row.email) byEmail.set(String(row.email).toLowerCase(), String(ins.id));
+            byName.set(normalizeName(row.name), String(ins.id));
+            staffImported += 1;
+          } else if (insErr) {
+            warnings.push(`staff ${row.name}: ${insErr.message}`);
+          }
+        }
+      }
+
+      const resolveStaffId = (r: Record<string, unknown>) => {
+        const uid = String(r.user_id || r.staff_id || '');
+        const em = String(r.staff_email || r.email || '').toLowerCase();
+        const nm = normalizeName(r.staff_name || r.requester_name || r.full_name || '');
+        return (uid ? byPojUid.get(uid) : null) || (em ? byEmail.get(em) : null) || (nm ? byName.get(nm) : null) || null;
+      };
+
+      const hrTables: Array<{ name: string; mapRow: (r: Record<string, unknown>) => Record<string, unknown> }> = [
+        {
+          name: 'leave_requests',
+          mapRow: (r) => ({
+            restaurant_id: restaurantId,
+            source_poj_id: String(r.id),
+            staff_id: resolveStaffId(r),
+            staff_name: String(r.staff_name || r.requester_name || r.full_name || 'Staff'),
+            staff_email: r.staff_email || r.email || null,
+            leave_type: String(r.leave_type || 'annual').toLowerCase().includes('sick') ? 'Sick Leave' : 'Annual Leave',
+            start_date: r.start_date || new Date().toISOString().slice(0, 10),
+            end_date: r.end_date || r.start_date || new Date().toISOString().slice(0, 10),
+            days_count: Number(r.days_count || r.days || 1),
+            reason: r.reason || null,
+            status: String(r.status || 'pending').toLowerCase(),
+            created_at: r.created_at || new Date().toISOString(),
+          }),
+        },
+        {
+          name: 'loan_requests',
+          mapRow: (r) => ({
+            restaurant_id: restaurantId,
+            source_poj_id: String(r.id),
+            staff_id: resolveStaffId(r),
+            staff_name: String(r.staff_name || r.requester_name || r.full_name || 'Staff'),
+            staff_email: r.staff_email || r.email || null,
+            amount: Number(r.amount || 0),
+            reason: r.reason || null,
+            repayment_months: Number(r.repayment_months || 3),
+            status: String(r.status || 'pending').toLowerCase(),
+            created_at: r.created_at || new Date().toISOString(),
+          }),
+        },
+        {
+          name: 'salary_advances',
+          mapRow: (r) => ({
+            restaurant_id: restaurantId,
+            source_poj_id: String(r.id),
+            staff_id: resolveStaffId(r),
+            staff_name: String(r.staff_name || r.requester_name || r.full_name || 'Staff'),
+            staff_email: r.staff_email || r.email || null,
+            amount: Number(r.amount || 0),
+            reason: r.reason || null,
+            status: String(r.status || 'pending').toLowerCase(),
+            created_at: r.created_at || new Date().toISOString(),
+          }),
+        },
+        {
+          name: 'overtime_claims',
+          mapRow: (r) => ({
+            restaurant_id: restaurantId,
+            source_poj_id: String(r.id),
+            staff_id: resolveStaffId(r),
+            staff_name: String(r.staff_name || r.requester_name || r.full_name || 'Staff'),
+            staff_email: r.staff_email || r.email || null,
+            work_date: r.work_date || r.date || new Date().toISOString().slice(0, 10),
+            hours: Number(r.hours || 1),
+            reason: r.reason || null,
+            status: String(r.status || 'pending').toLowerCase(),
+            created_at: r.created_at || new Date().toISOString(),
+          }),
+        },
+      ];
+
+      let requestsImported = 0;
+      for (const tbl of hrTables) {
+        const srcRows = await fetchPojTable(tbl.name);
+        if (srcRows.length === 0) continue;
+        const { data: existingRows } = await maniAdmin
+          .from(tbl.name)
+          .select('source_poj_id')
+          .eq('restaurant_id', restaurantId);
+        const existingIds = new Set((existingRows || []).map((x) => String(x.source_poj_id)));
+        const toInsert = srcRows
+          .filter((r) => !existingIds.has(String(r.id)))
+          .map(tbl.mapRow);
+        if (toInsert.length > 0) {
+          const { error: hrErr } = await maniAdmin.from(tbl.name).insert(toInsert);
+          if (hrErr) warnings.push(`${tbl.name}: ${hrErr.message}`);
+          else requestsImported += toInsert.length;
+        }
+      }
+
+      return jsonResponse({ ok: true, staffImported, requestsImported, warnings });
+    }
+
     // Fetch guest feedback directly from POJ Supabase
     if (body.action === 'fetch_feedback') {
       const fbResp = await fetch(`${pojBaseUrl}/rest/v1/pos_feedback?select=*&order=created_at.desc&limit=500`, {
