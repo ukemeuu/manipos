@@ -29,7 +29,7 @@ export const PERMISSIONS = [
   { key: 'manage_inventory', label: 'Access & manage inventory & recipes', group: 'Catalogue' },
   { key: 'manage_suppliers', label: 'Manage suppliers', group: 'Catalogue' },
   { key: 'manage_guests', label: 'Manage guest CRM & loyalty', group: 'Customers' },
-  { key: 'manage_feedback', label: 'Manage customer feedback', group: 'Customers' },
+  { key: 'manage_feedback', label: 'View & manage guest feedback', group: 'Customers' },
   { key: 'manage_staff', label: 'Manage staff & permissions', group: 'Administration' },
   { key: 'manage_settings', label: 'Edit store settings', group: 'Administration' },
   { key: 'manage_floor', label: 'Manage floor plan & reservations', group: 'Administration' },
@@ -55,11 +55,11 @@ export function roleDefaults(role) {
     case 'manager':
       return PERMISSION_KEYS.filter((k) => k !== 'manage_staff' && k !== 'view_previous_days');
     case 'cashier':
-      return ['view_orders', 'manage_menu', 'view_my_dashboard', 'reprint_receipts', 'close_shift'];
+      return ['view_orders', 'manage_menu', 'view_my_dashboard', 'reprint_receipts', 'close_shift', 'manage_feedback'];
     case 'waiter':
-      return ['view_orders', 'manage_menu', 'view_my_dashboard', 'reprint_receipts'];
+      return ['view_orders', 'manage_menu', 'view_my_dashboard', 'reprint_receipts', 'manage_feedback'];
     case 'accountant':
-      return ['view_analytics', 'view_orders', 'export_reports', 'manage_expenses'];
+      return ['view_analytics', 'view_orders', 'export_reports', 'manage_expenses', 'manage_feedback'];
     case 'stock_controller':
     case 'store_clerk':
     case 'issuer':

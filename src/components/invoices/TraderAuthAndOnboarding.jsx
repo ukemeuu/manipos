@@ -241,8 +241,8 @@ export function TraderAuthScreen({ onSignedIn }) {
           </button>
         </form>
 
-        <p className="text-[11px] text-center text-slate-400">
-          Free for up to 10 invoices/receipts per month · KES 290/mo for 30+30 · KES 700/mo Unlimited
+        <p className="text-[11px] text-center text-slate-400 font-semibold">
+          Free Forever
         </p>
       </div>
     </div>

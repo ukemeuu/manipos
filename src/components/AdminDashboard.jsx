@@ -1506,6 +1506,7 @@ export function AdminDashboard({
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, tab: 'reports', visible: canDo(TAB_PERMISSION.analytics) || canDo('view_dashboard') },
     { id: 'customers', label: 'Customers', icon: UserCheck, tab: 'customers', visible: canDo(TAB_PERMISSION.offers) || canDo(TAB_PERMISSION.feedback) },
     { id: 'menu', label: 'Menu', icon: Package, tab: 'menu', visible: canDo(TAB_PERMISSION.menu) || visibleRailIds.includes('menu') },
+    { id: 'feedback', label: 'Feedback', icon: MessageSquare, tab: 'feedback', visible: canDo(TAB_PERMISSION.feedback) },
     { id: 'storefront', label: 'Storefront', icon: Store, tab: 'storefront', visible: canDo(TAB_PERMISSION.settings) || visibleRailIds.includes('storefront') },
     { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
     { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
@@ -2388,7 +2389,7 @@ export function AdminDashboard({
               staffRole={effectiveStaffUser?.role || 'staff'}
               canViewPreviousDays={canViewPreviousDays}
             />
-          ) : (activeTab === 'orders' || (!isAdmin && !['menu', 'reports', 'inventory', 'my-dashboard'].includes(activeTab))) ? (
+          ) : (activeTab === 'orders' || (!isAdmin && !['menu', 'feedback', 'reports', 'inventory', 'my-dashboard'].includes(activeTab))) ? (
             <LiveOrdersView
               orders={orders}
               restaurantId={activeRestaurantId}

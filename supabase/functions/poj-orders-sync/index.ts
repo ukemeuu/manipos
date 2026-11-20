@@ -123,6 +123,18 @@ serve(async (req) => {
       'Content-Type': 'application/json',
     };
 
+    // Fetch guest feedback directly from POJ Supabase
+    if (body.action === 'fetch_feedback') {
+      const fbResp = await fetch(`${pojBaseUrl}/rest/v1/pos_feedback?select=*&order=created_at.desc&limit=500`, {
+        headers: pojHeaders,
+      });
+      if (!fbResp.ok) {
+        return jsonResponse({ ok: false, error: `POJ feedback fetch failed (${fbResp.status})` });
+      }
+      const fbRows = await fbResp.json().catch(() => []);
+      return jsonResponse({ ok: true, rows: Array.isArray(fbRows) ? fbRows : [] });
+    }
+
     // Support direct order patch from PIN-authenticated staff (status / payment_method / payment_status)
     if (body.action === 'patch_order' && body.poj_order_id && body.patch && typeof body.patch === 'object') {
       const pojOrderId = String(body.poj_order_id).trim();

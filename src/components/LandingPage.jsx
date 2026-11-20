@@ -204,61 +204,61 @@ export function LandingPage({ onProceedToLogin, onSwitchToRetail, onBrowseRestau
       label: 'Point of Sale',
       icon: <Receipt size={18} />,
       image: '/mockups/tablet-pos.png',
-      title: 'Superfast Cloud POS Billing',
-      desc: 'Touch-optimised POS screen with quick cashier billing, table management, floor maps, split-bill payments, and instant thermal receipt printing.',
-      points: ['Touchscreen & keyboard billing', 'Table & floor map management', 'Split bills & multiple payments', 'Offline fallback with auto-sync']
+      title: 'Superfast Cloud POS & M-Pesa Billing',
+      desc: 'Touch-optimised POS screen with quick cashier billing, split-by-guest or tender, M-Pesa STK & Paybill, and instant thermal receipt printing.',
+      points: ['Touchscreen & keyboard billing', 'Split bills by guest or payment method', 'M-Pesa STK Push, Paybill, Till & Card', 'Offline fallback with auto-sync']
     },
     {
-      label: 'Kitchen Display',
+      label: 'Kitchen & Orders',
       icon: <Monitor size={18} />,
       image: '/mockups/kds-screen.png',
-      title: 'Real-Time Kitchen Display (KDS)',
-      desc: 'Orders flow instantly from the POS to wall-mounted kitchen screens. Chefs see every ticket in real time, eliminating paper dockets and reducing errors.',
-      points: ['Live order ticket streaming', 'Status: New → Cooking → Ready', 'Bump & recall tickets', 'Multi-station routing']
+      title: 'Real-Time KDS, Microsites & Loud Order Ringing',
+      desc: 'Orders from your digital microsite, Uber Eats, Glovo, and Bolt Food stream straight to kitchen screens with loud native push alerts and auto-print on Accept.',
+      points: ['Live KDS ticket streaming', 'Loud native Android & iOS order ringing', 'Auto-print KOT & receipt on Accept', 'Multi-brand digital menus']
     },
     {
-      label: 'Dashboard',
+      label: 'Profit & Costing',
       icon: <BarChart3 size={18} />,
       image: '/mockups/laptop-dashboard.png',
-      title: 'Owner & Manager Dashboard',
-      desc: "Access real-time sales reports, daily Z-reports, top-performing items, and cashier audit logs from any browser — even your phone from home.",
-      points: ['Live revenue & order metrics', 'Daily Z-report & cashier logs', 'Top items & hourly trends', 'Multi-branch comparison']
+      title: 'Executive Dashboard, Commissions & 25% COGS',
+      desc: 'Track real-time sales, per-brand channel commissions, payment fees, 16% VAT, and ideal food cost from any browser — with manager approval on returned orders.',
+      points: ['Per-brand channel & payment commissions', 'Menu Builder bulk & item food cost (COGS)', 'Inventory ERP, recipes & supplier P&L', 'Admin/Manager approval for order returns']
     },
     {
-      label: 'Waiter App',
+      label: 'Waiter & Invoices',
       icon: <Tablet size={18} />,
       image: '/mockups/waiter-tablet.png',
-      title: 'Mobile Waiter Ordering',
-      desc: 'Waiters take orders tableside on a phone or tablet. Orders go straight to the kitchen — no shouting, no paper, no delays.',
-      points: ['Tableside order entry', 'Floor map with table status', 'Send to kitchen instantly', 'Works on any Android/iOS device']
+      title: 'Waiter App, Guest Feedback & Trader Invoices',
+      desc: 'Waiters get tableside ordering and their own shift breakdown dashboard. Plus Guest CRM, Feedback tracking, and standalone Supplier Invoices at manipos.com/#/invoices.',
+      points: ['Cashier & Waiter personal shift dashboard', 'Floor map with live table status', 'Guest CRM, Loyalty & Feedback Hub', 'Free Forever Supplier Invoice & Receipt tool']
     },
   ];
 
   const pricingPlans = [
     {
       name: 'Starter',
-      price: '2,500',
+      price: '7,500',
       period: '/month',
-      tagline: 'For one outlet finding its feet.',
-      features: ['1 outlet & 1 brand', 'Cloud POS + offline mode', 'Digital QR menu & online ordering', 'Kitchen display (1 screen)', 'M-Pesa & card reconciliation', 'Daily sales reports'],
+      tagline: 'Simple POS for one outlet getting started.',
+      features: ['1 outlet & 1 brand', 'Simple Cloud POS + offline mode', 'Digital QR menu & microsite ordering', 'M-Pesa Paybill, Till & cash billing', 'Thermal receipt printing', 'Daily sales & shift reports'],
       cta: 'Start 14-day trial',
       highlight: false,
     },
     {
       name: 'Growth',
-      price: '5,500',
+      price: '12,500',
       period: '/month',
-      tagline: 'For busy restaurants scaling service.',
-      features: ['Up to 3 outlets & 5 brands', 'Everything in Starter', 'Floor plan & reservations', 'Inventory + recipe deduction', 'Customer CRM & loyalty campaigns', 'Staff roles, shifts & audit logs', 'Priority WhatsApp support'],
+      tagline: 'For busy restaurants scaling service & margins.',
+      features: ['Up to 3 outlets & 5 brands', 'Everything in Starter', 'Kitchen Display System (KDS)', 'Table management & floor plan', 'Inventory, recipes & 25% COGS tracking', 'Channel commissions & profitability P&L', 'Guest CRM, loyalty & feedback dashboard', 'Staff roles, permissions & return approvals'],
       cta: 'Start 14-day trial',
       highlight: true,
     },
     {
-      name: 'Pro',
-      price: '12,500',
+      name: 'Enterprise',
+      price: '25,000',
       period: '/month',
-      tagline: 'For restaurant groups and franchises.',
-      features: ['Unlimited outlets & brands', 'Everything in Growth', 'Multi-branch consolidation', 'Delivery channel integrations', 'API & webhook access', 'Dedicated onboarding manager', '99.9% uptime SLA'],
+      tagline: 'For multi-branch groups and cloud kitchens.',
+      features: ['Unlimited outlets & brands', 'Everything in Growth', 'Full Inventory ERP, suppliers & stock counts', 'HR, staff advances & accountant expenses', 'Uber Eats, Glovo & Bolt Food intake', 'Native mobile push order ringing', 'Dedicated onboarding & priority SLA'],
       cta: 'Talk to sales',
       highlight: false,
     },

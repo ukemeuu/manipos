@@ -120,7 +120,11 @@ export function FeedbackDashboardView({ onBack }) {
         try { return JSON.parse(localStorage.getItem('pin_staff_user') || '{}'); } catch (e) { return {}; }
     }, []);
     const restaurantId = activeSession.restaurantId || activeSession.restaurant_id || null;
-    const isPojTenant = activeSession.tenantSlug === 'potofjollof';
+    const isPojTenant = (
+        activeSession.tenantSlug === 'potofjollof'
+        || activeSession.tenant_slug === 'potofjollof'
+        || (typeof window !== 'undefined' && window.location.search.toLowerCase().includes('potofjollof'))
+    );
     const googleStorageKey = restaurantId ? `manipos_google_reviews_${restaurantId}` : 'poj_google_reviews_state';
 
     const [feedbackData, setFeedbackData] = useState([]);
@@ -191,39 +195,60 @@ export function FeedbackDashboardView({ onBack }) {
         else setLoading(true);
 
         try {
-            if (isPojTenant) {
-                const data = await fetchCustomerFeedback(force, (cached) => {
-                    if (cached) setFeedbackData(cached);
-                });
-                if (data) setFeedbackData(data);
-                loadSheetGoogleReviews();
-            } else if (restaurantId) {
+            const mapSupabaseRow = (r) => ({
+                timestamp: r.created_at ? new Date(r.created_at).toLocaleString() : '',
+                code: r.code || '',
+                serviceType: r.service_type || r.channel || 'Dine-in',
+                customerName: r.customer_name || 'Guest',
+                orderId: r.order_id || '',
+                overallRating: r.overall_rating != null ? Number(r.overall_rating) : Number(r.rating || 0),
+                foodRating: r.food_rating != null ? Number(r.food_rating) : null,
+                serviceRating: r.service_rating != null ? Number(r.service_rating) : null,
+                speedRating: r.speed_rating != null ? Number(r.speed_rating) : null,
+                cleanlinessRating: r.cleanliness_rating != null ? Number(r.cleanliness_rating) : null,
+                comments: r.comments || r.comment || '',
+                photoUrl: r.photo_url || '',
+            });
+
+            const merged = [];
+            const seen = new Set();
+            const pushUnique = (item) => {
+                const key = `${item.code || ''}::${item.orderId || ''}::${(item.customerName || '').toLowerCase()}::${(item.comments || '').slice(0, 40).toLowerCase()}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                merged.push(item);
+            };
+
+            if (restaurantId) {
                 const { data: rows, error } = await supabase
                     .from('pos_feedback')
                     .select('*')
                     .eq('restaurant_id', restaurantId)
                     .order('created_at', { ascending: false });
                 if (!error && Array.isArray(rows)) {
-                    setFeedbackData(rows.map((r) => ({
-                        timestamp: r.created_at ? new Date(r.created_at).toLocaleString() : '',
-                        code: r.code || '',
-                        serviceType: r.service_type || r.channel || 'Dine-in',
-                        customerName: r.customer_name || 'Guest',
-                        orderId: r.order_id || '',
-                        overallRating: r.overall_rating != null ? Number(r.overall_rating) : Number(r.rating || 0),
-                        foodRating: r.food_rating != null ? Number(r.food_rating) : null,
-                        serviceRating: r.service_rating != null ? Number(r.service_rating) : null,
-                        speedRating: r.speed_rating != null ? Number(r.speed_rating) : null,
-                        cleanlinessRating: r.cleanliness_rating != null ? Number(r.cleanliness_rating) : null,
-                        comments: r.comments || r.comment || '',
-                        photoUrl: r.photo_url || '',
-                    })));
-                } else {
-                    setFeedbackData([]);
+                    rows.map(mapSupabaseRow).forEach(pushUnique);
                 }
-            } else {
-                setFeedbackData([]);
             }
+
+            if (isPojTenant) {
+                const [pojBridgeRes, sheetData] = await Promise.allSettled([
+                    supabase.functions.invoke('poj-orders-sync', {
+                        body: { action: 'fetch_feedback', restaurant_id: restaurantId, tenant_slug: 'potofjollof' },
+                    }),
+                    fetchCustomerFeedback(force, (cached) => {
+                        if (cached && merged.length === 0) setFeedbackData(cached);
+                    }),
+                ]);
+                if (pojBridgeRes.status === 'fulfilled' && Array.isArray(pojBridgeRes.value?.data?.rows)) {
+                    pojBridgeRes.value.data.rows.map(mapSupabaseRow).forEach(pushUnique);
+                }
+                if (sheetData.status === 'fulfilled' && Array.isArray(sheetData.value)) {
+                    sheetData.value.forEach(pushUnique);
+                }
+                loadSheetGoogleReviews();
+            }
+
+            setFeedbackData(merged);
         } catch (err) {
             console.error('Error loading feedback data:', err);
         } finally {
