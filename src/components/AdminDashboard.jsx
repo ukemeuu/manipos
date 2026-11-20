@@ -2010,6 +2010,7 @@ export function AdminDashboard({
                 { id: 'receiving', label: 'Receiving & Temp Logs', icon: Thermometer },
                 { id: 'store-ops', label: 'Stock Requisitions', icon: ClipboardList },
                 { id: 'waste', label: 'Kitchen Waste Log', icon: Trash2 },
+                { id: 'fpa-expenses', label: 'Expense & Receipt Upload', icon: Receipt },
               ].map((op) => {
                 const OpIcon = op.icon;
                 return (

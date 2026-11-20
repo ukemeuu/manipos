@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Boxes, Plus, Download, Upload, Search, AlertTriangle, Calendar, ArrowLeftRight,
   ClipboardCheck, ShoppingCart, Settings, ChefHat, BarChart3, Trash2, CheckCircle2,
-  X, Edit3, RefreshCw, PackageCheck
+  X, Edit3, RefreshCw, PackageCheck, Receipt
 } from 'lucide-react';
+import { PojOperationsView } from './PojOperationsView';
 import { supabase } from '../../lib/supabase';
 import {
   ORDA_UNITS,
@@ -909,6 +910,7 @@ export function OrdaInventoryErpView({
             { id: 'count', label: 'Physical Stock Count', icon: ClipboardCheck },
             { id: 'transfers', label: 'Transfers & Pull Requests', icon: ArrowLeftRight },
             { id: 'purchase-orders', label: 'Purchase Orders & Suppliers', icon: ShoppingCart },
+            { id: 'expenses', label: 'Expense & Receipt Upload', icon: Receipt },
             { id: 'inv-settings', label: 'Stores & Auto-86 Settings', icon: Settings },
           ].map((t) => {
             const Icon = t.icon;
@@ -2066,6 +2068,17 @@ export function OrdaInventoryErpView({
             </div>
           )}
         </div>
+      )}
+
+      {section === 'expenses' && (
+        <PojOperationsView
+          mode="expenses"
+          restaurantId={restaurantId}
+          restaurantName={restaurantName}
+          orders={orders}
+          staffUser={{ name: staffName }}
+          canUploadReceipts
+        />
       )}
 
       {/* SECTION 8: INVENTORY STORES & AUTO-86 SETTINGS */}
