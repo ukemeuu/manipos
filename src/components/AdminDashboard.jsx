@@ -1510,7 +1510,8 @@ export function AdminDashboard({
     { id: 'storefront', label: 'Storefront', icon: Store, tab: 'storefront', visible: canDo(TAB_PERMISSION.settings) || visibleRailIds.includes('storefront') },
     { id: 'settings', label: 'Settings', icon: Settings, tab: 'settings', visible: canDo(TAB_PERMISSION.settings) || canDo(TAB_PERMISSION.staff) },
     { id: 'wallet', label: 'Wallet', icon: Wallet, tab: 'wallet' },
-    { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory' },
+    { id: 'inventory', label: 'Inventory', icon: Boxes, tab: 'inventory', visible: canDo('manage_inventory') || canDo('manage_suppliers') },
+    { id: 'expenses', label: 'Expense Upload', icon: Receipt, tab: 'fpa-expenses', visible: canDo('upload_receipts') || canDo('manage_expenses') },
     { id: 'hr', label: 'HR', icon: Users, tab: 'hr-admin', visible: canDo(TAB_PERMISSION.staff) },
     { id: 'account', label: 'Account', icon: Building2, tab: 'account' },
   ].filter((item) => item.visible !== false && visibleRailIds.includes(item.id));
@@ -2389,7 +2390,7 @@ export function AdminDashboard({
               staffRole={effectiveStaffUser?.role || 'staff'}
               canViewPreviousDays={canViewPreviousDays}
             />
-          ) : (activeTab === 'orders' || (!isAdmin && !['menu', 'feedback', 'reports', 'inventory', 'my-dashboard'].includes(activeTab))) ? (
+          ) : (activeTab === 'orders' || (!isAdmin && !['menu', 'feedback', 'reports', 'inventory', 'fpa-expenses', 'my-dashboard'].includes(activeTab))) ? (
             <LiveOrdersView
               orders={orders}
               restaurantId={activeRestaurantId}
@@ -2547,11 +2548,12 @@ export function AdminDashboard({
             />
           ) : activeTab === 'fpa-expenses' || activeTab === 'receiving' || activeTab === 'waste' || activeTab === 'store-ops' || activeTab === 'qr-vault' ? (
             <PojOperationsView
-              mode={activeTab === 'fpa-expenses' ? 'accountant' : activeTab}
+              mode={activeTab === 'fpa-expenses' ? (activeModule === 'expenses' ? 'expenses' : 'accountant') : activeTab}
               restaurantId={activeRestaurantId}
               restaurantName={profileName || restaurantName}
               tenantSlug={tenantSlug}
               orders={scopedOrders}
+              canUploadReceipts={isAdmin || canDo('upload_receipts') || canDo('manage_expenses')}
               staffUser={{
                 name: pinStaffName,
                 role: JSON.parse(localStorage.getItem('pin_staff_user') || '{}').role || 'admin',

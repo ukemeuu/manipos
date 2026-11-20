@@ -157,7 +157,7 @@ export function resolveOrdaEntryState({ staffUser, requestedRoute = '', tabParam
 export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   const isAdmin = isAdminAccount(staffUser);
   if (isAdmin) {
-    return ['orders', 'dashboard', 'customers', 'menu', 'feedback', 'storefront', 'settings', 'wallet', 'inventory', 'hr', 'account'];
+    return ['orders', 'dashboard', 'customers', 'menu', 'feedback', 'storefront', 'settings', 'wallet', 'inventory', 'expenses', 'hr', 'account'];
   }
 
   const has = (perm) => Array.isArray(permissions) && permissions.includes(perm);
@@ -169,7 +169,8 @@ export function getVisibleOrdaRailIds({ staffUser, permissions = [] }) {
   if (has('manage_feedback')) ids.push('feedback');
   if (has('manage_settings')) ids.push('storefront');
   if (has('manage_settings') || has('manage_staff')) ids.push('settings');
-  if (has('manage_inventory')) ids.push('inventory');
+  if (has('manage_inventory') || has('manage_suppliers')) ids.push('inventory');
+  if (has('upload_receipts') || has('manage_expenses')) ids.push('expenses');
   if (has('manage_staff')) ids.push('hr');
   return ids;
 }

@@ -10,6 +10,8 @@ import {
   Check,
   QrCode,
   TrendingUp,
+  Upload,
+  ExternalLink,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { QRCodeGeneratorView } from '../QRCodeGeneratorView';
@@ -34,11 +36,13 @@ export function PojOperationsView({
   tenantSlug = '',
   orders = [],
   staffUser = {},
+  canUploadReceipts = true,
   standalone = false,
   onSignOut,
 }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [notice, setNotice] = useState('');
 
   const [expenses, setExpenses] = useState([]);
@@ -54,6 +58,7 @@ export function PojOperationsView({
     payment_method: 'M-Pesa',
     vendor_name: '',
     expense_date: new Date().toISOString().slice(0, 10),
+    receipt_url: '',
   });
   const [tempForm, setTempForm] = useState({ equipment_name: 'Walk-in Chiller', temp_celsius: '3.5', notes: '' });
   const [reqForm, setReqForm] = useState({ department: 'Kitchen', item_name: '', quantity: 1, unit: 'kg', notes: '' });
@@ -104,12 +109,41 @@ export function PojOperationsView({
     [expenses]
   );
 
+  const handleExpenseReceiptUpload = async (file) => {
+    if (!file || !restaurantId) return;
+    setUploadingReceipt(true);
+    setNotice('');
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const path = `expense-receipts/${restaurantId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('menu_images').upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from('menu_images').getPublicUrl(path);
+      if (data?.publicUrl) {
+        setExpForm((p) => ({ ...p, receipt_url: data.publicUrl }));
+        setNotice('Receipt uploaded.');
+      }
+    } catch (err) {
+      setNotice('Receipt upload failed: ' + (err.message || err));
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
   const insertAndReload = async (table, payload, resetCb, msg) => {
     if (!restaurantId) return;
     setSaving(true);
     setNotice('');
     try {
-      const { error } = await supabase.from(table).insert([{ restaurant_id: restaurantId, ...payload }]);
+      let cleanPayload = { restaurant_id: restaurantId, ...payload };
+      let { error } = await supabase.from(table).insert([cleanPayload]);
+      if (error && 'receipt_url' in cleanPayload && String(error.message || '').toLowerCase().includes('receipt_url')) {
+        const url = cleanPayload.receipt_url;
+        const next = { ...cleanPayload };
+        delete next.receipt_url;
+        if (url && next.description) next.description = `${next.description} [Receipt: ${url}]`;
+        ({ error } = await supabase.from(table).insert([next]));
+      }
       if (error) throw error;
       resetCb?.();
       setNotice(msg);
@@ -205,8 +239,13 @@ export function PojOperationsView({
                   e.preventDefault();
                   insertAndReload(
                     'expenses',
-                    { ...expForm, amount: Number(expForm.amount || 0), recorded_by: actorName },
-                    () => setExpForm({ category: EXPENSE_CATEGORIES[0], description: '', amount: '', payment_method: 'M-Pesa', vendor_name: '', expense_date: new Date().toISOString().slice(0, 10) }),
+                    {
+                      ...expForm,
+                      receipt_url: expForm.receipt_url || null,
+                      amount: Number(expForm.amount || 0),
+                      recorded_by: actorName,
+                    },
+                    () => setExpForm({ category: EXPENSE_CATEGORIES[0], description: '', amount: '', payment_method: 'M-Pesa', vendor_name: '', expense_date: new Date().toISOString().slice(0, 10), receipt_url: '' }),
                     'Expense recorded.'
                   );
                 }}
@@ -230,6 +269,23 @@ export function PojOperationsView({
                   </select>
                   <input type="text" value={expForm.vendor_name} onChange={(e) => setExpForm((p) => ({ ...p, vendor_name: e.target.value }))} placeholder="Vendor (Optional)" className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
                 </div>
+                {canUploadReceipts && (
+                  <label className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer hover:border-amber-400">
+                    {uploadingReceipt ? <Loader2 size={14} className="animate-spin" /> : expForm.receipt_url ? <Check size={14} className="text-emerald-600" /> : <Upload size={14} />}
+                    <span>{expForm.receipt_url ? 'Receipt Attached (Replace)' : 'Upload Receipt Photo / PDF'}</span>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      disabled={uploadingReceipt}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleExpenseReceiptUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                )}
                 <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black flex items-center justify-center gap-1 cursor-pointer">
                   <Plus size={14} /> Save Expense
                 </button>
@@ -252,7 +308,14 @@ export function PojOperationsView({
                           <p className="text-xs font-black text-slate-900">{ex.description} <span className="text-slate-400 font-semibold">· {ex.category}</span></p>
                           <p className="text-[11px] text-slate-500">{ex.expense_date} · {ex.payment_method} {ex.vendor_name ? `· ${ex.vendor_name}` : ''} · By {ex.recorded_by || 'Staff'}</p>
                         </div>
-                        <span className="font-mono text-xs font-black text-rose-700">KES {Number(ex.amount || 0).toLocaleString()}</span>
+                        <div className="text-right shrink-0">
+                          <span className="font-mono text-xs font-black text-rose-700 block">KES {Number(ex.amount || 0).toLocaleString()}</span>
+                          {ex.receipt_url && (
+                            <a href={ex.receipt_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:underline">
+                              <ExternalLink size={10} /> Receipt
+                            </a>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

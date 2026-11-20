@@ -131,6 +131,7 @@ describe('Interface B (Orda) Routing & RBAC', () => {
       'settings',
       'wallet',
       'inventory',
+      'expenses',
       'hr',
       'account',
     ]);

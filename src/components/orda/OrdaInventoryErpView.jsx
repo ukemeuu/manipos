@@ -172,6 +172,43 @@ export function OrdaInventoryErpView({
   // New Store quick input
   const [newStoreName, setNewStoreName] = useState('');
 
+  // Suppliers state (synced with prop + newly added)
+  const [localSuppliers, setLocalSuppliers] = useState(suppliers);
+  useEffect(() => {
+    setLocalSuppliers(Array.isArray(suppliers) ? suppliers : []);
+  }, [suppliers]);
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [supplierForm, setSupplierForm] = useState({ name: '', category: 'Food & Produce', phone: '', email: '' });
+
+  const handleAddSupplier = async (e) => {
+    e.preventDefault();
+    if (!supplierForm.name.trim() || !restaurantId) return;
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .insert([{
+          restaurant_id: restaurantId,
+          name: supplierForm.name.trim(),
+          category: supplierForm.category.trim() || 'Vendor',
+          phone: supplierForm.phone.trim() || null,
+          email: supplierForm.email.trim() || null,
+        }])
+        .select('*')
+        .single();
+      if (error) throw error;
+      if (data) setLocalSuppliers((prev) => [data, ...prev]);
+      setSupplierForm({ name: '', category: 'Food & Produce', phone: '', email: '' });
+      setShowAddSupplier(false);
+      setNotice(`Supplier "${supplierForm.name.trim()}" added.`);
+      onRefreshDashboard?.();
+    } catch (err) {
+      alert('Failed to add supplier: ' + (err.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const loadAll = async () => {
     if (!restaurantId) {
       setLoading(false);
@@ -1895,16 +1932,24 @@ export function OrdaInventoryErpView({
                 onClick={() => setPoSubTab('suppliers')}
                 className={`px-3.5 py-1.5 rounded-lg ${poSubTab === 'suppliers' ? 'bg-amber-400 text-black' : 'text-slate-600'}`}
               >
-                Suppliers ({suppliers.length})
+                Suppliers ({localSuppliers.length})
               </button>
             </div>
-            {poSubTab === 'orders' && (
+            {poSubTab === 'orders' ? (
               <button
                 type="button"
                 onClick={() => setPoDrawer(true)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
               >
                 <Plus size={14} /> Create Purchase Order
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAddSupplier((v) => !v)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 text-black text-xs font-black"
+              >
+                <Plus size={14} /> Add Supplier
               </button>
             )}
           </div>
@@ -1952,7 +1997,45 @@ export function OrdaInventoryErpView({
               </table>
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 text-xs">
+              {showAddSupplier && (
+                <form onSubmit={handleAddSupplier} className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Supplier Name *"
+                    value={supplierForm.name}
+                    onChange={(e) => setSupplierForm((p) => ({ ...p, name: e.target.value }))}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Category (e.g. Meats, Produce)"
+                    value={supplierForm.category}
+                    onChange={(e) => setSupplierForm((p) => ({ ...p, category: e.target.value }))}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Phone"
+                    value={supplierForm.phone}
+                    onChange={(e) => setSupplierForm((p) => ({ ...p, phone: e.target.value }))}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={supplierForm.email}
+                      onChange={(e) => setSupplierForm((p) => ({ ...p, email: e.target.value }))}
+                      className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                    />
+                    <button type="submit" disabled={saving} className="px-3 py-2 rounded-xl bg-amber-400 text-black font-black cursor-pointer">
+                      Save
+                    </button>
+                  </div>
+                </form>
+              )}
               <div className="flex justify-between items-center">
                 <p className="font-bold text-slate-700">Synced Restaurant Suppliers</p>
                 <button
@@ -1961,7 +2044,7 @@ export function OrdaInventoryErpView({
                     downloadCsv(
                       'suppliers.csv',
                       ['Name', 'Category', 'Phone', 'Email'],
-                      suppliers.map((s) => [s.name, s.category || '', s.phone || '', s.email || ''])
+                      localSuppliers.map((s) => [s.name, s.category || '', s.phone || '', s.email || ''])
                     )
                   }
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 font-bold"
@@ -1969,7 +2052,7 @@ export function OrdaInventoryErpView({
                   <Download size={13} /> Export CSV
                 </button>
               </div>
-              {suppliers.map((s) => (
+              {localSuppliers.map((s) => (
                 <div key={s.id} className="p-3 rounded-xl border border-slate-100 flex justify-between">
                   <div>
                     <p className="font-bold text-slate-900">{s.name}</p>
@@ -1977,6 +2060,9 @@ export function OrdaInventoryErpView({
                   </div>
                 </div>
               ))}
+              {localSuppliers.length === 0 && (
+                <p className="text-center text-slate-400 py-4">No suppliers yet. Click &quot;+ Add Supplier&quot; above.</p>
+              )}
             </div>
           )}
         </div>
@@ -2170,7 +2256,7 @@ export function OrdaInventoryErpView({
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
             />
             <datalist id="manipos-suppliers-list">
-              {suppliers.map((s) => <option key={s.id} value={s.name} />)}
+              {localSuppliers.map((s) => <option key={s.id} value={s.name} />)}
             </datalist>
           </div>
           <div className="space-y-2">
